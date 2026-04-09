@@ -5,6 +5,7 @@ import './DataAccessHelper/JSZipDataAccessHelper';
 // Bundle size management - end
 
 import BinaryHelper from './BinaryHelper';
+import vtkCastClient from './CastClient';
 import DataAccessHelper from './DataAccessHelper';
 import vtkHttpDataSetReader from './HttpDataSetReader';
 import vtkHttpSceneLoader from './HttpSceneLoader';
@@ -14,6 +15,7 @@ import vtkWSLinkClient from './WSLinkClient';
 
 export default {
   BinaryHelper,
+  vtkCastClient,
   DataAccessHelper,
   vtkHttpDataSetReader,
   vtkHttpSceneLoader,
