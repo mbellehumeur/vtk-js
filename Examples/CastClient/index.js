@@ -1,7 +1,23 @@
 import '@kitware/vtk.js/favicon';
 
-import vtkJsLogoSvg from '../../Sources/Interaction/UI/Icons/Logo.svg';
+import vtkJsLogoWideSvg from './logo-wide.svg';
 import vtkCastClient from 'vtk.js/Sources/IO/Core/CastClient';
+
+import style from './CastClient.module.css';
+
+const CONNECTION_STATUS_CLASS = {
+  connecting: style.connecting,
+  connected: style.connected,
+  disconnected: style.disconnected,
+  'token-ready': style.tokenReady,
+  error: style.error,
+};
+
+const MESSAGE_KIND_CLASS = {
+  received: style.msgReceived,
+  sent: style.msgSent,
+  err: style.msgErr,
+};
 
 const DEFAULT_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}","EC","WATCHER"]`;
@@ -74,117 +90,8 @@ const HUB_DEFINITIONS = {
   },
 };
 
-function injectStyles() {
-  const style = document.createElement('style');
-  style.textContent = `
-.cast { max-width: 1100px; margin: 0 auto; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-.cast .container { background:#3d3d3d; border-radius:8px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,.5); color:#e0e0e0; }
-.cast h2 { color:#e0e0e0; margin:0 0 12px; }
-.cast .section { margin-top:20px; padding-bottom:16px; border-bottom:1px solid #555; }
-.cast .section:last-child { border-bottom:none; }
-.cast .grid { display:grid; grid-template-columns: repeat(2, minmax(220px,1fr)); gap:12px; }
-.cast .section label,
-.cast .cast-hidden-endpoint label { display:block; margin-bottom:6px; color:#b0b0b0; font-size:13px; }
-.cast .section input,
-.cast .section textarea,
-.cast .section select,
-.cast .cast-hidden-endpoint input,
-.cast .cast-hidden-endpoint select { width:100%; box-sizing:border-box; border:1px solid #666; border-radius:4px; background:#4a4a4a; color:#e0e0e0; padding:9px 10px; font-size:13px; }
-.cast .section textarea { min-height:110px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; resize:vertical; }
-.cast .section input.subscribe-actors-json { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.cast .cast-hidden-endpoint { display:none !important; }
-.cast .cast-header { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:16px; margin-bottom:0; }
-.cast .header-left { justify-self:start; display:flex; align-items:center; min-width:0; }
-.cast .header-logo {
-  flex-shrink:0;
-  width:44px;
-  height:44px;
-  display:block;
-  color:inherit;
-  text-decoration:none;
-  border-radius:6px;
-}
-.cast .header-logo:focus-visible { outline:2px solid #90A4AE; outline-offset:2px; }
-.cast .header-logo svg { width:100%; height:100%; display:block; }
-.cast .header-title-wrap { position:relative; justify-self:center; align-self:center; outline:none; min-width:0; text-align:center; }
-.cast .header-title-wrap:focus-visible { box-shadow:0 0 0 2px #90A4AE; border-radius:4px; }
-.cast .header-title { font-size:1.75rem; font-weight:700; color:#e0e0e0; cursor:help; }
-.cast .header-instructions-panel {
-  display:none;
-  position:absolute;
-  top:100%;
-  left:50%;
-  transform:translateX(-50%);
-  z-index:50;
-  margin-top:4px;
-  min-width:min(420px, 92vw);
-  max-width:min(520px, 94vw);
-  max-height:min(420px, 72vh);
-  overflow:auto;
-  padding:12px 14px 14px;
-  background:#2b2b2b;
-  border:1px solid #666;
-  border-radius:8px;
-  box-shadow:0 10px 28px rgba(0,0,0,.55);
-  font-size:13px;
-  font-weight:400;
-  line-height:1.45;
-  color:#e0e0e0;
-  text-align:left;
-  outline:none;
-}
-.cast .header-instructions-panel:focus-visible { box-shadow:0 0 0 2px #90A4AE, 0 10px 28px rgba(0,0,0,.55); }
-.cast .header-instructions-panel::before {
-  content:"";
-  position:absolute;
-  left:0;
-  right:0;
-  top:-10px;
-  height:10px;
-}
-.cast .header-title-wrap:hover .header-instructions-panel,
-.cast .header-title-wrap:focus-within .header-instructions-panel { display:block; }
-.cast .header-instructions-panel strong { color:#fff; font-weight:600; }
-.cast .header-instructions-panel ol { margin:0 0 0 1.1em; padding:0; }
-.cast .header-instructions-panel li { margin-bottom:10px; }
-.cast .header-instructions-panel li:last-child { margin-bottom:0; }
-.cast .header-center { justify-self:end; display:flex; justify-content:flex-end; align-items:center; }
-.cast .header-token-btn { white-space:nowrap; }
-.cast .connection-controls { padding:10px 0 16px; border-bottom:1px solid #555; margin-bottom:8px; }
-.cast .connection-controls .grid { margin-top:0; }
-.cast .auth-topic-pair { display:flex; gap:8px; align-items:flex-end; }
-.cast .auth-topic-pair > div { flex:1 1 0; min-width:0; display:flex; flex-direction:column; }
-.cast .auth-topic-pair > div > div { display:flex; gap:8px; }
-.cast .auth-topic-pair > div > div > input { flex:1 1 0; min-width:0; width:auto; box-sizing:border-box; padding:9px 10px; font-size:13px; border:1px solid #666; border-radius:4px; background:#4a4a4a; color:#e0e0e0; }
-.cast .auth-topic-pair button { flex-shrink:0; align-self:flex-end; }
-.cast .subscribe-events-topic-actors,
-.cast .publish-event-topic-actor-row,
-.cast .get-datatype-topic-actor-row { grid-column:1/-1; display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; align-items:start; }
-.cast .status { padding:10px 12px; border-radius:4px; margin:12px 0; background:#4a4a4a; border-left:4px solid #777; }
-.cast .status.status-header { margin:0; padding:10px 16px; font-size:1.1rem; line-height:1.4; border-left-width:4px; border-radius:6px; white-space:nowrap; }
-.cast .status.status-header strong { font-weight:600; }
-.cast .connected { border-left-color:#4CAF50; }
-.cast .disconnected { border-left-color:#d32f2f; }
-.cast .connecting { border-left-color:#ff9800; }
-.cast .token-ready { border-left-color:#ff9800; }
-.cast .success { border-left-color:#4CAF50; }
-.cast .error { border-left-color:#ff9800; background:#5d4037; }
-.cast .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; }
-.cast .subscribe-actions { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; align-items:center; width:100%; margin-top:10px; }
-.cast .subscribe-actions .subscribe-action-buttons { display:flex; flex-wrap:wrap; gap:10px; }
-.cast button { padding:9px 14px; border:1px solid #666; border-radius:4px; background:#90A4AE; color:white; cursor:pointer; font-size:13px; }
-.cast button:hover:not(:disabled){ background:#78909C; }
-.cast button:disabled{ background:#3a3a3a; color:#777; border-color:#555; cursor:not-allowed; }
-.cast .messages { margin-top:12px; max-height:380px; overflow:auto; background:#2b2b2b; border-radius:4px; padding:10px; font-size:12px; }
-.cast .msg { border-left:3px solid #90A4AE; background:#3d3d3d; border-radius:4px; margin-bottom:8px; padding:8px; white-space:pre-wrap; word-break:break-word; }
-.cast .msg.received { border-left-color:#4CAF50; }
-.cast .msg.sent { border-left-color:#2196F3; }
-.cast .msg.err { border-left-color:#d32f2f; background:#5d4037; }
-`;
-  document.head.appendChild(style);
-}
-
-const HEADER_INSTRUCTIONS_HTML = `<ol>
+function headerInstructionsHtml() {
+  return `<ol>
 <li><strong>Hub</strong> — Choose <em>3D Slicer local</em> (hub on this machine) or <em>3D Slicer cloud</em>. Hidden fields still hold the token and hub URLs for the selected preset.</li>
 <li><strong>Authenticate</strong> — Requests an OAuth token from the auth endpoint. When the status strip shows token ready, you can subscribe and use Get/Publish (depending on hub rules).</li>
 <li><strong>Topic (Authenticate row)</strong> — Your FHIRcast session identifier. Use <strong>Update</strong> if the hub assigns or changes the topic after authentication.</li>
@@ -194,45 +101,46 @@ const HEADER_INSTRUCTIONS_HTML = `<ol>
 <li><strong>Publish</strong> — Pick event type (or custom), topic, and actor preset, then edit <strong>Event data JSON</strong>. Some event types (e.g. DICOM-send) expect specific payloads; the UI may show a fixed local file label for demos.</li>
 <li><strong>Get</strong> — Choose datatype, topic, and actor, then <strong>Get</strong> to fetch into the results area below. Requires token/subscriber state as implemented for this client.</li>
 <li><strong>Messages received</strong> — Log of incoming hub messages; use <strong>Clear Messages</strong> to reset the list and counter.</li>
-<li><strong>Hub Admin portal</strong> — Opens the hub admin UI in a new tab when configured.</li>
+<li><strong>Open Hub Admin Portal</strong> — Opens the hub admin UI in a new tab when configured.</li>
 </ol>
-<p style="margin:12px 0 0;font-size:12px;color:#b0b0b0">Hover the title to open. Tab to the title, then Tab once more to focus this panel for keyboard scrolling.</p>`;
+<p class="${style.instructionsFooter}">Hover the title to open. Tab to the title, then Tab once more to focus this panel for keyboard scrolling.</p>`;
+}
 
 function buildPageHtml() {
-  return `<div class="container">
-  <div class="cast-header"><div class="header-left"><a class="header-logo" href="https://kitware.github.io/vtk-js/" target="_blank" rel="noopener noreferrer" aria-label="VTK.js (opens documentation)"></a></div><div class="header-title-wrap" tabindex="0" aria-label="Cast client instructions"><span class="header-title">Cast client</span><div class="header-instructions-panel" role="region" aria-label="Cast client instructions" tabindex="0">${HEADER_INSTRUCTIONS_HTML}</div></div><div class="header-center"><div id="connectionStatus" class="status status-header disconnected"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div></div>
-  <div class="connection-controls section">
+  return `<div class="${style.container}">
+  <div class="${style.castHeader}"><div class="${style.headerLeft}"><a id="castHeaderLogoLink" class="${style.headerLogo}" href="https://kitware.github.io/vtk-js/" target="_blank" rel="noopener noreferrer" aria-label="VTK.js (opens documentation)"></a></div><div class="${style.headerTitleWrap}" tabindex="0" aria-label="Cast client instructions"><span class="${style.headerTitle}">Cast client</span><div class="${style.headerInstructionsPanel}" role="region" aria-label="Cast client instructions" tabindex="0">${headerInstructionsHtml()}</div></div><div class="${style.headerCenter}"><div id="connectionStatus" class="${style.status} ${style.statusHeader} ${style.disconnected}"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div></div>
+  <div class="${style.connectionControls} ${style.section}">
     <h2>Authenticate</h2>
-    <div class="grid">
+    <div class="${style.grid} ${style.connectionControlsInnerGrid}">
       <div><label for="hubSelect">Hub</label><select id="hubSelect"><option value="local">3D Slicer local</option><option value="cloud" selected>3D Slicer cloud</option></select></div>
-      <div style="grid-column:1/-1"><div class="auth-topic-pair"><button type="button" id="tokenBtn">Authenticate</button><button type="button" id="hubAdminPortalBtn" class="header-token-btn">Hub Admin portal</button><div><label for="topicDisplay">Topic</label><div><input id="topicDisplay" type="text" spellcheck="false" autocomplete="off" /><button type="button" id="topicUpdateBtn">Update</button></div></div></div></div>
+      <div class="${style.gridFullWidth}"><div class="${style.authTopicPair}"><button type="button" id="tokenBtn">Authenticate</button><button type="button" id="hubAdminPortalBtn" class="${style.headerTokenBtn}">Open Hub Admin Portal</button><div><label for="topicDisplay">Topic</label><div><input id="topicDisplay" type="text" spellcheck="false" autocomplete="off" /><button type="button" id="topicUpdateBtn">Update</button></div></div></div></div>
     </div>
   </div>
-  <span class="cast-hidden-endpoint"><div><label for="tokenEndpoint">auth endpoint</label><input id="tokenEndpoint" /></div></span>
-  <div class="section">
+  <span class="${style.castHiddenEndpoint}"><div><label for="tokenEndpoint">auth endpoint</label><input id="tokenEndpoint" /></div></span>
+  <div class="${style.section}">
     <h2>Subscribe</h2>
-    <div class="grid">
-      <div class="cast-hidden-endpoint"><label for="hubEndpoint">hub_endpoint</label><input id="hubEndpoint" /></div>
+    <div class="${style.grid}">
+      <div class="${style.castHiddenEndpoint}"><label for="hubEndpoint">hub_endpoint</label><input id="hubEndpoint" /></div>
       <div><label for="subscriberName">Subscriber</label><input id="subscriberName" /></div>
-      <div class="subscribe-events-topic-actors">
+      <div class="${style.subscribeEventsTopicActors}">
         <div><label for="events">Events</label><input id="events" value="*" /></div>
         <div><label for="topic">Topic</label><input id="topic" /></div>
-        <div><label for="subscribeActors">Actors (JSON array)</label><input id="subscribeActors" class="subscribe-actors-json" type="text" spellcheck="false" value='${DEFAULT_SUBSCRIBE_ACTORS_JSON}' /></div>
+        <div><label for="subscribeActors">Actors (JSON array)</label><input id="subscribeActors" class="${style.subscribeActorsJson}" type="text" spellcheck="false" value='${DEFAULT_SUBSCRIBE_ACTORS_JSON}' /></div>
       </div>
-      <div class="cast-hidden-endpoint" style="grid-column:1/-1"><label for="productName">client_product_name</label><input id="productName" value="VTKJS" /></div>
+      <div class="${style.castHiddenEndpoint} ${style.gridFullWidth}"><label for="productName">client_product_name</label><input id="productName" value="VTKJS" /></div>
     </div>
-    <div class="actions subscribe-actions">
-      <div class="subscribe-action-buttons">
+    <div class="${style.actions} ${style.subscribeActions}">
+      <div class="${style.subscribeActionButtons}">
         <button type="button" id="subscribeBtn" disabled>Subscribe</button>
         <button type="button" id="unsubscribeBtn" disabled>Unsubscribe</button>
       </div>
       <button type="button" id="openTopicViewerBtn" disabled>Open Image Display with this topic</button>
     </div>
   </div>
-  <div class="section">
+  <div class="${style.section}">
     <h2>Publish</h2>
-    <div class="grid">
-      <div class="publish-event-topic-actor-row">
+    <div class="${style.grid}">
+      <div class="${style.publishEventTopicActorRow}">
         <div>
           <label for="eventType">Event type</label>
           <select id="eventType">
@@ -243,7 +151,7 @@ function buildPageHtml() {
             <option value="patient-close">patient-close</option>
             <option value="custom">Other (custom)</option>
           </select>
-          <input id="eventTypeCustom" placeholder="Custom event type" style="display:none;margin-top:8px" />
+          <input id="eventTypeCustom" class="${style.eventTypeCustom}" placeholder="Custom event type" />
         </div>
         <div><label for="publishTopic">Topic</label><input id="publishTopic" /></div>
         <div><label for="publishActorPreset">Actor</label><select id="publishActorPreset"></select></div>
@@ -253,23 +161,23 @@ function buildPageHtml() {
       <label for="eventData">Event data JSON</label>
       <textarea id="eventData"></textarea>
     </div>
-    <div class="actions"><button id="publishBtn" disabled>Publish</button><span id="dicomFileLabel" style="display:none;align-self:center;color:#b0b0b0">local file:ai-results-seg.dcm</span></div>
+    <div class="${style.actions}"><button id="publishBtn" disabled>Publish</button><span id="dicomFileLabel" class="${style.dicomFileLabel}">local file:ai-results-seg.dcm</span></div>
   </div>
-  <div class="section">
+  <div class="${style.section}">
     <h2>Get</h2>
-    <div class="grid">
-      <div class="cast-hidden-endpoint"><label for="getEndpoint">GET endpoint</label><input id="getEndpoint" /></div>
-      <div class="cast-hidden-endpoint"><label for="getSubscriber">Subscriber</label><input id="getSubscriber" /></div>
-      <div class="get-datatype-topic-actor-row">
+    <div class="${style.grid}">
+      <div class="${style.castHiddenEndpoint}"><label for="getEndpoint">GET endpoint</label><input id="getEndpoint" /></div>
+      <div class="${style.castHiddenEndpoint}"><label for="getSubscriber">Subscriber</label><input id="getSubscriber" /></div>
+      <div class="${style.getDatatypeTopicActorRow}">
         <div><label for="getDataType">DataType</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select></div>
         <div><label for="getTopic">Topic</label><input id="getTopic" /></div>
         <div><label for="getActorPreset">Actor</label><select id="getActorPreset"></select></div>
       </div>
     </div>
     <div id="getResults"></div>
-    <div class="actions"><button id="getBtn" disabled>Get</button></div>
+    <div class="${style.actions}"><button id="getBtn" disabled>Get</button></div>
   </div>
-  <div class="section"><h2>Messages received <span id="messageCount" style="font-weight:normal;color:#90A4AE">(0)</span></h2><div class="actions"><button id="clearBtn">Clear Messages</button></div><div id="messages" class="messages"></div></div>
+  <div class="${style.section}"><h2>Messages received <span id="messageCount" class="${style.messageCount}">(0)</span></h2><div class="${style.actions}"><button id="clearBtn">Clear Messages</button></div><div id="messages" class="${style.messages}"></div></div>
   </div>`;
 }
 
@@ -370,7 +278,7 @@ async function buildDicomSendContext() {
 
 function addMessage(el, state, kind, label, payload) {
   const line = document.createElement('div');
-  line.className = `msg ${kind}`;
+  line.className = `${style.msg} ${MESSAGE_KIND_CLASS[kind]}`;
   const ts = new Date().toLocaleTimeString();
   line.textContent = `${label} - ${ts}\n${
     typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2)
@@ -381,7 +289,9 @@ function addMessage(el, state, kind, label, payload) {
 }
 
 function setConnection(el, status, text) {
-  el.connectionStatus.className = `status status-header ${status}`;
+  const statusClass =
+    CONNECTION_STATUS_CLASS[status] || style.disconnected;
+  el.connectionStatus.className = `${style.status} ${style.statusHeader} ${statusClass}`;
   el.statusText.textContent = text;
 }
 
@@ -650,7 +560,7 @@ async function handleGet(el, state) {
   const response = await fetch(url.toString(), { method: 'GET' });
   if (response.ok) {
     const json = await response.json();
-    el.getResults.innerHTML = `<div class="status success"><pre>${JSON.stringify(
+    el.getResults.innerHTML = `<div class="${style.status} ${style.success}"><pre class="${style.getResultsPre}">${JSON.stringify(
       json,
       null,
       2
@@ -664,15 +574,22 @@ async function handleGet(el, state) {
 }
 
 function boot() {
-  document.body.style.margin = '0';
+  document.documentElement.classList.add(style.castExampleHtml);
+  document.body.classList.add(style.castExampleBody);
+  /* Inline + important so black wins when embedded (e.g. viewer shell overrides body). */
+  document.documentElement.style.setProperty(
+    'background-color',
+    '#000',
+    'important'
+  );
+  document.body.style.setProperty('background-color', '#000', 'important');
   const root = document.createElement('div');
-  root.className = 'cast';
+  root.className = style.cast;
   root.innerHTML = buildPageHtml();
   document.body.appendChild(root);
-  injectStyles();
-  const headerLogo = root.querySelector('.header-logo');
+  const headerLogo = document.getElementById('castHeaderLogoLink');
   if (headerLogo) {
-    headerLogo.innerHTML = vtkJsLogoSvg;
+    headerLogo.innerHTML = vtkJsLogoWideSvg;
   }
 
   const el = {
@@ -775,12 +692,16 @@ function boot() {
 ]`;
 
   el.eventType.addEventListener('change', () => {
-    el.eventTypeCustom.style.display =
-      el.eventType.value === 'custom' ? 'block' : 'none';
+    el.eventTypeCustom.className =
+      el.eventType.value === 'custom'
+        ? `${style.eventTypeCustom} ${style.eventTypeCustomVisible}`
+        : style.eventTypeCustom;
     el.eventDataRow.style.display =
       el.eventType.value === 'dicom-send' ? 'none' : '';
-    el.dicomFileLabel.style.display =
-      el.eventType.value === 'dicom-send' ? 'inline' : 'none';
+    el.dicomFileLabel.className =
+      el.eventType.value === 'dicom-send'
+        ? `${style.dicomFileLabel} ${style.dicomFileLabelVisible}`
+        : style.dicomFileLabel;
     if (el.eventType.value === 'dicom-send') {
       el.publishActorPreset.value = DICOM_SEND_ACTOR_KEYWORD;
     } else {
