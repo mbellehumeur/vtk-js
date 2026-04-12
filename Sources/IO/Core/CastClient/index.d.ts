@@ -50,8 +50,13 @@ export interface CastClientConfig {
   messageIdPrefix?: string;
 }
 
+export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
+
 export interface vtkCastClient extends vtkObject {
   onMessage(callback: (message: CastMessage) => void): void;
+  onConnectionStateChange(
+    callback: (state: ConnectionState, detail?: unknown) => void
+  ): void;
   destroy(): void;
   getHubConfig(): HubConfig;
   getSessionConfig(): SessionConfig;

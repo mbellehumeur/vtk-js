@@ -31,6 +31,18 @@ MockWebSocket.prototype.emitClose = function emitClose() {
   this.listeners.close.forEach((cb) => cb());
 };
 
+MockWebSocket.prototype.emitOpen = function emitOpen() {
+  if (typeof this.onopen === 'function') {
+    this.onopen();
+  }
+};
+
+MockWebSocket.prototype.emitError = function emitError() {
+  if (typeof this.onerror === 'function') {
+    this.onerror();
+  }
+};
+
 MockWebSocket.OPEN = 1;
 MockWebSocket.CLOSED = 3;
 
@@ -408,5 +420,59 @@ test('vtkCastClient publish rejects dicom-send string payload', (t) =>
           'throws strict dicom-send string payload error'
         );
       }
+    }
+  ));
+
+test('vtkCastClient emits websocket connection state changes', (t) =>
+  withGlobals(
+    t,
+    () => {
+      const websockets = [];
+      globalThis.window = { location: { origin: 'https://viewer.local' } };
+      globalThis.AbortSignal = { timeout: () => undefined };
+      globalThis.WebSocket = makeWebSocketCtor(websockets);
+      globalThis.fetch = async (url) => {
+        if (url.includes('/token')) {
+          return {
+            status: 200,
+            json: async () => ({ access_token: 'token-conn' }),
+          };
+        }
+        return {
+          status: 202,
+          json: async () => ({ 'hub.channel.endpoint': 'ws://hub.local/ws' }),
+        };
+      };
+      return { websockets };
+    },
+    async ({ websockets }) => {
+      const client = vtkCastClient.newInstance({
+        hub: {
+          hub_endpoint: 'https://hub.local/api/hub',
+          token_endpoint: 'https://hub.local/token',
+        },
+        session: {
+          events: ['*'],
+          topic: 'topic-conn',
+        },
+      });
+
+      const states = [];
+      client.onConnectionStateChange((state) => {
+        states.push(state);
+      });
+
+      await client.getToken();
+      await client.subscribe();
+      const ws = websockets[0];
+      ws.emitOpen();
+      ws.emitError();
+      ws.emitClose();
+
+      t.deepEqual(
+        states,
+        ['connecting', 'connected', 'error', 'disconnected'],
+        'connection states emitted from websocket lifecycle'
+      );
     }
   ));

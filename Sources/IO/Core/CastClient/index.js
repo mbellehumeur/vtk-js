@@ -206,12 +206,19 @@ const DEFAULT_VALUES = {
   hub: null,
   reconnectInterval: null,
   onMessageCallback: null,
+  onConnectionStateChangeCallback: null,
   lastSentMessage: null,
   pendingDicomSendCastMessage: null,
 };
 
 function vtkCastClient(publicAPI, model) {
   model.classHierarchy.push('vtkCastClient');
+
+  function emitConnectionState(state, detail) {
+    if (model.onConnectionStateChangeCallback) {
+      model.onConnectionStateChangeCallback(state, detail);
+    }
+  }
 
   function messageIdPrefix() {
     return model.config.messageIdPrefix || DEFAULT_MESSAGE_ID_PREFIX;
@@ -221,6 +228,7 @@ function vtkCastClient(publicAPI, model) {
     console.debug('CastClient: websocket is closed.');
     model.pendingDicomSendCastMessage = null;
     model.hub.resubscribeRequested = true;
+    emitConnectionState('disconnected');
   }
 
   function processBinaryMessage(buf) {
@@ -355,6 +363,10 @@ function vtkCastClient(publicAPI, model) {
 
   publicAPI.onMessage = (callback) => {
     model.onMessageCallback = callback;
+  };
+
+  publicAPI.onConnectionStateChange = (callback) => {
+    model.onConnectionStateChangeCallback = callback;
   };
 
   publicAPI.destroy = () => {
@@ -524,6 +536,7 @@ function vtkCastClient(publicAPI, model) {
     };
 
     try {
+      emitConnectionState('connecting');
       const response = await fetch(model.hub.hub_endpoint, requestOptions);
       if (response.status === 202) {
         model.hub.subscribed = true;
@@ -549,6 +562,7 @@ function vtkCastClient(publicAPI, model) {
         model.hub.websocket.binaryType = 'arraybuffer';
         model.hub.websocket.onopen = function onOpen() {
           this.send(`{"hub.channel.endpoint":"${normalizedWebsocketUrl}"}`);
+          emitConnectionState('connected');
         };
         model.hub.websocket.addEventListener('message', (ev) => {
           if (typeof ev.data === 'string') {
@@ -560,6 +574,7 @@ function vtkCastClient(publicAPI, model) {
         model.hub.websocket.addEventListener('close', websocketClose);
         model.hub.websocket.onerror = function onError() {
           console.warn('CastClient: Error reported on websocket');
+          emitConnectionState('error');
         };
         return response.status;
       }
@@ -644,6 +659,7 @@ function vtkCastClient(publicAPI, model) {
       model.hub.websocket.close();
       model.hub.websocket = null;
     }
+    emitConnectionState('disconnected');
   };
 
   publicAPI.publish = async (castMessage, hub = model.hub) => {

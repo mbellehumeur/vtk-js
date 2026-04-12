@@ -1,11 +1,12 @@
 import '@kitware/vtk.js/favicon';
 
+import vtkJsLogoSvg from '../../Sources/Interaction/UI/Icons/Logo.svg';
 import vtkCastClient from 'vtk.js/Sources/IO/Core/CastClient';
 
 const DEFAULT_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}","EC","WATCHER"]`;
 const DEFAULT_GET_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
-const DEFAULT_SUBSCRIBER_NAME = 'CS3D';
+const DEFAULT_SUBSCRIBER_NAME = 'VTKJS';
 const DICOM_SEND_ACTOR_KEYWORD = 'EC';
 const OPENIGT_LINK_ACTOR_TOOLTIP =
   'Image Guided Therapy link\nA system that handles navigation and other dataTypes';
@@ -58,7 +59,7 @@ const HUB_DEFINITIONS = {
   local: {
     hubEndpoint: 'http://127.0.0.1:2017/api/hub',
     authEndpoint: 'http://127.0.0.1:2017/oauth/token',
-    product_name: 'CS3D',
+    product_name: 'VTKJS',
     client_id: 'client_id_3d_Slicer',
     client_secret: 'client_secret_3d_Slicer',
   },
@@ -67,7 +68,7 @@ const HUB_DEFINITIONS = {
       'https://cast-hub-g6abetanhjesb6cx.westeurope-01.azurewebsites.net/api/hub',
     authEndpoint:
       'https://cast-hub-g6abetanhjesb6cx.westeurope-01.azurewebsites.net/oauth/token',
-    product_name: 'CS3D',
+    product_name: 'VTKJS',
     client_id: 'client_id_3d_Slicer',
     client_secret: 'client_secret_3d_Slicer',
   },
@@ -93,9 +94,61 @@ function injectStyles() {
 .cast .section input.subscribe-actors-json { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .cast .cast-hidden-endpoint { display:none !important; }
 .cast .cast-header { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:16px; margin-bottom:0; }
-.cast .header-title { font-size:1.75rem; font-weight:700; color:#e0e0e0; }
-.cast .header-center { display:flex; justify-content:center; }
-.cast .header-right { display:flex; align-items:center; gap:12px; justify-content:flex-end; }
+.cast .header-left { justify-self:start; display:flex; align-items:center; min-width:0; }
+.cast .header-logo {
+  flex-shrink:0;
+  width:44px;
+  height:44px;
+  display:block;
+  color:inherit;
+  text-decoration:none;
+  border-radius:6px;
+}
+.cast .header-logo:focus-visible { outline:2px solid #90A4AE; outline-offset:2px; }
+.cast .header-logo svg { width:100%; height:100%; display:block; }
+.cast .header-title-wrap { position:relative; justify-self:center; align-self:center; outline:none; min-width:0; text-align:center; }
+.cast .header-title-wrap:focus-visible { box-shadow:0 0 0 2px #90A4AE; border-radius:4px; }
+.cast .header-title { font-size:1.75rem; font-weight:700; color:#e0e0e0; cursor:help; }
+.cast .header-instructions-panel {
+  display:none;
+  position:absolute;
+  top:100%;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:50;
+  margin-top:4px;
+  min-width:min(420px, 92vw);
+  max-width:min(520px, 94vw);
+  max-height:min(420px, 72vh);
+  overflow:auto;
+  padding:12px 14px 14px;
+  background:#2b2b2b;
+  border:1px solid #666;
+  border-radius:8px;
+  box-shadow:0 10px 28px rgba(0,0,0,.55);
+  font-size:13px;
+  font-weight:400;
+  line-height:1.45;
+  color:#e0e0e0;
+  text-align:left;
+  outline:none;
+}
+.cast .header-instructions-panel:focus-visible { box-shadow:0 0 0 2px #90A4AE, 0 10px 28px rgba(0,0,0,.55); }
+.cast .header-instructions-panel::before {
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:-10px;
+  height:10px;
+}
+.cast .header-title-wrap:hover .header-instructions-panel,
+.cast .header-title-wrap:focus-within .header-instructions-panel { display:block; }
+.cast .header-instructions-panel strong { color:#fff; font-weight:600; }
+.cast .header-instructions-panel ol { margin:0 0 0 1.1em; padding:0; }
+.cast .header-instructions-panel li { margin-bottom:10px; }
+.cast .header-instructions-panel li:last-child { margin-bottom:0; }
+.cast .header-center { justify-self:end; display:flex; justify-content:flex-end; align-items:center; }
 .cast .header-token-btn { white-space:nowrap; }
 .cast .connection-controls { padding:10px 0 16px; border-bottom:1px solid #555; margin-bottom:8px; }
 .cast .connection-controls .grid { margin-top:0; }
@@ -131,14 +184,28 @@ function injectStyles() {
   document.head.appendChild(style);
 }
 
+const HEADER_INSTRUCTIONS_HTML = `<ol>
+<li><strong>Hub</strong> — Choose <em>3D Slicer local</em> (hub on this machine) or <em>3D Slicer cloud</em>. Hidden fields still hold the token and hub URLs for the selected preset.</li>
+<li><strong>Authenticate</strong> — Requests an OAuth token from the auth endpoint. When the status strip shows token ready, you can subscribe and use Get/Publish (depending on hub rules).</li>
+<li><strong>Topic (Authenticate row)</strong> — Your FHIRcast session identifier. Use <strong>Update</strong> if the hub assigns or changes the topic after authentication.</li>
+<li><strong>Subscribe</strong> — Set subscriber name, events pattern (e.g. <code>*</code>), topic, and actors as a JSON array of keywords (hover actor presets in Publish/Get for DICOM role hints). Requires a valid token first.</li>
+<li><strong>Unsubscribe</strong> — Leaves the subscription; status and buttons update accordingly.</li>
+<li><strong>Open Image Display with this topic</strong> — Opens the configured viewer with the current topic (enabled when appropriate).</li>
+<li><strong>Publish</strong> — Pick event type (or custom), topic, and actor preset, then edit <strong>Event data JSON</strong>. Some event types (e.g. DICOM-send) expect specific payloads; the UI may show a fixed local file label for demos.</li>
+<li><strong>Get</strong> — Choose datatype, topic, and actor, then <strong>Get</strong> to fetch into the results area below. Requires token/subscriber state as implemented for this client.</li>
+<li><strong>Messages received</strong> — Log of incoming hub messages; use <strong>Clear Messages</strong> to reset the list and counter.</li>
+<li><strong>Hub Admin portal</strong> — Opens the hub admin UI in a new tab when configured.</li>
+</ol>
+<p style="margin:12px 0 0;font-size:12px;color:#b0b0b0">Hover the title to open. Tab to the title, then Tab once more to focus this panel for keyboard scrolling.</p>`;
+
 function buildPageHtml() {
   return `<div class="container">
-  <div class="cast-header"><span class="header-title">Cast client</span><div class="header-center"><div id="connectionStatus" class="status status-header disconnected"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div><div class="header-right"><button type="button" id="hubAdminPortalBtn" class="header-token-btn">Hub Admin portal</button></div></div>
+  <div class="cast-header"><div class="header-left"><a class="header-logo" href="https://kitware.github.io/vtk-js/" target="_blank" rel="noopener noreferrer" aria-label="VTK.js (opens documentation)"></a></div><div class="header-title-wrap" tabindex="0" aria-label="Cast client instructions"><span class="header-title">Cast client</span><div class="header-instructions-panel" role="region" aria-label="Cast client instructions" tabindex="0">${HEADER_INSTRUCTIONS_HTML}</div></div><div class="header-center"><div id="connectionStatus" class="status status-header disconnected"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div></div>
   <div class="connection-controls section">
     <h2>Authenticate</h2>
     <div class="grid">
       <div><label for="hubSelect">Hub</label><select id="hubSelect"><option value="local">3D Slicer local</option><option value="cloud" selected>3D Slicer cloud</option></select></div>
-      <div style="grid-column:1/-1"><div class="auth-topic-pair"><button type="button" id="tokenBtn">Authenticate</button><div><label for="topicDisplay">Topic</label><div><input id="topicDisplay" type="text" spellcheck="false" autocomplete="off" /><button type="button" id="topicUpdateBtn">Update</button></div></div></div></div>
+      <div style="grid-column:1/-1"><div class="auth-topic-pair"><button type="button" id="tokenBtn">Authenticate</button><button type="button" id="hubAdminPortalBtn" class="header-token-btn">Hub Admin portal</button><div><label for="topicDisplay">Topic</label><div><input id="topicDisplay" type="text" spellcheck="false" autocomplete="off" /><button type="button" id="topicUpdateBtn">Update</button></div></div></div></div>
     </div>
   </div>
   <span class="cast-hidden-endpoint"><div><label for="tokenEndpoint">auth endpoint</label><input id="tokenEndpoint" /></div></span>
@@ -152,14 +219,14 @@ function buildPageHtml() {
         <div><label for="topic">Topic</label><input id="topic" /></div>
         <div><label for="subscribeActors">Actors (JSON array)</label><input id="subscribeActors" class="subscribe-actors-json" type="text" spellcheck="false" value='${DEFAULT_SUBSCRIBE_ACTORS_JSON}' /></div>
       </div>
-      <div class="cast-hidden-endpoint" style="grid-column:1/-1"><label for="productName">client_product_name</label><input id="productName" value="CS3D" /></div>
+      <div class="cast-hidden-endpoint" style="grid-column:1/-1"><label for="productName">client_product_name</label><input id="productName" value="VTKJS" /></div>
     </div>
     <div class="actions subscribe-actions">
       <div class="subscribe-action-buttons">
         <button type="button" id="subscribeBtn" disabled>Subscribe</button>
         <button type="button" id="unsubscribeBtn" disabled>Unsubscribe</button>
       </div>
-      <button type="button" id="openTopicViewerBtn" disabled>Open viewer with this topic</button>
+      <button type="button" id="openTopicViewerBtn" disabled>Open Image Display with this topic</button>
     </div>
   </div>
   <div class="section">
@@ -170,8 +237,8 @@ function buildPageHtml() {
           <label for="eventType">Event type</label>
           <select id="eventType">
             <option value="ImagingStudy-open">ImagingStudy-open</option>
-            <option value="ImagingStudy-close">ImagingStudy-close</option>
             <option value="dicom-send">DICOM-send</option>
+            <option value="ImagingStudy-close">ImagingStudy-close</option>
             <option value="patient-open">patient-open</option>
             <option value="patient-close">patient-close</option>
             <option value="custom">Other (custom)</option>
@@ -186,7 +253,7 @@ function buildPageHtml() {
       <label for="eventData">Event data JSON</label>
       <textarea id="eventData"></textarea>
     </div>
-    <div class="actions"><button id="publishBtn" disabled>Publish</button></div>
+    <div class="actions"><button id="publishBtn" disabled>Publish</button><span id="dicomFileLabel" style="display:none;align-self:center;color:#b0b0b0">local file:ai-results-seg.dcm</span></div>
   </div>
   <div class="section">
     <h2>Get</h2>
@@ -318,6 +385,24 @@ function setConnection(el, status, text) {
   el.statusText.textContent = text;
 }
 
+function applyWebsocketStatus(el, wsState) {
+  switch (wsState) {
+    case 'connecting':
+      setConnection(el, 'connecting', 'Websocket connecting');
+      break;
+    case 'connected':
+      setConnection(el, 'connected', 'Websocket connected');
+      break;
+    case 'error':
+      setConnection(el, 'error', 'Websocket error');
+      break;
+    case 'disconnected':
+    default:
+      setConnection(el, 'disconnected', 'Websocket disconnected');
+      break;
+  }
+}
+
 function applyHubPreset(el, state, hubKey) {
   const hubDef = HUB_DEFINITIONS[hubKey];
   el.hubEndpoint.value = hubDef.hubEndpoint;
@@ -363,12 +448,28 @@ function ensureClient(el, state, recreate = false) {
     state.client = vtkCastClient.newInstance({
       hub: buildHubConfig(el, state),
       session: buildSessionConfig(el),
-      productName: el.productName.value.trim() || 'CS3D',
+      productName: el.productName.value.trim() || 'VTKJS',
       callbackUrl: `${window.location.origin}/castCallback`,
       autoReconnect: true,
     });
     state.client.onMessage((message) => {
       addMessage(el, state, 'received', 'Received', message);
+    });
+    state.client.onConnectionStateChange((wsState) => {
+      applyWebsocketStatus(el, wsState);
+      if (wsState === 'connected') {
+        el.subscribeBtn.disabled = true;
+        el.unsubscribeBtn.disabled = false;
+        el.openTopicViewerBtn.disabled = false;
+        el.publishBtn.disabled = false;
+        el.getBtn.disabled = false;
+      } else if (wsState === 'disconnected' || wsState === 'error') {
+        el.subscribeBtn.disabled = false;
+        el.unsubscribeBtn.disabled = true;
+        el.openTopicViewerBtn.disabled = true;
+        el.publishBtn.disabled = true;
+        el.getBtn.disabled = true;
+      }
     });
   }
   state.client.setTopic(el.topic.value.trim());
@@ -385,7 +486,7 @@ async function handleToken(el, state) {
     tokenFormData.append('client_secret', state.selectedClientSecret || '');
     tokenFormData.append(
       'client_product_name',
-      el.productName.value.trim() || 'CS3D'
+      el.productName.value.trim() || 'VTKJS'
     );
     const response = await fetch(el.tokenEndpoint.value.trim(), {
       method: 'POST',
@@ -431,16 +532,9 @@ async function handleToken(el, state) {
 }
 
 async function handleSubscribe(el, state) {
-  setConnection(el, 'connecting', 'Subscribing');
   const castClient = ensureClient(el, state);
   const result = await castClient.subscribe();
   if (result === 202) {
-    setConnection(el, 'connected', 'Websocket connected');
-    el.subscribeBtn.disabled = true;
-    el.unsubscribeBtn.disabled = false;
-    el.openTopicViewerBtn.disabled = false;
-    el.publishBtn.disabled = false;
-    el.getBtn.disabled = false;
     addMessage(el, state, 'sent', 'Subscribe', {
       topic: el.topic.value.trim(),
     });
@@ -459,7 +553,7 @@ async function handleUnsubscribe(el, state) {
   el.publishBtn.disabled = true;
   el.getBtn.disabled = true;
   el.subscribeBtn.disabled = false;
-  setConnection(el, 'disconnected', 'Not connected');
+  setConnection(el, 'disconnected', 'Websocket disconnected');
 }
 
 async function handlePublish(el, state) {
@@ -576,6 +670,10 @@ function boot() {
   root.innerHTML = buildPageHtml();
   document.body.appendChild(root);
   injectStyles();
+  const headerLogo = root.querySelector('.header-logo');
+  if (headerLogo) {
+    headerLogo.innerHTML = vtkJsLogoSvg;
+  }
 
   const el = {
     tokenEndpoint: byId('tokenEndpoint'),
@@ -601,6 +699,7 @@ function boot() {
     unsubscribeBtn: byId('unsubscribeBtn'),
     openTopicViewerBtn: byId('openTopicViewerBtn'),
     publishBtn: byId('publishBtn'),
+    dicomFileLabel: byId('dicomFileLabel'),
     getBtn: byId('getBtn'),
     tokenBtn: byId('tokenBtn'),
     hubAdminPortalBtn: byId('hubAdminPortalBtn'),
@@ -680,8 +779,12 @@ function boot() {
       el.eventType.value === 'custom' ? 'block' : 'none';
     el.eventDataRow.style.display =
       el.eventType.value === 'dicom-send' ? 'none' : '';
+    el.dicomFileLabel.style.display =
+      el.eventType.value === 'dicom-send' ? 'inline' : 'none';
     if (el.eventType.value === 'dicom-send') {
       el.publishActorPreset.value = DICOM_SEND_ACTOR_KEYWORD;
+    } else {
+      el.publishActorPreset.value = DEFAULT_ACTOR_KEYWORD;
     }
   });
   el.eventType.dispatchEvent(new Event('change'));
@@ -709,6 +812,14 @@ function boot() {
 
   el.hubAdminPortalBtn.addEventListener('click', () => {
     try {
+      if (el.hubSelect.value === 'local') {
+        window.open(
+          'http://localhost:2017/api/hub/admin',
+          '_blank',
+          'noopener,noreferrer'
+        );
+        return;
+      }
       const base = el.hubEndpoint.value.trim();
       const hubBase = base.endsWith('/') ? base : `${base}/`;
       const url = new URL('admin', hubBase).href;
@@ -720,9 +831,11 @@ function boot() {
 
   el.openTopicViewerBtn.addEventListener('click', () => {
     const topic = el.topic.value.trim();
-    const url = new URL(
-      'https://na-mic-pw45-hpe7f6crachve4ab.westeurope-01.azurewebsites.net/'
-    );
+    const viewerBaseUrl =
+      el.hubSelect.value === 'local'
+        ? 'http://localhost:3000'
+        : 'https://ohif-vtkjscastclient.d2lirbatw5joxv.amplifyapp.com';
+    const url = new URL(viewerBaseUrl);
     if (topic) {
       url.searchParams.set('topic', topic);
     }
