@@ -192,6 +192,33 @@ function createHubRuntimeState() {
   };
 }
 
+function getClientInfoPayload() {
+  if (typeof navigator === 'undefined') {
+    return null;
+  }
+
+  const info = {};
+  if (typeof navigator.userAgent === 'string' && navigator.userAgent.trim()) {
+    info.userAgent = navigator.userAgent.trim();
+  }
+  if (typeof navigator.platform === 'string' && navigator.platform.trim()) {
+    info.platform = navigator.platform.trim();
+  }
+  if (typeof navigator.language === 'string' && navigator.language.trim()) {
+    info.language = navigator.language.trim();
+  }
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (typeof timezone === 'string' && timezone.trim()) {
+      info.timezone = timezone.trim();
+    }
+  } catch (err) {
+    // Intl/timezone may be unavailable in some runtimes.
+  }
+
+  return Object.keys(info).length ? info : null;
+}
+
 const DEFAULT_VALUES = {
   config: {
     hub: {},
@@ -521,6 +548,13 @@ function vtkCastClient(publicAPI, model) {
         JSON.stringify(subscribeActors)
       );
     }
+    const clientInfo = getClientInfoPayload();
+    if (clientInfo) {
+      subscribeFormData.append(
+        'subscriber.client_info',
+        JSON.stringify(clientInfo)
+      );
+    }
 
     const requestOptions = {
       method: 'POST',
@@ -628,6 +662,13 @@ function vtkCastClient(publicAPI, model) {
       unsubscribeFormData.append(
         'subscriber.actors',
         JSON.stringify(unsubscribeActors)
+      );
+    }
+    const clientInfo = getClientInfoPayload();
+    if (clientInfo) {
+      unsubscribeFormData.append(
+        'subscriber.client_info',
+        JSON.stringify(clientInfo)
       );
     }
 

@@ -91,24 +91,23 @@ const HUB_DEFINITIONS = {
 };
 
 function headerInstructionsHtml() {
-  return `<ol>
-<li><strong>Hub</strong> — Choose <em>3D Slicer local</em> (hub on this machine) or <em>3D Slicer cloud</em>. Hidden fields still hold the token and hub URLs for the selected preset.</li>
-<li><strong>Authenticate</strong> — Requests an OAuth token from the auth endpoint. When the status strip shows token ready, you can subscribe and use Get/Publish (depending on hub rules).</li>
-<li><strong>Topic (Authenticate row)</strong> — Your FHIRcast session identifier. Use <strong>Update</strong> if the hub assigns or changes the topic after authentication.</li>
-<li><strong>Subscribe</strong> — Set subscriber name, events pattern (e.g. <code>*</code>), topic, and actors as a JSON array of keywords (hover actor presets in Publish/Get for DICOM role hints). Requires a valid token first.</li>
-<li><strong>Unsubscribe</strong> — Leaves the subscription; status and buttons update accordingly.</li>
-<li><strong>Open Image Display with this topic</strong> — Opens the configured viewer with the current topic (enabled when appropriate).</li>
-<li><strong>Publish</strong> — Pick event type (or custom), topic, and actor preset, then edit <strong>Event data JSON</strong>. Some event types (e.g. DICOM-send) expect specific payloads; the UI may show a fixed local file label for demos.</li>
-<li><strong>Get</strong> — Choose datatype, topic, and actor, then <strong>Get</strong> to fetch into the results area below. Requires token/subscriber state as implemented for this client.</li>
-<li><strong>Messages received</strong> — Log of incoming hub messages; use <strong>Clear Messages</strong> to reset the list and counter.</li>
-<li><strong>Open Hub Admin Portal</strong> — Opens the hub admin UI in a new tab when configured.</li>
+  return `<p>This example demonstrate using the vtk.js IO module cast client  for messaging as a worklist client and an evidence creator (EC) with the 3D slicer hub and an OHIF viewer.</p>
+<ol>
+<li><strong>Authenticate</strong> — Click the Authenticate button to request a token and user id. When the status strip shows token ready, you can subscribe and use Get/Publish (depending on hub rules).</li>
+<li><strong>Open Hub Admin Portal</strong> — Opens the hub admin portal to see the  subscriptions and messaging.</li>
+<li><strong>Subscribe</strong> — Click the Subscribe button to connect a websocket to the hub and receive and events.</li>
+<li><strong>Open Image Display with this topic</strong> — Opens a OHIF instance using the vtk.js client. </li>
+<li><strong>Publish ImagingStudy-open</strong> — Click the publish button to send an ImagingStudy-open event to the hub.  The study should open in the viewer.</li>
+<li><strong>Publish DICOM-send</strong> — Change the event type to DICOM-send and click the Publish button. This will send a DICOM file to the viewer and the segmentation should appear.</li>
+<li><strong>Get</strong> — Choose datatype "PNG"  and change the actor to ID.  This will get the PNG image of the viewer display</li>
+<li><strong>Publish ImagingStudy-close</strong> — Change the event type to ImagingStudy-close and click the Publish button. This will close the study in the viewer. </li>
 </ol>
 <p class="${style.instructionsFooter}">Hover the title to open. Tab to the title, then Tab once more to focus this panel for keyboard scrolling.</p>`;
 }
 
 function buildPageHtml() {
   return `<div class="${style.container}">
-  <div class="${style.castHeader}"><div class="${style.headerLeft}"><a id="castHeaderLogoLink" class="${style.headerLogo}" href="https://kitware.github.io/vtk-js/" target="_blank" rel="noopener noreferrer" aria-label="VTK.js (opens documentation)"></a></div><div class="${style.headerTitleWrap}" tabindex="0" aria-label="Cast client instructions"><span class="${style.headerTitle}">Cast client</span><div class="${style.headerInstructionsPanel}" role="region" aria-label="Cast client instructions" tabindex="0">${headerInstructionsHtml()}</div></div><div class="${style.headerCenter}"><div id="connectionStatus" class="${style.status} ${style.statusHeader} ${style.disconnected}"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div></div>
+  <div class="${style.castHeader}"><div class="${style.headerLeft}"><a id="castHeaderLogoLink" class="${style.headerLogo}" href="https://kitware.github.io/vtk-js/" target="_blank" rel="noopener noreferrer" aria-label="VTK.js (opens documentation)"></a></div><div class="${style.headerTitleWrap}" tabindex="0" aria-label="Cast client instructions"><span class="${style.headerTitle}">Cast client example</span><div class="${style.headerInstructionsPanel}" role="region" aria-label="Cast client instructions" tabindex="0">${headerInstructionsHtml()}</div></div><div class="${style.headerCenter}"><div id="connectionStatus" class="${style.status} ${style.statusHeader} ${style.disconnected}"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div></div>
   <div class="${style.connectionControls} ${style.section}">
     <h2>Authenticate</h2>
     <div class="${style.grid} ${style.connectionControlsInnerGrid}">
@@ -161,7 +160,7 @@ function buildPageHtml() {
       <label for="eventData">Event data JSON</label>
       <textarea id="eventData"></textarea>
     </div>
-    <div class="${style.actions}"><button id="publishBtn" disabled>Publish</button><span id="dicomFileLabel" class="${style.dicomFileLabel}">local file:ai-results-seg.dcm</span></div>
+    <div class="${style.actions}"><button id="publishBtn" disabled>Publish</button><span id="dicomFileLabel" class="${style.dicomFileLabel}">file: <span class="${style.dicomFileValue}">AI-Results-SEG.dcm</span></span></div>
   </div>
   <div class="${style.section}">
     <h2>Get</h2>

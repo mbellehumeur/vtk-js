@@ -43,6 +43,8 @@
   --cast-destructive: oklch(0.704 0.191 22.216);
   --cast-border: oklch(1 0 0 / 10%);
   --cast-input: oklch(1 0 0 / 15%);
+  /* Lifted surface inside inputs / selects (vs #000 panel / page) */
+  --cast-input-bg: oklch(0.34 0 0);
   --cast-ring: oklch(0.556 0 0);
   --cast-radius: 0.5rem;
   /* Dark theme primary (vars.css): light control surface */
@@ -56,9 +58,9 @@
   margin: 0 auto;
 }
 
-/* Card surface — vtk-js docs dark `--card`, not gray glass */
+/* Main panel — same fill as page chrome (.castExampleHtml / .castExampleBody #000) */
 .container {
-  background: oklch(0.205 0 0 / 0.94);
+  background: #000;
   border-radius: var(--cast-radius);
   padding: 20px;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
@@ -111,7 +113,7 @@
   box-sizing: border-box;
   border: 1px solid var(--cast-input);
   border-radius: calc(var(--cast-radius) * 0.75);
-  background: transparent;
+  background: var(--cast-input-bg);
   color: var(--cast-foreground);
   padding: 9px 10px;
   font-size: 13px;
@@ -325,7 +327,7 @@
   font-size: 13px;
   border: 1px solid var(--cast-input);
   border-radius: calc(var(--cast-radius) * 0.75);
-  background: transparent;
+  background: var(--cast-input-bg);
   color: var(--cast-foreground);
 }
 
@@ -496,10 +498,23 @@
   display: none;
   align-self: center;
   color: var(--cast-muted-foreground);
+  line-height: 1.2;
 }
 
 .dicomFileLabelVisible {
-  display: inline;
+  display: inline-block;
+}
+
+.dicomFileValue {
+  display: inline-block;
+  margin-left: 4px;
+  color: var(--cast-foreground);
+  border: 1px solid var(--cast-input);
+  background: var(--cast-input-bg);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
 }
 
 .messageCount {
