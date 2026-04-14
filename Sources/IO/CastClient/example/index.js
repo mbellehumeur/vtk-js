@@ -1,6 +1,5 @@
 import '@kitware/vtk.js/favicon';
 
-import vtkJsLogoWideSvg from './logo-wide.svg';
 import vtkCastClient from 'vtk.js/Sources/IO/Core/CastClient';
 
 import style from './CastClient.module.css';
@@ -107,7 +106,9 @@ function headerInstructionsHtml() {
 
 function buildPageHtml() {
   return `<div class="${style.container}">
-  <div class="${style.castHeader}"><div class="${style.headerLeft}"><a id="castHeaderLogoLink" class="${style.headerLogo}" href="https://kitware.github.io/vtk-js/" target="_blank" rel="noopener noreferrer" aria-label="VTK.js (opens documentation)"></a></div><div class="${style.headerTitleWrap}" tabindex="0" aria-label="Cast client instructions"><span class="${style.headerTitle}">Cast client example</span><div class="${style.headerInstructionsPanel}" role="region" aria-label="Cast client instructions" tabindex="0">${headerInstructionsHtml()}</div></div><div class="${style.headerCenter}"><div id="connectionStatus" class="${style.status} ${style.statusHeader} ${style.disconnected}"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div></div>
+  <div class="${style.castHeader}"><div class="${style.headerTitleWrap}" tabindex="0" aria-label="Cast client instructions"><span class="${style.headerTitle}">Cast client example</span><div class="${style.headerInstructionsPanel}" role="region" aria-label="Cast client instructions" tabindex="0">${headerInstructionsHtml()}</div></div><div class="${style.headerCenter}"><div id="connectionStatus" class="${style.status} ${style.statusHeader} ${style.disconnected}"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div></div>
+  <div class="${style.layout}">
+  <div class="${style.leftPane}">
   <div class="${style.connectionControls} ${style.section}">
     <h2>Authenticate</h2>
     <div class="${style.grid} ${style.connectionControlsInnerGrid}">
@@ -176,7 +177,11 @@ function buildPageHtml() {
     <div id="getResults"></div>
     <div class="${style.actions}"><button id="getBtn" disabled>Get</button></div>
   </div>
-  <div class="${style.section}"><h2>Messages received <span id="messageCount" class="${style.messageCount}">(0)</span></h2><div class="${style.actions}"><button id="clearBtn">Clear Messages</button></div><div id="messages" class="${style.messages}"></div></div>
+  </div>
+  <div class="${style.rightPane}">
+  <div class="${style.section} ${style.logsSection}"><h2>Messages received <span id="messageCount" class="${style.messageCount}">(0)</span></h2><div class="${style.actions}"><button id="clearBtn">Clear Messages</button></div><div id="messages" class="${style.messages}"></div></div>
+  </div>
+  </div>
   </div>`;
 }
 
@@ -585,11 +590,8 @@ function boot() {
   const root = document.createElement('div');
   root.className = style.cast;
   root.innerHTML = buildPageHtml();
-  document.body.appendChild(root);
-  const headerLogo = document.getElementById('castHeaderLogoLink');
-  if (headerLogo) {
-    headerLogo.innerHTML = vtkJsLogoWideSvg;
-  }
+  const mountNode = document.getElementById('vtk-root') || document.body;
+  mountNode.replaceChildren(root);
 
   const el = {
     tokenEndpoint: byId('tokenEndpoint'),
