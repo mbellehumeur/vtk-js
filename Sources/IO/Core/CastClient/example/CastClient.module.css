@@ -62,35 +62,39 @@
 /* Main panel — same fill as page chrome (.castExampleHtml / .castExampleBody #000) */
 .container {
   background: #000;
-  border-radius: var(--cast-radius);
-  padding: 20px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
-  border: 1px solid var(--cast-border);
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  border: none;
   color: var(--cast-foreground);
 }
 
 .layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr);
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   margin-top: 14px;
-  align-items: start;
 }
 
-.leftPane,
-.rightPane {
-  min-width: 0;
-}
-
-.rightPane {
-  position: sticky;
-  top: 12px;
+.controlGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .logsSection {
   margin-top: 0;
   padding-bottom: 0;
   border-bottom: none;
+  grid-column: 1 / -1;
+}
+
+.panelCard {
+  margin-top: 0;
+  padding: 14px;
+  border: 1px solid var(--cast-border);
+  border-radius: var(--cast-radius);
+  background: oklch(0.145 0 0 / 45%);
 }
 
 .cast h2 {
@@ -177,20 +181,26 @@
 }
 
 .castHeader {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 16px;
   margin-bottom: 0;
 }
 
+.headerSpacer {
+  justify-self: start;
+  width: 1px;
+  height: 1px;
+}
+
 .headerTitleWrap {
   position: relative;
+  justify-self: center;
   align-self: center;
   outline: none;
   min-width: 0;
-  text-align: left;
-  flex: 1 1 auto;
+  text-align: center;
 }
 
 .headerTitleWrap:focus-visible {
@@ -275,10 +285,10 @@
 }
 
 .headerCenter {
+  justify-self: end;
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  flex: 0 0 auto;
 }
 
 .headerTokenBtn {
@@ -286,10 +296,9 @@
 }
 
 .connectionControls {
-  padding: 18px 0 16px;
-  border-top: 1px solid var(--cast-border);
-  border-bottom: 1px solid var(--cast-border);
-  margin-bottom: 8px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  margin-bottom: 0;
 }
 
 .connectionControlsInnerGrid {
@@ -443,7 +452,7 @@
 
 .messages {
   margin-top: 12px;
-  max-height: calc(100vh - 250px);
+  max-height: 360px;
   min-height: 320px;
   overflow: auto;
   background: oklch(0.145 0 0 / 50%);
@@ -526,12 +535,8 @@
 }
 
 @media (max-width: 1100px) {
-  .layout {
+  .controlGrid {
     grid-template-columns: 1fr;
-  }
-
-  .rightPane {
-    position: static;
   }
 
   .messages {

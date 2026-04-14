@@ -105,19 +105,21 @@ async function normalizeDicomSendMessageStrict(msg) {
   }
 
   const contextValue = event.context;
-  const contextItems = Array.isArray(contextValue)
-    ? contextValue
-    : contextValue != null
-      ? [contextValue]
-      : [];
+  let contextItems = [];
+  if (Array.isArray(contextValue)) {
+    contextItems = contextValue;
+  } else if (contextValue != null) {
+    contextItems = [contextValue];
+  }
   if (!contextItems.length) {
     throw new Error('CastClient: dicom-send requires non-empty event.context');
   }
 
-  const normalizedContext = [];
-  for (let i = 0; i < contextItems.length; i++) {
-    normalizedContext.push(await normalizeDicomSendContextItem(contextItems[i]));
-  }
+  const normalizedContext = await Promise.all(
+    contextItems.map((contextItem) =>
+      normalizeDicomSendContextItem(contextItem)
+    )
+  );
 
   return {
     ...msg,

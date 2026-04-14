@@ -140,7 +140,7 @@ function toDataUri(filePath, source) {
 }
 
 function assetLoader({ inline = false } = {}) {
-  const assetRegex = /\.(png|jpe?g)$/i;
+  const assetRegex = /\.(png|jpe?g|dcm)$/i;
 
   return {
     name: inline ? 'asset-loader-inline' : 'asset-loader',
@@ -238,6 +238,17 @@ function inlineCssUrls() {
   };
 }
 
+function onwarnFilterCircularD3Interpolate(warning, warn) {
+  if (
+    warning.code === 'CIRCULAR_DEPENDENCY' &&
+    typeof warning.message === 'string' &&
+    warning.message.includes('node_modules/d3-interpolate/')
+  ) {
+    return;
+  }
+  warn(warning);
+}
+
 async function walkFiles(dir, results = []) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   await Promise.all(
@@ -255,7 +266,7 @@ async function walkFiles(dir, results = []) {
 
 async function copyApplicationStaticAssets(entryPath, outDir) {
   const sourceDir = path.dirname(entryPath);
-  const assetRegex = /\.(png|jpe?g|gif|svg|webp)$/i;
+  const assetRegex = /\.(png|jpe?g|gif|svg|webp|dcm)$/i;
   const files = await walkFiles(sourceDir);
 
   await Promise.all(
@@ -358,6 +369,7 @@ async function build() {
     const esBundle = await rollup({
       input: esEntries,
       plugins: createPlugins(),
+      onwarn: onwarnFilterCircularD3Interpolate,
     });
 
     await esBundle.write({
@@ -387,6 +399,7 @@ async function build() {
         const bundle = await rollup({
           input: entryPath,
           plugins: createPlugins({ forInlineIife: true }),
+          onwarn: onwarnFilterCircularD3Interpolate,
         });
         const { output } = await bundle.generate({
           format: 'iife',

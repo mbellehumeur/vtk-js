@@ -92,12 +92,13 @@ const HUB_DEFINITIONS = {
 function headerInstructionsHtml() {
   return `<p>This example demonstrate using the vtk.js IO module cast client  for messaging as a worklist client and an evidence creator (EC) with the 3D slicer hub and an OHIF viewer.</p>
 <ol>
-<li><strong>Authenticate</strong> — Click the Authenticate button to request a token and user id. When the status strip shows token ready, you can subscribe and use Get/Publish (depending on hub rules).</li>
+<li><strong>Authenticate</strong> — Click the Authenticate button to request a token and user id. When the status strip shows token ready, you can subscribe.</li>
 <li><strong>Open Hub Admin Portal</strong> — Opens the hub admin portal to see the  subscriptions and messaging.</li>
-<li><strong>Subscribe</strong> — Click the Subscribe button to connect a websocket to the hub and receive and events.</li>
-<li><strong>Open Image Display with this topic</strong> — Opens a OHIF instance using the vtk.js client. </li>
+<li><strong>Subscribe</strong> — Click the Subscribe button to connect establish a subscription to desired messages to the hub and declare the actors you support for the GET requests.  THis will also establish a websocket connection to receive events.</li>
+<li><strong>Open viewer with this topic</strong> — Opens an OHIF instance using the vtk.js client. </li>
 <li><strong>Publish ImagingStudy-open</strong> — Click the publish button to send an ImagingStudy-open event to the hub.  The study should open in the viewer.</li>
 <li><strong>Publish DICOM-send</strong> — Change the event type to DICOM-send and click the Publish button. This will send a DICOM file to the viewer and the segmentation should appear.</li>
+<li><strong>Get</strong> —Click the Get button to qury the FHIRcast context of the worklist client. </li>
 <li><strong>Get</strong> — Choose datatype "PNG"  and change the actor to ID.  This will get the PNG image of the viewer display</li>
 <li><strong>Publish ImagingStudy-close</strong> — Change the event type to ImagingStudy-close and click the Publish button. This will close the study in the viewer. </li>
 </ol>
@@ -106,28 +107,52 @@ function headerInstructionsHtml() {
 
 function buildPageHtml() {
   return `<div class="${style.container}">
-  <div class="${style.castHeader}"><div class="${style.headerTitleWrap}" tabindex="0" aria-label="Cast client instructions"><span class="${style.headerTitle}">Cast client example</span><div class="${style.headerInstructionsPanel}" role="region" aria-label="Cast client instructions" tabindex="0">${headerInstructionsHtml()}</div></div><div class="${style.headerCenter}"><div id="connectionStatus" class="${style.status} ${style.statusHeader} ${style.disconnected}"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div></div>
+  <div class="${style.castHeader}"><div class="${
+    style.headerSpacer
+  }" aria-hidden="true"></div><div class="${
+    style.headerTitleWrap
+  }" tabindex="0" aria-label="Cast client instructions"><span class="${
+    style.headerTitle
+  }">Cast client example</span><div class="${
+    style.headerInstructionsPanel
+  }" role="region" aria-label="Cast client instructions" tabindex="0">${headerInstructionsHtml()}</div></div><div class="${
+    style.headerCenter
+  }"><div id="connectionStatus" class="${style.status} ${style.statusHeader} ${
+    style.disconnected
+  }"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div></div>
   <div class="${style.layout}">
-  <div class="${style.leftPane}">
-  <div class="${style.connectionControls} ${style.section}">
+  <div class="${style.controlGrid}">
+  <div class="${style.connectionControls} ${style.section} ${style.panelCard}">
     <h2>Authenticate</h2>
     <div class="${style.grid} ${style.connectionControlsInnerGrid}">
       <div><label for="hubSelect">Hub</label><select id="hubSelect"><option value="local">3D Slicer local</option><option value="cloud" selected>3D Slicer cloud</option></select></div>
-      <div class="${style.gridFullWidth}"><div class="${style.authTopicPair}"><button type="button" id="tokenBtn">Authenticate</button><button type="button" id="hubAdminPortalBtn" class="${style.headerTokenBtn}">Open Hub Admin Portal</button><div><label for="topicDisplay">Topic</label><div><input id="topicDisplay" type="text" spellcheck="false" autocomplete="off" /><button type="button" id="topicUpdateBtn">Update</button></div></div></div></div>
+      <div class="${style.gridFullWidth}"><div class="${
+    style.authTopicPair
+  }"><button type="button" id="tokenBtn">Authenticate</button><button type="button" id="hubAdminPortalBtn" class="${
+    style.headerTokenBtn
+  }">Open Hub Admin Portal</button><div><label for="topicDisplay">Topic</label><div><input id="topicDisplay" type="text" spellcheck="false" autocomplete="off" /><button type="button" id="topicUpdateBtn">Update</button></div></div></div></div>
     </div>
   </div>
-  <span class="${style.castHiddenEndpoint}"><div><label for="tokenEndpoint">auth endpoint</label><input id="tokenEndpoint" /></div></span>
-  <div class="${style.section}">
+  <span class="${
+    style.castHiddenEndpoint
+  }"><div><label for="tokenEndpoint">auth endpoint</label><input id="tokenEndpoint" /></div></span>
+  <div class="${style.section} ${style.panelCard}">
     <h2>Subscribe</h2>
     <div class="${style.grid}">
-      <div class="${style.castHiddenEndpoint}"><label for="hubEndpoint">hub_endpoint</label><input id="hubEndpoint" /></div>
+      <div class="${
+        style.castHiddenEndpoint
+      }"><label for="hubEndpoint">hub_endpoint</label><input id="hubEndpoint" /></div>
       <div><label for="subscriberName">Subscriber</label><input id="subscriberName" /></div>
       <div class="${style.subscribeEventsTopicActors}">
         <div><label for="events">Events</label><input id="events" value="*" /></div>
         <div><label for="topic">Topic</label><input id="topic" /></div>
-        <div><label for="subscribeActors">Actors (JSON array)</label><input id="subscribeActors" class="${style.subscribeActorsJson}" type="text" spellcheck="false" value='${DEFAULT_SUBSCRIBE_ACTORS_JSON}' /></div>
+        <div><label for="subscribeActors">Actors (JSON array)</label><input id="subscribeActors" class="${
+          style.subscribeActorsJson
+        }" type="text" spellcheck="false" value='${DEFAULT_SUBSCRIBE_ACTORS_JSON}' /></div>
       </div>
-      <div class="${style.castHiddenEndpoint} ${style.gridFullWidth}"><label for="productName">client_product_name</label><input id="productName" value="VTKJS" /></div>
+      <div class="${style.castHiddenEndpoint} ${
+    style.gridFullWidth
+  }"><label for="productName">client_product_name</label><input id="productName" value="VTKJS" /></div>
     </div>
     <div class="${style.actions} ${style.subscribeActions}">
       <div class="${style.subscribeActionButtons}">
@@ -137,7 +162,7 @@ function buildPageHtml() {
       <button type="button" id="openTopicViewerBtn" disabled>Open Image Display with this topic</button>
     </div>
   </div>
-  <div class="${style.section}">
+  <div class="${style.section} ${style.panelCard}">
     <h2>Publish</h2>
     <div class="${style.grid}">
       <div class="${style.publishEventTopicActorRow}">
@@ -151,7 +176,9 @@ function buildPageHtml() {
             <option value="patient-close">patient-close</option>
             <option value="custom">Other (custom)</option>
           </select>
-          <input id="eventTypeCustom" class="${style.eventTypeCustom}" placeholder="Custom event type" />
+          <input id="eventTypeCustom" class="${
+            style.eventTypeCustom
+          }" placeholder="Custom event type" />
         </div>
         <div><label for="publishTopic">Topic</label><input id="publishTopic" /></div>
         <div><label for="publishActorPreset">Actor</label><select id="publishActorPreset"></select></div>
@@ -161,13 +188,23 @@ function buildPageHtml() {
       <label for="eventData">Event data JSON</label>
       <textarea id="eventData"></textarea>
     </div>
-    <div class="${style.actions}"><button id="publishBtn" disabled>Publish</button><span id="dicomFileLabel" class="${style.dicomFileLabel}">file: <span class="${style.dicomFileValue}">AI-Results-SEG.dcm</span></span></div>
+    <div class="${
+      style.actions
+    }"><button id="publishBtn" disabled>Publish</button><span id="dicomFileLabel" class="${
+    style.dicomFileLabel
+  }">file: <span class="${
+    style.dicomFileValue
+  }">AI-Results-SEG.dcm</span></span></div>
   </div>
-  <div class="${style.section}">
+  <div class="${style.section} ${style.panelCard}">
     <h2>Get</h2>
     <div class="${style.grid}">
-      <div class="${style.castHiddenEndpoint}"><label for="getEndpoint">GET endpoint</label><input id="getEndpoint" /></div>
-      <div class="${style.castHiddenEndpoint}"><label for="getSubscriber">Subscriber</label><input id="getSubscriber" /></div>
+      <div class="${
+        style.castHiddenEndpoint
+      }"><label for="getEndpoint">GET endpoint</label><input id="getEndpoint" /></div>
+      <div class="${
+        style.castHiddenEndpoint
+      }"><label for="getSubscriber">Subscriber</label><input id="getSubscriber" /></div>
       <div class="${style.getDatatypeTopicActorRow}">
         <div><label for="getDataType">DataType</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select></div>
         <div><label for="getTopic">Topic</label><input id="getTopic" /></div>
@@ -175,12 +212,19 @@ function buildPageHtml() {
       </div>
     </div>
     <div id="getResults"></div>
-    <div class="${style.actions}"><button id="getBtn" disabled>Get</button></div>
+    <div class="${
+      style.actions
+    }"><button id="getBtn" disabled>Get</button></div>
   </div>
-  </div>
-  <div class="${style.rightPane}">
-  <div class="${style.section} ${style.logsSection}"><h2>Messages received <span id="messageCount" class="${style.messageCount}">(0)</span></h2><div class="${style.actions}"><button id="clearBtn">Clear Messages</button></div><div id="messages" class="${style.messages}"></div></div>
-  </div>
+  <div class="${style.section} ${
+    style.logsSection
+  }"><h2>Messages received <span id="messageCount" class="${
+    style.messageCount
+  }">(0)</span></h2><div class="${
+    style.actions
+  }"><button id="clearBtn">Clear Messages</button></div><div id="messages" class="${
+    style.messages
+  }"></div></div>
   </div>
   </div>`;
 }
@@ -293,8 +337,7 @@ function addMessage(el, state, kind, label, payload) {
 }
 
 function setConnection(el, status, text) {
-  const statusClass =
-    CONNECTION_STATUS_CLASS[status] || style.disconnected;
+  const statusClass = CONNECTION_STATUS_CLASS[status] || style.disconnected;
   el.connectionStatus.className = `${style.status} ${style.statusHeader} ${statusClass}`;
   el.statusText.textContent = text;
 }
@@ -563,13 +606,9 @@ async function handleGet(el, state) {
   }
   const response = await fetch(url.toString(), { method: 'GET' });
   if (response.ok) {
-    const json = await response.json();
-    el.getResults.innerHTML = `<div class="${style.status} ${style.success}"><pre class="${style.getResultsPre}">${JSON.stringify(
-      json,
-      null,
-      2
-    )}</pre></div>`;
-    addMessage(el, state, 'received', 'Get', json);
+    await response.json();
+    el.getResults.innerHTML = `<div class="${style.status} ${style.success}">Response received.</div>`;
+    addMessage(el, state, 'received', 'Get', 'Response received.');
     return;
   }
   const text = await response.text();
