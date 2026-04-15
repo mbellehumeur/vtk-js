@@ -1,3 +1,41 @@
+
+/**
+ * @example
+ * const client = vtkCastClient.newInstance({
+ *   hub: {
+ *     name: 'demo',
+ *     version: '1',
+ *     hub_endpoint: 'https://host/api/hub',
+ *     token_endpoint: 'https://host/oauth/token',
+ *     client_id: 'client_id',
+ *     client_secret: 'client_secret',
+ *   },
+ *   session: {
+ *     events: ['*'],
+ *     lease: 7200,
+ *     subscriberName: 'VTKJS-EXAMPLE',
+ *     topic: 'my-topic',
+ *   },
+ *   autoReconnect: true,
+ * });
+ *
+ * client.onMessage((message) => {
+ *   console.log(message);
+ * });
+ *
+ * const tokenOk = await client.getToken();
+ * if (tokenOk) {
+ *   await client.subscribe();
+ *   await client.publish({
+ *     event: {
+ *       'hub.event': 'custom',
+ *       'hub.topic': 'my-topic',
+ *       context: [],
+ *     },
+ *   });
+ * }
+ */
+
 import '@kitware/vtk.js/favicon';
 
 import vtkCastClient from 'vtk.js/Sources/IO/Core/CastClient';
@@ -94,11 +132,11 @@ function headerInstructionsHtml() {
 <ol>
 <li><strong>Authenticate</strong> — Click the Authenticate button to request a token and user id. When the status strip shows token ready, you can subscribe.</li>
 <li><strong>Open Hub Admin Portal</strong> — Opens the hub admin portal to see the  subscriptions and messaging.</li>
-<li><strong>Subscribe</strong> — Click the Subscribe button to connect establish a subscription to desired messages to the hub and declare the actors you support for the GET requests.  THis will also establish a websocket connection to receive events.</li>
-<li><strong>Open viewer with this topic</strong> — Opens an OHIF instance using the vtk.js client. </li>
+<li><strong>Subscribe</strong> — Click the Subscribe button to connect establish a subscription to desired messages to the hub and declare the actors you support for the GET requests.  This will also establish a websocket connection to receive events and their data (JSON or binary).</li>
 <li><strong>Publish ImagingStudy-open</strong> — Click the publish button to send an ImagingStudy-open event to the hub.  The study should open in the viewer.</li>
+<li><strong>Open viewer with this topic</strong> — Opens an OHIF instance that automatically authenticates, subscribes to the hub and does a  cast request to get the FHIRcastContext from the WORKLIST_CLIENT actor.  If astudy is found, it is opened in the viewer.</li>
 <li><strong>Publish DICOM-send</strong> — Change the event type to DICOM-send and click the Publish button. This will send a DICOM file to the viewer and the segmentation should appear.</li>
-<li><strong>Get</strong> —Click the Get button to qury the FHIRcast context of the worklist client. </li>
+<li><strong>Get</strong> —Click the Get button to query the FHIRcast context of the worklist client. </li>
 <li><strong>Get</strong> — Choose datatype "PNG"  and change the actor to ID.  This will get the PNG image of the viewer display</li>
 <li><strong>Publish ImagingStudy-close</strong> — Change the event type to ImagingStudy-close and click the Publish button. This will close the study in the viewer. </li>
 </ol>
@@ -113,7 +151,7 @@ function buildPageHtml() {
     style.headerTitleWrap
   }" tabindex="0" aria-label="Cast client instructions"><span class="${
     style.headerTitle
-  }">Cast client example</span><div class="${
+  }">IO module cast example</span><div class="${
     style.headerInstructionsPanel
   }" role="region" aria-label="Cast client instructions" tabindex="0">${headerInstructionsHtml()}</div></div><div class="${
     style.headerCenter
@@ -123,7 +161,7 @@ function buildPageHtml() {
   <div class="${style.layout}">
   <div class="${style.controlGrid}">
   <div class="${style.connectionControls} ${style.section} ${style.panelCard}">
-    <h2>Authenticate</h2>
+    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>Authenticate</h2>
     <div class="${style.grid} ${style.connectionControlsInnerGrid}">
       <div><label for="hubSelect">Hub</label><select id="hubSelect"><option value="local">3D Slicer local</option><option value="cloud" selected>3D Slicer cloud</option></select></div>
       <div class="${style.gridFullWidth}"><div class="${
@@ -137,7 +175,7 @@ function buildPageHtml() {
     style.castHiddenEndpoint
   }"><div><label for="tokenEndpoint">auth endpoint</label><input id="tokenEndpoint" /></div></span>
   <div class="${style.section} ${style.panelCard}">
-    <h2>Subscribe</h2>
+    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>Subscribe</h2>
     <div class="${style.grid}">
       <div class="${
         style.castHiddenEndpoint
@@ -159,11 +197,11 @@ function buildPageHtml() {
         <button type="button" id="subscribeBtn" disabled>Subscribe</button>
         <button type="button" id="unsubscribeBtn" disabled>Unsubscribe</button>
       </div>
-      <button type="button" id="openTopicViewerBtn" disabled>Open Image Display with this topic</button>
+      <button type="button" id="startConferenceBtn" class="${style.startConferenceBtn}" disabled>Start a conference</button>
     </div>
   </div>
   <div class="${style.section} ${style.panelCard}">
-    <h2>Publish</h2>
+    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>Publish</h2>
     <div class="${style.grid}">
       <div class="${style.publishEventTopicActorRow}">
         <div>
@@ -188,16 +226,14 @@ function buildPageHtml() {
       <label for="eventData">Event data JSON</label>
       <textarea id="eventData"></textarea>
     </div>
-    <div class="${
-      style.actions
-    }"><button id="publishBtn" disabled>Publish</button><span id="dicomFileLabel" class="${
+    <div class="${style.actions} ${style.publishActions}"><button id="publishBtn" disabled>Publish</button><span id="dicomFileLabel" class="${
     style.dicomFileLabel
   }">file: <span class="${
     style.dicomFileValue
-  }">AI-Results-SEG.dcm</span></span></div>
+  }">AI-Results-SEG.dcm</span></span><button type="button" id="openTopicViewerBtn" class="${style.openTopicViewerBtn}" disabled>Open a viewer with this topic</button></div>
   </div>
   <div class="${style.section} ${style.panelCard}">
-    <h2>Get</h2>
+    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Get</h2>
     <div class="${style.grid}">
       <div class="${
         style.castHiddenEndpoint
@@ -206,7 +242,7 @@ function buildPageHtml() {
         style.castHiddenEndpoint
       }"><label for="getSubscriber">Subscriber</label><input id="getSubscriber" /></div>
       <div class="${style.getDatatypeTopicActorRow}">
-        <div><label for="getDataType">DataType</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select></div>
+        <div><label for="getDataType">DataType</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="PNG">PNG</option><option value="JPG">JPG</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select></div>
         <div><label for="getTopic">Topic</label><input id="getTopic" /></div>
         <div><label for="getActorPreset">Actor</label><select id="getActorPreset"></select></div>
       </div>
@@ -369,7 +405,7 @@ function applyHubPreset(el, state, hubKey) {
   state.selectedClientSecret = hubDef.client_secret;
   try {
     const hubUrl = new URL(el.hubEndpoint.value.trim());
-    el.getEndpoint.value = `${hubUrl.origin}/api/hub/cast-get`;
+    el.getEndpoint.value = `${hubUrl.origin}/api/hub/cast-request`;
   } catch (err) {
     // noop
   }
@@ -417,12 +453,14 @@ function ensureClient(el, state, recreate = false) {
       if (wsState === 'connected') {
         el.subscribeBtn.disabled = true;
         el.unsubscribeBtn.disabled = false;
+        el.startConferenceBtn.disabled = false;
         el.openTopicViewerBtn.disabled = false;
         el.publishBtn.disabled = false;
         el.getBtn.disabled = false;
       } else if (wsState === 'disconnected' || wsState === 'error') {
         el.subscribeBtn.disabled = false;
         el.unsubscribeBtn.disabled = true;
+        el.startConferenceBtn.disabled = true;
         el.openTopicViewerBtn.disabled = true;
         el.publishBtn.disabled = true;
         el.getBtn.disabled = true;
@@ -506,6 +544,7 @@ async function handleUnsubscribe(el, state) {
   }
   await state.client.unsubscribe();
   el.unsubscribeBtn.disabled = true;
+  el.startConferenceBtn.disabled = true;
   el.openTopicViewerBtn.disabled = true;
   el.publishBtn.disabled = true;
   el.getBtn.disabled = true;
@@ -591,20 +630,34 @@ async function handleGet(el, state) {
   }
   const endpoint = el.getEndpoint.value.trim();
   const url = new URL(endpoint);
-  url.searchParams.set('subscriber', subscriber);
+  const payload = {
+    subscriber,
+  };
   const getTopic = el.getTopic.value.trim();
   if (getTopic) {
-    url.searchParams.set('topic', getTopic);
+    payload.topic = getTopic;
   }
   const dataType = el.getDataType.value;
   if (dataType) {
-    url.searchParams.set('dataType', dataType);
+    payload.dataType = dataType;
   }
   const getActorRaw = el.getActorPreset.value.trim();
   if (getActorRaw) {
-    url.searchParams.set('actor', getActorRaw);
+    payload.actor = getActorRaw;
   }
-  const response = await fetch(url.toString(), { method: 'GET' });
+  const token = state.client?.getConnectionState?.().token?.trim() || '';
+  if (!token) {
+    addMessage(el, state, 'err', 'Get error', 'Token is required');
+    return;
+  }
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
   if (response.ok) {
     await response.json();
     el.getResults.innerHTML = `<div class="${style.status} ${style.success}">Response received.</div>`;
@@ -654,6 +707,7 @@ function boot() {
     getDataType: byId('getDataType'),
     subscribeBtn: byId('subscribeBtn'),
     unsubscribeBtn: byId('unsubscribeBtn'),
+    startConferenceBtn: byId('startConferenceBtn'),
     openTopicViewerBtn: byId('openTopicViewerBtn'),
     publishBtn: byId('publishBtn'),
     dicomFileLabel: byId('dicomFileLabel'),
@@ -787,6 +841,24 @@ function boot() {
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
       addMessage(el, state, 'err', 'Hub Admin', 'Invalid hub_endpoint URL');
+    }
+  });
+
+  el.startConferenceBtn.addEventListener('click', () => {
+    try {
+      const hubUrl = new URL(el.hubEndpoint.value.trim());
+      const url = new URL('/api/hub/conference-client', hubUrl.origin);
+      const subscriberName = el.subscriberName.value.trim();
+      const topic = el.topic.value.trim();
+      if (subscriberName) {
+        url.searchParams.set('subscriberName', subscriberName);
+      }
+      if (topic) {
+        url.searchParams.set('topic', topic);
+      }
+      window.open(url.toString(), '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      addMessage(el, state, 'err', 'Conference', 'Invalid hub_endpoint URL');
     }
   });
 

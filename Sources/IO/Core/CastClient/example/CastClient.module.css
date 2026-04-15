@@ -42,7 +42,7 @@
   --cast-muted-foreground: oklch(0.708 0 0);
   --cast-secondary: oklch(0.269 0 0);
   --cast-destructive: oklch(0.704 0.191 22.216);
-  --cast-border: oklch(1 0 0 / 10%);
+  --cast-border: oklch(1 0 0 / 16%);
   --cast-input: oklch(1 0 0 / 15%);
   /* Lifted surface inside inputs / selects (vs #000 panel / page) */
   --cast-input-bg: oklch(0.34 0 0);
@@ -94,7 +94,7 @@
   padding: 14px;
   border: 1px solid var(--cast-border);
   border-radius: var(--cast-radius);
-  background: oklch(0.145 0 0 / 45%);
+  background: oklch(0.18 0 0 / 55%);
 }
 
 .cast h2 {
@@ -407,10 +407,10 @@
 }
 
 .subscribeActions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   gap: 12px;
-  align-items: center;
   width: 100%;
   margin-top: 10px;
 }
@@ -419,6 +419,32 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.subscribeActions .startConferenceBtn {
+  margin-left: auto;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.publishActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.publishActions #publishBtn {
+  flex-shrink: 0;
+}
+
+.publishActions .dicomFileLabel {
+  margin-left: 0;
+}
+
+.publishActions .openTopicViewerBtn {
+  margin-left: auto;
+  width: auto;
 }
 
 .cast button {
@@ -455,7 +481,7 @@
   max-height: 360px;
   min-height: 320px;
   overflow: auto;
-  background: oklch(0.145 0 0 / 50%);
+  background: oklch(0.18 0 0 / 60%);
   border-radius: var(--cast-radius);
   padding: 10px;
   font-size: 12px;

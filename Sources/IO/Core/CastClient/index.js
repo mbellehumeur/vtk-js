@@ -1,6 +1,5 @@
 import macro from 'vtk.js/Sources/macros';
-
-const DEFAULT_MESSAGE_ID_PREFIX = 'CS3D-';
+const DEFAULT_MESSAGE_ID_PREFIX = 'VTKJS-';
 const RECONNECT_INTERVAL_MS = 10000;
 const SUBSCRIBE_TIMEOUT_MS = 5000;
 const EMPTY_FHIRCAST_CONTEXT = {
@@ -221,6 +220,17 @@ function getClientInfoPayload() {
   return Object.keys(info).length ? info : null;
 }
 
+function getActorKeyword(actor) {
+  if (typeof actor === 'string') {
+    return actor.trim().toUpperCase();
+  }
+  if (!actor || typeof actor !== 'object') {
+    return '';
+  }
+  const value = actor.keyword || actor.id || actor.key || '';
+  return typeof value === 'string' ? value.trim().toUpperCase() : '';
+}
+
 const DEFAULT_VALUES = {
   config: {
     hub: {},
@@ -325,6 +335,12 @@ function vtkCastClient(publicAPI, model) {
       if (event['hub.event'] === 'get-request') {
         const context = event.context || {};
         const requestId = context.requestId;
+        const requestedActor = getActorKeyword(castMessage.actor);
+        if (requestedActor === 'ID' && model.onMessageCallback) {
+          model.onMessageCallback(castMessage);
+          return;
+        }
+        let handled = false;
         if (
           typeof requestId === 'string' &&
           context.dataType === 'FHIRcastContext'
@@ -352,6 +368,10 @@ function vtkCastClient(publicAPI, model) {
             responseData,
             event['hub.topic']
           );
+          handled = true;
+        }
+        if (!handled && model.onMessageCallback) {
+          model.onMessageCallback(castMessage);
         }
         return;
       }
@@ -751,12 +771,16 @@ function vtkCastClient(publicAPI, model) {
     const response = {
       timestamp: new Date().toJSON(),
       id: generateMessageId(messageIdPrefix()),
+      subscriber: model.hub.subscriberName || undefined,
       event: {
         'hub.topic': topic || model.hub.topic,
         'hub.event': 'get-response',
         context: { requestId, data },
       },
     };
+    if (Array.isArray(model.hub.actors) && model.hub.actors.length > 0) {
+      response.actor = model.hub.actors[0];
+    }
     model.hub.websocket.send(JSON.stringify(response));
   };
 
