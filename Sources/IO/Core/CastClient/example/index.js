@@ -128,54 +128,49 @@ const HUB_DEFINITIONS = {
 };
 
 function headerInstructionsHtml() {
-  return `<p>This example demonstrate using the vtk.js IO module cast client  for messaging as a worklist client and an evidence creator (EC) with the 3D slicer hub and an OHIF viewer.</p>
+  return `<p>This example demonstrate using the IO module cast client  as a worklist client and an evidence creator (EC) with the 3D Slicer hub and the OHIF viewer.</p>
 <ol>
 <li><strong>Authenticate</strong> — Click the Authenticate button to request a token and user id. When the status strip shows token ready, you can subscribe.</li>
-<li><strong>Open Hub Admin Portal</strong> — Opens the hub admin portal to see the  subscriptions and messaging.</li>
-<li><strong>Subscribe</strong> — Click the Subscribe button to connect establish a subscription to desired messages to the hub and declare the actors you support for the GET requests.  This will also establish a websocket connection to receive events and their data (JSON or binary).</li>
-<li><strong>Publish ImagingStudy-open</strong> — Click the publish button to send an ImagingStudy-open event to the hub.  The study should open in the viewer.</li>
-<li><strong>Open viewer with this topic</strong> — Opens an OHIF instance that automatically authenticates, subscribes to the hub and does a  cast request to get the FHIRcastContext from the WORKLIST_CLIENT actor.  If astudy is found, it is opened in the viewer.</li>
-<li><strong>Publish DICOM-send</strong> — Change the event type to DICOM-send and click the Publish button. This will send a DICOM file to the viewer and the segmentation should appear.</li>
-<li><strong>Get</strong> —Click the Get button to query the FHIRcast context of the worklist client. </li>
-<li><strong>Get</strong> — Choose datatype "PNG"  and change the actor to ID.  This will get the PNG image of the viewer display</li>
+<li><strong>Open the hub admin portal</strong> — Click Open the hub admin portal button to see the  subscriptions and messaging.</li>
+<li><strong>Subscribe to the hub</strong> — Click the Subscribe button to establish a subscription to the hub. This will also establish a websocket connection to receive events and requests for data.</li>
+<li><strong>Publish ImagingStudy-open</strong> — Click the publish button to send an ImagingStudy-open event to the hub.  You should see the message received in the hub and delivered to no one.</li>
+<li><strong>Open a viewer</strong> — Click the Open a viewer with this topic button in the Subscribe section.  The OHIF instance will automatically authenticate, subscribe to the hub and request the context from the WORKLIST_CLIENT actors.  If a study is found, it is opened in the viewer.</li>
+<li><strong>Publish AI results with DICOM-send</strong> — Change the event type to DICOM-send and click the Publish button. This will send a DICOM file to the viewer and the segmentation should appear.</li>
+<li><strong>Request context from the worklist client</strong> —Click the Request button to query the context of the worklist client. </li>
+<li><strong>Request an image from the viewer</strong> — Choose datatype to "JPGFULLSIZE" and change the actor to ID (Image Display). This will request the image of the viewer display</li>
+<li><strong>Test websocket reconnect</strong> — Click Reset server in the hub admin portal on the bottom right. Wait a few seconds and the websocket should reconnect and the status strip should show connected. Open an additional viewer, it should open with the current study even though the hub was restarted.</li>
 <li><strong>Publish ImagingStudy-close</strong> — Change the event type to ImagingStudy-close and click the Publish button. This will close the study in the viewer. </li>
-</ol>
-<p class="${style.instructionsFooter}">Hover the title to open. Tab to the title, then Tab once more to focus this panel for keyboard scrolling.</p>`;
+</ol>`;
 }
 
 function buildPageHtml() {
   return `<div class="${style.container}">
   <div class="${style.castHeader}"><div class="${
-    style.headerSpacer
-  }" aria-hidden="true"></div><div class="${
     style.headerTitleWrap
   }" tabindex="0" aria-label="Cast client instructions"><span class="${
     style.headerTitle
   }">IO module cast example</span><div class="${
     style.headerInstructionsPanel
-  }" role="region" aria-label="Cast client instructions" tabindex="0">${headerInstructionsHtml()}</div></div><div class="${
-    style.headerCenter
-  }"><div id="connectionStatus" class="${style.status} ${style.statusHeader} ${
-    style.disconnected
-  }"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div></div>
+  }" role="region" aria-label="Cast client instructions" tabindex="0">${headerInstructionsHtml()}</div></div></div>
   <div class="${style.layout}">
   <div class="${style.controlGrid}">
   <div class="${style.connectionControls} ${style.section} ${style.panelCard}">
     <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>Authenticate</h2>
     <div class="${style.grid} ${style.connectionControlsInnerGrid}">
-      <div><label for="hubSelect">Hub</label><select id="hubSelect"><option value="local">3D Slicer local</option><option value="cloud" selected>3D Slicer cloud</option></select></div>
+      <div><label for="hubSelect">Hub</label><div class="${style.hubAuthRow}"><select id="hubSelect"><option value="local">3D Slicer local</option><option value="cloud" selected>3D Slicer cloud</option></select><button type="button" id="tokenBtn">Authenticate</button></div></div>
       <div class="${style.gridFullWidth}"><div class="${
     style.authTopicPair
-  }"><button type="button" id="tokenBtn">Authenticate</button><button type="button" id="hubAdminPortalBtn" class="${
-    style.headerTokenBtn
-  }">Open Hub Admin Portal</button><div><label for="topicDisplay">Topic</label><div><input id="topicDisplay" type="text" spellcheck="false" autocomplete="off" /><button type="button" id="topicUpdateBtn">Update</button></div></div></div></div>
+  }"><div><label for="topicDisplay">Topic</label><div><input id="topicDisplay" type="text" spellcheck="false" autocomplete="off" /><button type="button" id="topicUpdateBtn" disabled>Update</button></div></div></div><button type="button" id="hubAdminPortalBtn" class="${
+    style.hubAdminPortalBtn
+  }" disabled>Open the hub admin portal</button></div>
+
     </div>
   </div>
   <span class="${
     style.castHiddenEndpoint
   }"><div><label for="tokenEndpoint">auth endpoint</label><input id="tokenEndpoint" /></div></span>
   <div class="${style.section} ${style.panelCard}">
-    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>Subscribe</h2>
+    <div class="${style.subscribeSectionHeader}"><h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>Subscribe</h2><div id="connectionStatus" class="${style.status} ${style.statusHeader} ${style.disconnected}"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div>
     <div class="${style.grid}">
       <div class="${
         style.castHiddenEndpoint
@@ -184,7 +179,7 @@ function buildPageHtml() {
       <div class="${style.subscribeEventsTopicActors}">
         <div><label for="events">Events</label><input id="events" value="*" /></div>
         <div><label for="topic">Topic</label><input id="topic" /></div>
-        <div><label for="subscribeActors">Actors (JSON array)</label><input id="subscribeActors" class="${
+        <div><label for="subscribeActors">Actors</label><input id="subscribeActors" class="${
           style.subscribeActorsJson
         }" type="text" spellcheck="false" value='${DEFAULT_SUBSCRIBE_ACTORS_JSON}' /></div>
       </div>
@@ -197,7 +192,8 @@ function buildPageHtml() {
         <button type="button" id="subscribeBtn" disabled>Subscribe</button>
         <button type="button" id="unsubscribeBtn" disabled>Unsubscribe</button>
       </div>
-      <button type="button" id="startConferenceBtn" class="${style.startConferenceBtn}" disabled>Start a conference</button>
+      <div><button type="button" id="openTopicViewerBtn" class="${style.openTopicViewerBtn}" disabled>Open a viewer with this topic</button></div>
+      <div class="${style.subscribeActionsEnd}"><button type="button" id="startConferenceBtn" class="${style.startConferenceBtn}" disabled>Start a conference</button></div>
     </div>
   </div>
   <div class="${style.section} ${style.panelCard}">
@@ -226,14 +222,19 @@ function buildPageHtml() {
       <label for="eventData">Event data JSON</label>
       <textarea id="eventData"></textarea>
     </div>
-    <div class="${style.actions} ${style.publishActions}"><button id="publishBtn" disabled>Publish</button><span id="dicomFileLabel" class="${
+    <div id="dicomFileLabel" class="${
     style.dicomFileLabel
-  }">file: <span class="${
+  }"><label for="dicomFileValue">File</label><div class="${style.dicomFilePickerRow}"><input id="dicomFileValue" class="${
     style.dicomFileValue
-  }">AI-Results-SEG.dcm</span></span><button type="button" id="openTopicViewerBtn" class="${style.openTopicViewerBtn}" disabled>Open a viewer with this topic</button></div>
+  }" value="AI-Results-SEG.dcm" readonly /><button type="button" id="chooseDicomFilesBtn">Choose files</button><button type="button" id="chooseDicomFoldersBtn">Choose folders</button><input id="dicomFilesInput" type="file" multiple class="${
+    style.castHiddenEndpoint
+  }" /><input id="dicomFoldersInput" type="file" webkitdirectory directory multiple class="${
+    style.castHiddenEndpoint
+  }" /></div></div>
+    <div id="publishActions" class="${style.actions} ${style.publishActions}"><button id="publishBtn" disabled>Publish</button></div>
   </div>
   <div class="${style.section} ${style.panelCard}">
-    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Get</h2>
+    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Request</h2>
     <div class="${style.grid}">
       <div class="${
         style.castHiddenEndpoint
@@ -242,15 +243,16 @@ function buildPageHtml() {
         style.castHiddenEndpoint
       }"><label for="getSubscriber">Subscriber</label><input id="getSubscriber" /></div>
       <div class="${style.getDatatypeTopicActorRow}">
-        <div><label for="getDataType">DataType</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="PNG">PNG</option><option value="JPG">JPG</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select></div>
+        <div><label for="getDataType">Data Type</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="PNGFULLSIZE">PNGFULLSIZE</option><option value="PNGTHUMBNAIL">PNGTHUMBNAIL</option><option value="JPGFULLSIZE">JPGFULLSIZE</option><option value="JPGTHUMBNAIL">JPGTHUMBNAIL</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select></div>
         <div><label for="getTopic">Topic</label><input id="getTopic" /></div>
         <div><label for="getActorPreset">Actor</label><select id="getActorPreset"></select></div>
       </div>
     </div>
-    <div id="getResults"></div>
-    <div class="${
-      style.actions
-    }"><button id="getBtn" disabled>Get</button></div>
+    <div id="getResponseRow">
+      <label for="getResponseData">Response</label>
+      <textarea id="getResponseData" readonly></textarea>
+    </div>
+    <div class="${style.actions} ${style.requestActions}"><button id="getBtn" disabled>Request</button><button id="openRetrievedImageBtn" disabled>Open retrieved image</button></div>
   </div>
   <div class="${style.section} ${
     style.logsSection
@@ -341,6 +343,58 @@ function parseActorField(raw) {
   }
 }
 
+function findImageResource(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const stack = [payload];
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current || typeof current !== 'object') {
+      continue;
+    }
+
+    if (
+      typeof current.contentType === 'string' &&
+      typeof current.data === 'string' &&
+      /^image\/(png|jpeg)$/i.test(current.contentType.trim())
+    ) {
+      return {
+        contentType: current.contentType.trim().toLowerCase(),
+        data: current.data.trim(),
+      };
+    }
+
+    if (Array.isArray(current)) {
+      current.forEach((item) => stack.push(item));
+      continue;
+    }
+
+    Object.values(current).forEach((value) => {
+      if (value && typeof value === 'object') {
+        stack.push(value);
+      }
+    });
+  }
+
+  return null;
+}
+
+function imageToObjectUrl(contentType, base64Data) {
+  try {
+    const binary = atob(base64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: contentType });
+    return URL.createObjectURL(blob);
+  } catch (err) {
+    return '';
+  }
+}
+
 async function buildDicomSendContext() {
   const dicomUrl = new URL('./ai-result.dcm', import.meta.url);
   const response = await fetch(dicomUrl.toString());
@@ -405,7 +459,7 @@ function applyHubPreset(el, state, hubKey) {
   state.selectedClientSecret = hubDef.client_secret;
   try {
     const hubUrl = new URL(el.hubEndpoint.value.trim());
-    el.getEndpoint.value = `${hubUrl.origin}/api/hub/cast-request`;
+    el.getEndpoint.value = `${hubUrl.origin}/api/hub/request`;
   } catch (err) {
     // noop
   }
@@ -501,6 +555,8 @@ async function handleToken(el, state) {
       ok = Boolean(castClient.getConnectionState().token);
     }
     el.subscribeBtn.disabled = !ok;
+    el.topicUpdateBtn.disabled = !ok;
+    el.hubAdminPortalBtn.disabled = !ok;
     if (!ok) {
       setConnection(el, 'disconnected', 'Token failed');
       addMessage(el, state, 'err', 'Token error', 'Failed to get token');
@@ -521,6 +577,8 @@ async function handleToken(el, state) {
     addMessage(el, state, 'received', 'Token', 'Token obtained');
   } catch (error) {
     el.subscribeBtn.disabled = true;
+    el.topicUpdateBtn.disabled = true;
+    el.hubAdminPortalBtn.disabled = true;
     setConnection(el, 'disconnected', 'Token error');
     addMessage(el, state, 'err', 'Token exception', String(error));
   }
@@ -625,7 +683,7 @@ async function handlePublish(el, state) {
 async function handleGet(el, state) {
   const subscriber = el.getSubscriber.value.trim();
   if (!subscriber) {
-    addMessage(el, state, 'err', 'Get error', 'Subscriber is required');
+    addMessage(el, state, 'err', 'Request error', 'Subscriber is required');
     return;
   }
   const endpoint = el.getEndpoint.value.trim();
@@ -647,9 +705,14 @@ async function handleGet(el, state) {
   }
   const token = state.client?.getConnectionState?.().token?.trim() || '';
   if (!token) {
-    addMessage(el, state, 'err', 'Get error', 'Token is required');
+    addMessage(el, state, 'err', 'Request error', 'Token is required');
     return;
   }
+  if (state.retrievedImageUrl) {
+    URL.revokeObjectURL(state.retrievedImageUrl);
+    state.retrievedImageUrl = '';
+  }
+  el.openRetrievedImageBtn.disabled = true;
   const response = await fetch(url.toString(), {
     method: 'POST',
     headers: {
@@ -659,14 +722,25 @@ async function handleGet(el, state) {
     body: JSON.stringify(payload),
   });
   if (response.ok) {
-    await response.json();
-    el.getResults.innerHTML = `<div class="${style.status} ${style.success}">Response received.</div>`;
-    addMessage(el, state, 'received', 'Get', 'Response received.');
+    const data = await response.json();
+    el.getResponseData.value = JSON.stringify(data, null, 2);
+    const imageResource = findImageResource(data);
+    if (imageResource) {
+      const imageUrl = imageToObjectUrl(
+        imageResource.contentType,
+        imageResource.data
+      );
+      if (imageUrl) {
+        state.retrievedImageUrl = imageUrl;
+        el.openRetrievedImageBtn.disabled = false;
+      }
+    }
+    addMessage(el, state, 'received', 'Request', 'Response received.');
     return;
   }
   const text = await response.text();
-  el.getResults.innerHTML = '';
-  addMessage(el, state, 'err', 'Get error', `${response.status} ${text}`);
+  el.getResponseData.value = text;
+  addMessage(el, state, 'err', 'Request error', `${response.status} ${text}`);
 }
 
 function boot() {
@@ -710,8 +784,15 @@ function boot() {
     startConferenceBtn: byId('startConferenceBtn'),
     openTopicViewerBtn: byId('openTopicViewerBtn'),
     publishBtn: byId('publishBtn'),
+    publishActions: byId('publishActions'),
     dicomFileLabel: byId('dicomFileLabel'),
+    dicomFileValue: byId('dicomFileValue'),
+    chooseDicomFilesBtn: byId('chooseDicomFilesBtn'),
+    chooseDicomFoldersBtn: byId('chooseDicomFoldersBtn'),
+    dicomFilesInput: byId('dicomFilesInput'),
+    dicomFoldersInput: byId('dicomFoldersInput'),
     getBtn: byId('getBtn'),
+    openRetrievedImageBtn: byId('openRetrievedImageBtn'),
     tokenBtn: byId('tokenBtn'),
     hubAdminPortalBtn: byId('hubAdminPortalBtn'),
     clearBtn: byId('clearBtn'),
@@ -721,12 +802,13 @@ function boot() {
     topicDisplay: byId('topicDisplay'),
     topicUpdateBtn: byId('topicUpdateBtn'),
     messageCount: byId('messageCount'),
-    getResults: byId('getResults'),
+    getResponseData: byId('getResponseData'),
   };
 
   const state = {
     client: null,
     messageCount: 0,
+    retrievedImageUrl: '',
     selectedClientId: '',
     selectedClientSecret: '',
     defaultTopic:
@@ -741,6 +823,14 @@ function boot() {
   });
   el.publishActorPreset.value = DEFAULT_ACTOR_KEYWORD;
   el.getActorPreset.value = DEFAULT_GET_ACTOR_KEYWORD;
+
+  el.getDataType.addEventListener('change', () => {
+    const normalized = el.getDataType.value.trim().toUpperCase();
+    const isImageType =
+      normalized.startsWith('PNG') || normalized.startsWith('JPG');
+    el.getActorPreset.value = isImageType ? 'ID' : DEFAULT_GET_ACTOR_KEYWORD;
+  });
+  el.getDataType.dispatchEvent(new Event('change'));
 
   el.hubSelect.value = 'cloud';
   applyHubPreset(el, state, 'cloud');
@@ -786,17 +876,20 @@ function boot() {
 ]`;
 
   el.eventType.addEventListener('change', () => {
+    const isDicomSend = el.eventType.value === 'dicom-send';
     el.eventTypeCustom.className =
       el.eventType.value === 'custom'
         ? `${style.eventTypeCustom} ${style.eventTypeCustomVisible}`
         : style.eventTypeCustom;
-    el.eventDataRow.style.display =
-      el.eventType.value === 'dicom-send' ? 'none' : '';
+    el.eventDataRow.style.display = isDicomSend ? 'none' : '';
     el.dicomFileLabel.className =
-      el.eventType.value === 'dicom-send'
+      isDicomSend
         ? `${style.dicomFileLabel} ${style.dicomFileLabelVisible}`
         : style.dicomFileLabel;
-    if (el.eventType.value === 'dicom-send') {
+    el.publishActions.className = isDicomSend
+      ? `${style.actions} ${style.publishActions} ${style.publishActionsDicomOffset}`
+      : `${style.actions} ${style.publishActions}`;
+    if (isDicomSend) {
       el.publishActorPreset.value = DICOM_SEND_ACTOR_KEYWORD;
     } else {
       el.publishActorPreset.value = DEFAULT_ACTOR_KEYWORD;
@@ -866,13 +959,49 @@ function boot() {
     const topic = el.topic.value.trim();
     const viewerBaseUrl =
       el.hubSelect.value === 'local'
-        ? 'http://localhost:3000'
-        : 'https://ohif-vtkjscastclient.d2lirbatw5joxv.amplifyapp.com';
+        ? 'http://localhost:3000/viewer'
+        : 'https://ohif-cast.d1ps2fewnyt2md.amplifyapp.com/viewer/';
     const url = new URL(viewerBaseUrl);
     if (topic) {
       url.searchParams.set('topic', topic);
     }
     window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  });
+
+  el.chooseDicomFilesBtn.addEventListener('click', () => {
+    el.dicomFilesInput.click();
+  });
+
+  el.chooseDicomFoldersBtn.addEventListener('click', () => {
+    el.dicomFoldersInput.click();
+  });
+
+  el.dicomFilesInput.addEventListener('change', () => {
+    const files = Array.from(el.dicomFilesInput.files || []);
+    if (!files.length) {
+      el.dicomFileValue.value = 'AI-Results-SEG.dcm';
+      return;
+    }
+    if (files.length === 1) {
+      el.dicomFileValue.value = files[0].name;
+      return;
+    }
+    el.dicomFileValue.value = `${files.length} files selected`;
+  });
+
+  el.dicomFoldersInput.addEventListener('change', () => {
+    const files = Array.from(el.dicomFoldersInput.files || []);
+    if (!files.length) {
+      el.dicomFileValue.value = 'AI-Results-SEG.dcm';
+      return;
+    }
+    const firstRelativePath = files[0].webkitRelativePath || '';
+    const folderName =
+      firstRelativePath.split('/').filter(Boolean)[0] || 'Folder';
+    el.dicomFileValue.value =
+      files.length === 1
+        ? folderName
+        : `${folderName} (${files.length} files)`;
   });
 
   el.tokenBtn.addEventListener('click', async () => handleToken(el, state));
@@ -884,6 +1013,12 @@ function boot() {
   );
   el.publishBtn.addEventListener('click', async () => handlePublish(el, state));
   el.getBtn.addEventListener('click', async () => handleGet(el, state));
+  el.openRetrievedImageBtn.addEventListener('click', () => {
+    if (!state.retrievedImageUrl) {
+      return;
+    }
+    window.open(state.retrievedImageUrl, '_blank', 'noopener,noreferrer');
+  });
   el.clearBtn.addEventListener('click', () => {
     el.messages.innerHTML = '';
     state.messageCount = 0;
@@ -891,6 +1026,9 @@ function boot() {
   });
 
   window.addEventListener('beforeunload', () => {
+    if (state.retrievedImageUrl) {
+      URL.revokeObjectURL(state.retrievedImageUrl);
+    }
     if (state.client) {
       state.client.destroy();
     }
