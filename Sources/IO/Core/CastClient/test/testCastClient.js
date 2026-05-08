@@ -154,7 +154,7 @@ test('vtkCastClient token + subscribe + publish flow', (t) =>
     }
   ));
 
-test('vtkCastClient handles get-request and dicom binary frame', (t) =>
+test('vtkCastClient handles cast-request and dicom binary frame', (t) =>
   withGlobals(
     t,
     () => {
@@ -203,15 +203,15 @@ test('vtkCastClient handles get-request and dicom binary frame', (t) =>
         JSON.stringify({
           id: 'remote-1',
           event: {
-            'hub.event': 'get-request',
+            'hub.event': 'cast-request',
             'hub.topic': 'topic-1',
             context: { requestId: 'req-1', dataType: 'FHIRcastContext' },
           },
         })
       );
       t.ok(
-        ws.sent.some((entry) => entry.includes('"hub.event":"get-response"')),
-        'get-response sent over websocket'
+        ws.sent.some((entry) => entry.includes('"hub.event":"cast-response"')),
+        'cast-response sent over websocket'
       );
 
       let received = null;

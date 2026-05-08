@@ -1,17 +1,28 @@
 import macro from 'vtk.js/Sources/macros';
+
 const DEFAULT_MESSAGE_ID_PREFIX = 'VTKJS-';
 const RECONNECT_INTERVAL_MS = 10000;
 const SUBSCRIBE_TIMEOUT_MS = 5000;
-const EMPTY_FHIRCAST_CONTEXT = {
-  'context.type': '',
-  context: [],
-};
-
+const SUBSCRIBER_ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 function generateMessageId(prefix = DEFAULT_MESSAGE_ID_PREFIX) {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return prefix + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
   }
   return prefix + Math.random().toString(36).substring(2, 18);
+}
+
+function generateSubscriberName(productName = 'VTKJS') {
+  const base =
+    String(productName || 'VTKJS')
+      .trim()
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'VTKJS';
+  let suffix = '';
+  for (let i = 0; i < 6; i++) {
+    const index = Math.floor(Math.random() * SUBSCRIBER_ID_ALPHABET.length);
+    suffix += SUBSCRIBER_ID_ALPHABET[index];
+  }
+  return `${base}-${suffix}`;
 }
 
 function isArrayBufferView(value) {
@@ -163,7 +174,6 @@ function createHubConfig() {
   return {
     name: '',
     friendlyName: '',
-    productName: '',
     version: '',
     hub_endpoint: '',
     authorization_endpoint: '',
@@ -176,6 +186,8 @@ function createHubConfig() {
 function createSessionConfig() {
   return {
     subscriberName: '',
+    productName: '',
+    productVersion: '',
     actors: [],
     topic: '',
     events: [],
@@ -220,22 +232,12 @@ function getClientInfoPayload() {
   return Object.keys(info).length ? info : null;
 }
 
-function getActorKeyword(actor) {
-  if (typeof actor === 'string') {
-    return actor.trim().toUpperCase();
-  }
-  if (!actor || typeof actor !== 'object') {
-    return '';
-  }
-  const value = actor.keyword || actor.id || actor.key || '';
-  return typeof value === 'string' ? value.trim().toUpperCase() : '';
-}
-
 const DEFAULT_VALUES = {
   config: {
     hub: {},
     session: {},
     productName: undefined,
+    productVersion: undefined,
     callbackUrl: undefined,
     autoStart: false,
     autoReconnect: false,
@@ -243,6 +245,7 @@ const DEFAULT_VALUES = {
     messageIdPrefix: DEFAULT_MESSAGE_ID_PREFIX,
   },
   hub: null,
+  session: null,
   reconnectInterval: null,
   onMessageCallback: null,
   onConnectionStateChangeCallback: null,
@@ -332,50 +335,6 @@ function vtkCastClient(publicAPI, model) {
         return;
       }
 
-      if (event['hub.event'] === 'get-request') {
-        const context = event.context || {};
-        const requestId = context.requestId;
-        const requestedActor = getActorKeyword(castMessage.actor);
-        if (requestedActor === 'ID' && model.onMessageCallback) {
-          model.onMessageCallback(castMessage);
-          return;
-        }
-        let handled = false;
-        if (
-          typeof requestId === 'string' &&
-          context.dataType === 'FHIRcastContext'
-        ) {
-          const lastEvent =
-            model.lastSentMessage && model.lastSentMessage.event;
-          const lastEventTypeText =
-            lastEvent && typeof lastEvent['hub.event'] === 'string'
-              ? lastEvent['hub.event'].toLowerCase()
-              : '';
-
-          let responseData = model.lastSentMessage || EMPTY_FHIRCAST_CONTEXT;
-          if (lastEventTypeText.includes('close')) {
-            responseData = EMPTY_FHIRCAST_CONTEXT;
-          } else if (lastEventTypeText.includes('imagingstudy-open')) {
-            responseData = {
-              'context.type': 'ImagingStudy',
-              context: Array.isArray(lastEvent && lastEvent.context)
-                ? lastEvent.context
-                : [],
-            };
-          }
-          publicAPI.sendGetResponse(
-            requestId,
-            responseData,
-            event['hub.topic']
-          );
-          handled = true;
-        }
-        if (!handled && model.onMessageCallback) {
-          model.onMessageCallback(castMessage);
-        }
-        return;
-      }
-
       if (castMessage.id === model.hub.lastPublishedMessageID) {
         return;
       }
@@ -431,7 +390,6 @@ function vtkCastClient(publicAPI, model) {
     return {
       name: hub.name,
       friendlyName: hub.friendlyName,
-      productName: hub.productName,
       version: hub.version,
       hub_endpoint: hub.hub_endpoint,
       authorization_endpoint: hub.authorization_endpoint,
@@ -442,13 +400,15 @@ function vtkCastClient(publicAPI, model) {
   };
 
   publicAPI.getSessionConfig = () => {
-    const hub = model.hub;
+    const session = model.session;
     return {
-      subscriberName: hub.subscriberName,
-      actors: hub.actors,
-      topic: hub.topic,
-      events: hub.events,
-      lease: hub.lease,
+      subscriberName: session.subscriberName,
+      productName: session.productName,
+      productVersion: session.productVersion,
+      actors: session.actors,
+      topic: session.topic,
+      events: session.events,
+      lease: session.lease,
     };
   };
 
@@ -465,7 +425,7 @@ function vtkCastClient(publicAPI, model) {
 
   publicAPI.setTopic = (topic) => {
     console.debug('CastClient: setting topic to', topic);
-    model.hub.topic = topic;
+    model.session.topic = topic;
   };
 
   publicAPI.setToken = (token) => {
@@ -473,7 +433,7 @@ function vtkCastClient(publicAPI, model) {
   };
 
   publicAPI.setSubscriberName = (subscriberName) => {
-    model.hub.subscriberName = subscriberName;
+    model.session.subscriberName = subscriberName;
   };
 
   publicAPI.getToken = async () => {
@@ -493,7 +453,7 @@ function vtkCastClient(publicAPI, model) {
     tokenFormData.append('client_secret', model.hub.client_secret || '');
     tokenFormData.append(
       'client_product_name',
-      model.config.productName || 'CS3D'
+      model.session.productName || model.config.productName || 'VTKJS'
     );
 
     try {
@@ -506,9 +466,6 @@ function vtkCastClient(publicAPI, model) {
         const config = await response.json();
         if (typeof config.access_token === 'string' && config.access_token) {
           model.hub.token = config.access_token;
-        }
-        if (typeof config.subscriber_name === 'string') {
-          model.hub.subscriberName = config.subscriber_name;
         }
         if (config.topic && typeof config.topic === 'string') {
           if (!model.config.preserveSessionTopicFromToken) {
@@ -534,7 +491,7 @@ function vtkCastClient(publicAPI, model) {
   };
 
   publicAPI.subscribe = async () => {
-    const topic = model.hub.topic && model.hub.topic.trim();
+    const topic = model.session.topic && model.session.topic.trim();
     if (!topic) {
       console.warn(
         'CastClient: Error. subscription not sent. No topic defined.'
@@ -557,11 +514,25 @@ function vtkCastClient(publicAPI, model) {
     subscribeFormData.append('hub.mode', 'subscribe');
     subscribeFormData.append('hub.channel.type', 'websocket');
     subscribeFormData.append('hub.callback', callbackUrl);
-    subscribeFormData.append('hub.events', (model.hub.events || []).toString());
+    subscribeFormData.append(
+      'hub.events',
+      (model.session.events || []).toString()
+    );
     subscribeFormData.append('hub.topic', topic);
-    subscribeFormData.append('hub.lease', String(model.hub.lease || 999));
-    subscribeFormData.append('subscriber.name', model.hub.subscriberName || '');
-    const subscribeActors = (model.hub.actors || [])
+    subscribeFormData.append('hub.lease', String(model.session.lease || 999));
+    subscribeFormData.append(
+      'subscriber.name',
+      model.session.subscriberName || ''
+    );
+    subscribeFormData.append(
+      'subscriber.product',
+      model.session.productName || ''
+    );
+    subscribeFormData.append(
+      'subscriber.version',
+      model.session.productVersion || model.config.productVersion || ''
+    );
+    const subscribeActors = (model.session.actors || [])
       .map((actor) => actor.trim())
       .filter(Boolean);
     if (subscribeActors.length) {
@@ -669,15 +640,23 @@ function vtkCastClient(publicAPI, model) {
     unsubscribeFormData.append('hub.callback', callbackUrl);
     unsubscribeFormData.append(
       'hub.events',
-      (model.hub.events || []).toString()
+      (model.session.events || []).toString()
     );
-    unsubscribeFormData.append('hub.topic', model.hub.topic || '');
-    unsubscribeFormData.append('hub.lease', String(model.hub.lease || 999));
+    unsubscribeFormData.append('hub.topic', model.session.topic || '');
+    unsubscribeFormData.append('hub.lease', String(model.session.lease || 999));
     unsubscribeFormData.append(
       'subscriber.name',
-      model.hub.subscriberName || ''
+      model.session.subscriberName || ''
     );
-    const unsubscribeActors = (model.hub.actors || [])
+    unsubscribeFormData.append(
+      'subscriber.product',
+      model.session.productName || ''
+    );
+    unsubscribeFormData.append(
+      'subscriber.version',
+      model.session.productVersion || model.config.productVersion || ''
+    );
+    const unsubscribeActors = (model.session.actors || [])
       .map((actor) => actor.trim())
       .filter(Boolean);
     if (unsubscribeActors.length) {
@@ -730,13 +709,25 @@ function vtkCastClient(publicAPI, model) {
     msg.id = generateMessageId(messageIdPrefix());
     hub.lastPublishedMessageID = msg.id;
 
-    const subscriberName = hub.subscriberName && hub.subscriberName.trim();
-    if (subscriberName && msg.subscriber === undefined) {
-      msg.subscriber = subscriberName;
+    const subscriberName =
+      model.session.subscriberName && model.session.subscriberName.trim();
+    const subscriberProduct =
+      model.session.productName && model.session.productName.trim();
+    const subscriberVersion =
+      (model.session.productVersion && model.session.productVersion.trim()) ||
+      model.config.productVersion;
+    if (subscriberName && msg['subscriber.name'] === undefined) {
+      msg['subscriber.name'] = subscriberName;
+    }
+    if (subscriberProduct && msg['subscriber.product'] === undefined) {
+      msg['subscriber.product'] = subscriberProduct;
+    }
+    if (subscriberVersion && msg['subscriber.version'] === undefined) {
+      msg['subscriber.version'] = subscriberVersion;
     }
 
-    if (msg.event) {
-      msg.event['hub.topic'] = hub.topic;
+    if (msg.event && !msg.event['hub.topic']) {
+      msg.event['hub.topic'] = model.session.topic;
     }
 
     msg = await normalizeDicomSendMessageStrict(msg);
@@ -759,7 +750,58 @@ function vtkCastClient(publicAPI, model) {
     }
   };
 
-  publicAPI.sendGetResponse = (requestId, data, topic) => {
+  publicAPI.request = async (args = {}) => {
+    const subscriber = String(args.subscriber || '').trim();
+    if (!subscriber) {
+      throw new Error('CastClient.request: "subscriber" is required.');
+    }
+    const hub = model.hub;
+    const token = hub.token && hub.token.trim();
+    if (!token) {
+      throw new Error(
+        'CastClient.request: token is required (call getToken first).'
+      );
+    }
+
+    const endpoint =
+      (args.endpoint && args.endpoint.trim()) ||
+      `${(hub.hub_endpoint || '').replace(/\/+$/, '')}/request`;
+
+    const body = { subscriber };
+    const topic =
+      (args.topic && String(args.topic).trim()) || model.session.topic;
+    if (topic) body.topic = topic;
+    if (args.dataType && String(args.dataType).trim()) {
+      body.dataType = String(args.dataType).trim();
+    }
+    if (args.actor && String(args.actor).trim()) {
+      body.actor = String(args.actor).trim();
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    let data;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = '';
+      }
+    } else {
+      data = await response.text();
+    }
+    return { ok: response.ok, status: response.status, data };
+  };
+
+  publicAPI.sendCastRequestResponse = (requestId, data, topic) => {
     if (
       !model.hub.websocket ||
       typeof WebSocket === 'undefined' ||
@@ -771,15 +813,23 @@ function vtkCastClient(publicAPI, model) {
     const response = {
       timestamp: new Date().toJSON(),
       id: generateMessageId(messageIdPrefix()),
-      subscriber: model.hub.subscriberName || undefined,
+      'subscriber.name': model.session.subscriberName || undefined,
+      'subscriber.product': model.session.productName || undefined,
+      'subscriber.version':
+        model.session.productVersion ||
+        model.config.productVersion ||
+        undefined,
       event: {
-        'hub.topic': topic || model.hub.topic,
-        'hub.event': 'get-response',
+        'hub.topic': topic || model.session.topic,
+        'hub.event': 'cast-response',
         context: { requestId, data },
       },
     };
-    if (Array.isArray(model.hub.actors) && model.hub.actors.length > 0) {
-      response.actor = model.hub.actors[0];
+    if (
+      Array.isArray(model.session.actors) &&
+      model.session.actors.length > 0
+    ) {
+      response.actor = model.session.actors[0];
     }
     model.hub.websocket.send(JSON.stringify(response));
   };
@@ -796,11 +846,21 @@ export function extend(publicAPI, model, initialValues = {}) {
   Object.assign(model, DEFAULT_VALUES, initialValues);
 
   model.config = { ...DEFAULT_VALUES.config, ...initialValues };
+  model.session = {
+    ...createSessionConfig(),
+    ...(model.config.session || {}),
+  };
+  if (
+    !model.session.subscriberName ||
+    !String(model.session.subscriberName).trim()
+  ) {
+    model.session.subscriberName = generateSubscriberName(
+      model.session.productName || model.config.productName || 'VTKJS'
+    );
+  }
   model.hub = {
     ...createHubConfig(),
     ...(model.config.hub || {}),
-    ...createSessionConfig(),
-    ...(model.config.session || {}),
     ...createHubRuntimeState(),
   };
 

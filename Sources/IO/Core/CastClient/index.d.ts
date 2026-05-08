@@ -3,7 +3,6 @@ import { vtkObject } from '../../../interfaces';
 export interface HubConfig {
   name: string;
   friendlyName?: string;
-  productName?: string;
   version?: string;
   hub_endpoint: string;
   authorization_endpoint?: string;
@@ -18,6 +17,8 @@ export interface SessionConfig {
   topic?: string;
   events?: string[];
   lease?: number;
+  productName?: string;
+  productVersion?: string;
 }
 
 export interface HubRuntimeState {
@@ -29,9 +30,12 @@ export interface HubRuntimeState {
 }
 
 export interface CastMessage {
-  id?: string;
   timestamp?: string;
+  id?: string;
   'hub.mode'?: string;
+  'subscriber.name'?: string;
+  'subscriber.product'?: string;
+  'subscriber.version'?: string;
   event?: {
     'hub.event': string;
     'hub.topic'?: string;
@@ -43,11 +47,26 @@ export interface CastClientConfig {
   hub?: Partial<HubConfig>;
   session?: Partial<SessionConfig>;
   productName?: string;
+  productVersion?: string;
   callbackUrl?: string;
   autoStart?: boolean;
   autoReconnect?: boolean;
   preserveSessionTopicFromToken?: boolean;
   messageIdPrefix?: string;
+}
+
+export interface CastRequestArgs {
+  subscriber: string;
+  topic?: string;
+  dataType?: string;
+  actor?: string;
+  endpoint?: string;
+}
+
+export interface CastRequestResult {
+  ok: boolean;
+  status: number;
+  data: unknown;
 }
 
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -69,9 +88,10 @@ export interface vtkCastClient extends vtkObject {
   unsubscribe(): Promise<void>;
   publish(
     castMessage: Record<string, unknown>,
-    hub?: HubConfig & SessionConfig & HubRuntimeState
+    hub?: HubConfig & HubRuntimeState
   ): Promise<Response | null>;
-  sendGetResponse(requestId: string, data: unknown, topic?: string): void;
+  sendCastRequestResponse(requestId: string, data: unknown, topic?: string): void;
+  request(args: CastRequestArgs): Promise<CastRequestResult>;
   getConfig(): CastClientConfig;
 }
 
