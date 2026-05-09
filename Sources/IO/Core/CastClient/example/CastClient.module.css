@@ -242,9 +242,13 @@
   flex-shrink: 0;
 }
 
+.hubAdminPortalRow {
+  margin-top: 8px;
+}
+
 .hubAdminPortalBtn {
   margin-top: 0;
-  margin-left: 6px;
+  margin-left: 0;
   white-space: nowrap;
 }
 

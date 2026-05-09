@@ -58,6 +58,7 @@ const MESSAGE_KIND_CLASS = {
 const DEFAULT_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}","EC","WATCHER"]`;
 const DEFAULT_GET_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
+const EXAMPLE_BASE_TITLE = 'vtk.js CastClient example';
 const DICOM_SEND_ACTOR_KEYWORD = 'EC';
 const EMPTY_FHIRCAST_CONTEXT = {
   'context.type': '',
@@ -227,9 +228,9 @@ function buildPageHtml() {
   <div class="${style.connectionControls} ${style.section} ${style.panelCard}">
     <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>Authenticate</h2>
     <div class="${style.grid} ${style.connectionControlsInnerGrid}">
-      <div><label for="authSelect">Auth</label><div class="${style.hubAuthRow}"><select id="authSelect"><option value="hubTestAuth" selected>Hub test auth</option><option value="openIDConnect">openIDConnect</option><option value="other">Other</option></select><button type="button" id="tokenBtn">Authenticate</button></div></div>
+      <div><label for="authSelect">Auth</label><div class="${style.hubAuthRow}"><select id="authSelect"><option value="hubTestAuth" selected>Hub test auth</option><option value="openIDConnect">OIDC</option><option value="other">Other</option></select><button type="button" id="authTokenBtn">Authenticate</button></div></div>
       <div class="${style.gridFullWidth}"></div>
-      <div><label for="hubSelect">Hub</label><div class="${style.hubAuthRow}"><select id="hubSelect"><option value="volviewLocal">VolView server local</option><option value="volviewCloud" selected>VolView server cloud</option><option value="local">3D Slicer local</option><option value="cloud">3D Slicer cloud</option></select><button type="button" id="hubAdminPortalBtn" class="${style.hubAdminPortalBtn}" disabled>Open the hub admin portal</button></div></div>
+      <div><label for="hubSelect">Hub</label><div class="${style.hubAuthRow}"><select id="hubSelect"><option value="volviewLocal">VolView server local</option><option value="volviewCloud" selected>VolView server cloud</option><option value="local">3D Slicer local</option><option value="cloud">3D Slicer cloud</option></select><button type="button" id="tokenBtn">Authorize</button></div><div class="${style.hubAdminPortalRow}"><button type="button" id="hubAdminPortalBtn" class="${style.hubAdminPortalBtn}" disabled>Open the hub admin portal</button></div></div>
 
     </div>
   </div>
@@ -561,7 +562,18 @@ async function buildDicomSendContext(viewer) {
 function setConnection(el, status, text) {
   const statusClass = CONNECTION_STATUS_CLASS[status] || style.disconnected;
   el.connectionStatus.className = `${style.status} ${style.statusHeader} ${statusClass}`;
-  el.statusText.textContent = text;
+  const productName = el.productName?.value?.trim() || 'VTKJS-WKLST';
+  const prefixedText = `${productName}: ${text}`;
+  el.statusText.textContent = prefixedText;
+  updateBrowserTitle(el, text);
+}
+
+function updateBrowserTitle(el, text) {
+  const topic = el.topic?.value?.trim();
+  const productName = el.productName?.value?.trim() || 'VTKJS-WKLST';
+  document.title = topic
+    ? `${productName}: ${topic} - ${text}`
+    : `${productName}: ${text}`;
 }
 
 function applyWebsocketStatus(el, wsState) {
@@ -570,7 +582,7 @@ function applyWebsocketStatus(el, wsState) {
       setConnection(el, 'connecting', 'Websocket connecting');
       break;
     case 'connected':
-      setConnection(el, 'connected', 'Websocket connected');
+      setConnection(el, 'connected', `${getHubLabel(el.hubSelect.value)} connected`);
       break;
     case 'error':
       setConnection(el, 'error', 'Websocket error');
@@ -580,6 +592,10 @@ function applyWebsocketStatus(el, wsState) {
       setConnection(el, 'disconnected', 'Websocket disconnected');
       break;
   }
+}
+
+function getHubLabel(hubKey) {
+  return HUB_DEFINITIONS[hubKey]?.label || 'Hub';
 }
 
 function applyHubPreset(el, state, hubKey) {
@@ -703,6 +719,7 @@ async function handleToken(el, state) {
       el.topic.value = session.topic;
       el.publishTopic.value = session.topic;
       el.getTopic.value = session.topic;
+      setConnection(el, 'token-ready', 'Token ready');
     }
     addMessage(el, state, 'received', 'Token', 'Token obtained');
   } catch (error) {
@@ -924,6 +941,7 @@ function boot() {
     getBtn: byId('getBtn'),
     openRetrievedImageBtn: byId('openRetrievedImageBtn'),
     tokenBtn: byId('tokenBtn'),
+    authTokenBtn: byId('authTokenBtn'),
     hubAdminPortalBtn: byId('hubAdminPortalBtn'),
     instructionsBtn: byId('instructionsBtn'),
     clearBtn: byId('clearBtn'),
@@ -1030,6 +1048,8 @@ function boot() {
     const nextTopic = el.topic.value.trim();
     el.publishTopic.value = nextTopic;
     el.getTopic.value = nextTopic;
+    const statusText = el.statusText?.textContent?.trim() || 'Ready';
+    updateBrowserTitle(el, statusText);
   });
 
   el.hubSelect.addEventListener('change', () => {
@@ -1188,6 +1208,7 @@ function boot() {
   });
 
   el.tokenBtn.addEventListener('click', async () => handleToken(el, state));
+  el.authTokenBtn.addEventListener('click', async () => handleToken(el, state));
   el.subscribeBtn.addEventListener('click', async () =>
     handleSubscribe(el, state)
   );
