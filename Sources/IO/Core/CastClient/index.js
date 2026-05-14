@@ -1,4 +1,5 @@
 import macro from 'vtk.js/Sources/macros';
+import { responseEventFor } from './eventNames';
 
 const DEFAULT_MESSAGE_ID_PREFIX = 'VTKJS-';
 const RECONNECT_INTERVAL_MS = 10000;
@@ -192,12 +193,14 @@ function createSessionConfig() {
     topic: '',
     events: [],
     lease: 999,
+    userName: '',
   };
 }
 
 function createHubRuntimeState() {
   return {
     token: '',
+    lastIdToken: '',
     lastPublishedMessageID: '',
     subscribed: false,
     resubscribeRequested: false,
@@ -436,25 +439,117 @@ function vtkCastClient(publicAPI, model) {
     model.session.subscriberName = subscriberName;
   };
 
-  publicAPI.getToken = async () => {
+  publicAPI.setUserName = (userName) => {
+    model.session.userName = userName || '';
+  };
+
+  function resolveAuthorizationEndpoint() {
+    const explicit = model.hub.authorization_endpoint;
+    if (typeof explicit === 'string' && explicit.trim()) {
+      return explicit.trim();
+    }
+    // Fallback: derive from token_endpoint origin (back-compat with hub
+    // configs that haven't been updated to expose authorization_endpoint).
     try {
-      const url = new URL(model.hub.token_endpoint);
+      const tokenUrl = new URL(model.hub.token_endpoint);
+      return `${tokenUrl.origin}/oauth/authorize`;
+    } catch (err) {
+      return '';
+    }
+  }
+
+  publicAPI.authenticate = async () => {
+    const authorizeEndpoint = resolveAuthorizationEndpoint();
+    if (!authorizeEndpoint) {
+      throw new Error(
+        'CastClient.authenticate: no authorization_endpoint or token_endpoint configured.'
+      );
+    }
+    try {
+      const url = new URL(authorizeEndpoint);
       console.debug(
-        'CastClient: Getting token from:',
+        'CastClient: Authorizing at:',
         `${url.origin}${url.pathname}`
       );
     } catch (err) {
-      console.debug('CastClient: Getting token from hub');
+      console.debug('CastClient: Authorizing at hub');
     }
 
+    const productName =
+      model.session.productName || model.config.productName || 'VTKJS';
+
+    const formData = new URLSearchParams();
+    if (model.hub.lastIdToken) {
+      formData.append('id_token', model.hub.lastIdToken);
+    } else if (model.session.userName) {
+      formData.append('user_name', model.session.userName);
+    }
+    formData.append('client_product_name', productName);
+    if (model.session.topic) {
+      formData.append('topic', model.session.topic);
+    }
+
+    let response;
+    try {
+      response = await fetch(authorizeEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('CastClient: Exception during authenticate:', message);
+      throw err;
+    }
+    if (response.status !== 200) {
+      const text = await response.text().catch(() => '');
+      console.error(
+        'CastClient: Authenticate failed. Status:',
+        response.status,
+        text
+      );
+      throw new Error(
+        `CastClient.authenticate failed (HTTP ${response.status})`
+      );
+    }
+    const data = await response.json();
+    if (typeof data.user_name === 'string' && data.user_name) {
+      model.session.userName = data.user_name;
+    }
+    return {
+      user_name: data.user_name || '',
+      code: data.code || '',
+      expires_in:
+        typeof data.expires_in === 'number' ? data.expires_in : undefined,
+    };
+  };
+
+  publicAPI.getToken = async (code) => {
+    if (typeof code !== 'string' || !code) {
+      console.error(
+        'CastClient.getToken: code is required (call authenticate() first).'
+      );
+      return false;
+    }
+    try {
+      const url = new URL(model.hub.token_endpoint);
+      console.debug(
+        'CastClient: Exchanging code at:',
+        `${url.origin}${url.pathname}`
+      );
+    } catch (err) {
+      console.debug('CastClient: Exchanging code at hub');
+    }
+
+    const productName =
+      model.session.productName || model.config.productName || 'VTKJS';
+
     const tokenFormData = new URLSearchParams();
-    tokenFormData.append('grant_type', 'client_credentials');
+    tokenFormData.append('grant_type', 'authorization_code');
+    tokenFormData.append('code', code);
     tokenFormData.append('client_id', model.hub.client_id || '');
     tokenFormData.append('client_secret', model.hub.client_secret || '');
-    tokenFormData.append(
-      'client_product_name',
-      model.session.productName || model.config.productName || 'VTKJS'
-    );
+    tokenFormData.append('client_product_name', productName);
 
     try {
       const response = await fetch(model.hub.token_endpoint, {
@@ -466,6 +561,15 @@ function vtkCastClient(publicAPI, model) {
         const config = await response.json();
         if (typeof config.access_token === 'string' && config.access_token) {
           model.hub.token = config.access_token;
+        }
+        if (typeof config.id_token === 'string' && config.id_token) {
+          model.hub.lastIdToken = config.id_token;
+        }
+        if (
+          typeof config.subscriber_name === 'string' &&
+          config.subscriber_name
+        ) {
+          model.session.subscriberName = config.subscriber_name;
         }
         if (config.topic && typeof config.topic === 'string') {
           if (!model.config.preserveSessionTopicFromToken) {
@@ -610,7 +714,21 @@ function vtkCastClient(publicAPI, model) {
         console.warn(
           'CastClient: Subscription response 401 - Token refresh needed.'
         );
-        await publicAPI.getToken();
+        try {
+          const { code } = await publicAPI.authenticate();
+          if (code) {
+            await publicAPI.getToken(code);
+          }
+        } catch (refreshErr) {
+          const refreshMsg =
+            refreshErr instanceof Error
+              ? refreshErr.message
+              : String(refreshErr);
+          console.error(
+            'CastClient: Token refresh after 401 failed:',
+            refreshMsg
+          );
+        }
       } else {
         console.error(
           'CastClient: Subscription rejected by hub. Status:',
@@ -759,7 +877,7 @@ function vtkCastClient(publicAPI, model) {
     const token = hub.token && hub.token.trim();
     if (!token) {
       throw new Error(
-        'CastClient.request: token is required (call getToken first).'
+        'CastClient.request: token is required (call authenticate() then getToken(code) first).'
       );
     }
 
@@ -776,6 +894,9 @@ function vtkCastClient(publicAPI, model) {
     }
     if (args.actor && String(args.actor).trim()) {
       body.actor = String(args.actor).trim();
+    }
+    if (args.productName && String(args.productName).trim()) {
+      body.productName = String(args.productName).trim();
     }
 
     const response = await fetch(endpoint, {
@@ -801,7 +922,12 @@ function vtkCastClient(publicAPI, model) {
     return { ok: response.ok, status: response.status, data };
   };
 
-  publicAPI.sendCastRequestResponse = (requestId, data, topic) => {
+  // Send a response to a previously-received <datatype>-request.
+  //
+  // Signature: (requestId, dataType, data, topic?). The hub.event is derived
+  // from ``dataType`` (e.g. PNGFULLSIZE -> pngfullsize-response). ``dataType``
+  // is required; omitting it is an error (no generic cast-response emission).
+  publicAPI.sendCastRequestResponse = (requestId, dataType, data, topic) => {
     if (
       !model.hub.websocket ||
       typeof WebSocket === 'undefined' ||
@@ -809,6 +935,20 @@ function vtkCastClient(publicAPI, model) {
     ) {
       return;
     }
+
+    let dt = '';
+    if (typeof dataType === 'string') {
+      dt = dataType.trim();
+    } else if (dataType != null) {
+      dt = String(dataType).trim();
+    }
+    if (!dt) {
+      console.error(
+        'CastClient.sendCastRequestResponse requires a non-empty dataType.'
+      );
+      return;
+    }
+    const eventName = responseEventFor(dt);
 
     const response = {
       timestamp: new Date().toJSON(),
@@ -821,8 +961,12 @@ function vtkCastClient(publicAPI, model) {
         undefined,
       event: {
         'hub.topic': topic || model.session.topic,
-        'hub.event': 'cast-response',
-        context: { requestId, data },
+        'hub.event': eventName,
+        context: {
+          requestId,
+          dataType: dt,
+          data,
+        },
       },
     };
     if (

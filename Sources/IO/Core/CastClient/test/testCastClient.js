@@ -90,6 +90,16 @@ test('vtkCastClient token + subscribe + publish flow', (t) =>
       globalThis.WebSocket = makeWebSocketCtor(websockets);
       globalThis.fetch = async (url, options) => {
         fetchCalls.push({ url, options });
+        if (url.includes('/authorize')) {
+          return {
+            status: 200,
+            json: async () => ({
+              user_name: 'user-1',
+              code: 'code-123',
+              expires_in: 60,
+            }),
+          };
+        }
         if (url.includes('/token')) {
           return {
             status: 200,
@@ -119,6 +129,7 @@ test('vtkCastClient token + subscribe + publish flow', (t) =>
       const client = vtkCastClient.newInstance({
         hub: {
           hub_endpoint: 'https://hub.local/api/hub',
+          authorization_endpoint: 'https://hub.local/authorize',
           token_endpoint: 'https://hub.local/token',
           client_id: 'cid',
           client_secret: 'secret',
@@ -129,7 +140,10 @@ test('vtkCastClient token + subscribe + publish flow', (t) =>
         },
       });
 
-      const ok = await client.getToken();
+      const auth = await client.authenticate();
+      t.equal(auth.user_name, 'user-1', 'user_name returned');
+      t.equal(auth.code, 'code-123', 'code returned');
+      const ok = await client.getToken(auth.code);
       t.equal(ok, true, 'token acquired');
       t.equal(client.getConnectionState().token, 'token-123', 'stored token');
       t.equal(
@@ -150,11 +164,15 @@ test('vtkCastClient token + subscribe + publish flow', (t) =>
         client.getConnectionState().lastPublishedMessageID,
         'message id tracked'
       );
-      t.equal(fetchCalls.length, 3, 'token + subscribe + publish fetch calls');
+      t.equal(
+        fetchCalls.length,
+        4,
+        'authorize + token + subscribe + publish fetch calls'
+      );
     }
   ));
 
-test('vtkCastClient handles cast-request and dicom binary frame', (t) =>
+test('vtkCastClient handles fhircastcontext-request and dicom binary frame', (t) =>
   withGlobals(
     t,
     () => {
@@ -163,6 +181,12 @@ test('vtkCastClient handles cast-request and dicom binary frame', (t) =>
       globalThis.AbortSignal = { timeout: () => undefined };
       globalThis.WebSocket = makeWebSocketCtor(websockets);
       globalThis.fetch = async (url, options) => {
+        if (url.includes('/authorize')) {
+          return {
+            status: 200,
+            json: async () => ({ user_name: 'user-xyz', code: 'code-xyz' }),
+          };
+        }
         if (url.includes('/token')) {
           return {
             status: 200,
@@ -180,6 +204,7 @@ test('vtkCastClient handles cast-request and dicom binary frame', (t) =>
       const client = vtkCastClient.newInstance({
         hub: {
           hub_endpoint: 'https://hub.local/api/hub',
+          authorization_endpoint: 'https://hub.local/authorize',
           token_endpoint: 'https://hub.local/token',
         },
         session: {
@@ -188,7 +213,8 @@ test('vtkCastClient handles cast-request and dicom binary frame', (t) =>
         },
       });
 
-      await client.getToken();
+      const { code } = await client.authenticate();
+      await client.getToken(code);
       await client.subscribe();
       const ws = websockets[0];
 
@@ -203,15 +229,17 @@ test('vtkCastClient handles cast-request and dicom binary frame', (t) =>
         JSON.stringify({
           id: 'remote-1',
           event: {
-            'hub.event': 'cast-request',
+            'hub.event': 'fhircastcontext-request',
             'hub.topic': 'topic-1',
             context: { requestId: 'req-1', dataType: 'FHIRcastContext' },
           },
         })
       );
       t.ok(
-        ws.sent.some((entry) => entry.includes('"hub.event":"cast-response"')),
-        'cast-response sent over websocket'
+        ws.sent.some((entry) =>
+          entry.includes('"hub.event":"fhircastcontext-response"')
+        ),
+        'fhircastcontext-response sent over websocket'
       );
 
       let received = null;
@@ -257,6 +285,15 @@ test('vtkCastClient resubscribe check and destroy cleanup', (t) =>
       globalThis.WebSocket = makeWebSocketCtor(websockets);
       globalThis.fetch = async (url, options) => {
         fetchCalls.push({ url, options });
+        if (url.includes('/authorize')) {
+          return {
+            status: 200,
+            json: async () => ({
+              user_name: 'user-reconnect',
+              code: 'code-reconnect',
+            }),
+          };
+        }
         if (url.includes('/token')) {
           return {
             status: 200,
@@ -275,6 +312,7 @@ test('vtkCastClient resubscribe check and destroy cleanup', (t) =>
         autoReconnect: true,
         hub: {
           hub_endpoint: 'https://hub.local/api/hub',
+          authorization_endpoint: 'https://hub.local/authorize',
           token_endpoint: 'https://hub.local/token',
         },
         session: {
@@ -283,7 +321,8 @@ test('vtkCastClient resubscribe check and destroy cleanup', (t) =>
         },
       });
 
-      await client.getToken();
+      const { code } = await client.authenticate();
+      await client.getToken(code);
       await client.subscribe();
       const ws = websockets[0];
       ws.emitClose();
@@ -294,7 +333,7 @@ test('vtkCastClient resubscribe check and destroy cleanup', (t) =>
       );
 
       await intervals[0]();
-      t.ok(fetchCalls.length >= 3, 'interval triggers resubscribe attempt');
+      t.ok(fetchCalls.length >= 4, 'interval triggers resubscribe attempt');
 
       client.destroy();
       t.equal(clears.length, 1, 'reconnect interval cleared');
@@ -312,6 +351,12 @@ test('vtkCastClient publish normalizes dicom-send binary payload', (t) =>
       globalThis.WebSocket = makeWebSocketCtor(websockets);
       globalThis.fetch = async (url, options) => {
         fetchCalls.push({ url, options });
+        if (url.includes('/authorize')) {
+          return {
+            status: 200,
+            json: async () => ({ user_name: 'user-dicom', code: 'code-dicom' }),
+          };
+        }
         if (url.includes('/token')) {
           return {
             status: 200,
@@ -335,6 +380,7 @@ test('vtkCastClient publish normalizes dicom-send binary payload', (t) =>
       const client = vtkCastClient.newInstance({
         hub: {
           hub_endpoint: 'https://hub.local/api/hub',
+          authorization_endpoint: 'https://hub.local/authorize',
           token_endpoint: 'https://hub.local/token',
         },
         session: {
@@ -343,7 +389,8 @@ test('vtkCastClient publish normalizes dicom-send binary payload', (t) =>
         },
       });
 
-      await client.getToken();
+      const { code } = await client.authenticate();
+      await client.getToken(code);
       await client.subscribe();
       const response = await client.publish({
         event: {
@@ -432,6 +479,12 @@ test('vtkCastClient emits websocket connection state changes', (t) =>
       globalThis.AbortSignal = { timeout: () => undefined };
       globalThis.WebSocket = makeWebSocketCtor(websockets);
       globalThis.fetch = async (url) => {
+        if (url.includes('/authorize')) {
+          return {
+            status: 200,
+            json: async () => ({ user_name: 'user-conn', code: 'code-conn' }),
+          };
+        }
         if (url.includes('/token')) {
           return {
             status: 200,
@@ -449,6 +502,7 @@ test('vtkCastClient emits websocket connection state changes', (t) =>
       const client = vtkCastClient.newInstance({
         hub: {
           hub_endpoint: 'https://hub.local/api/hub',
+          authorization_endpoint: 'https://hub.local/authorize',
           token_endpoint: 'https://hub.local/token',
         },
         session: {
@@ -462,7 +516,8 @@ test('vtkCastClient emits websocket connection state changes', (t) =>
         states.push(state);
       });
 
-      await client.getToken();
+      const { code } = await client.authenticate();
+      await client.getToken(code);
       await client.subscribe();
       const ws = websockets[0];
       ws.emitOpen();

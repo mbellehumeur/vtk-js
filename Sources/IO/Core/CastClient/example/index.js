@@ -5,6 +5,7 @@
  *     name: 'demo',
  *     version: '1',
  *     hub_endpoint: 'https://host/api/hub',
+ *     authorization_endpoint: 'https://host/oauth/authorize',
  *     token_endpoint: 'https://host/oauth/token',
  *     client_id: 'client_id',
  *     client_secret: 'client_secret',
@@ -22,7 +23,8 @@
  *   console.log(message);
  * });
  *
- * const tokenOk = await client.getToken();
+ * const { user_name, code } = await client.authenticate();
+ * const tokenOk = await client.getToken(code);
  * if (tokenOk) {
  *   await client.subscribe();
  *   await client.publish({
@@ -38,6 +40,7 @@
 import '@kitware/vtk.js/favicon';
 
 import vtkCastClient from 'vtk.js/Sources/IO/Core/CastClient';
+import { isRequestEvent, requestEventFor } from '../eventNames';
 
 import style from './CastClient.module.css';
 
@@ -58,7 +61,6 @@ const MESSAGE_KIND_CLASS = {
 const DEFAULT_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}","EC","WATCHER"]`;
 const DEFAULT_GET_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
-const EXAMPLE_BASE_TITLE = 'vtk.js CastClient example';
 const DICOM_SEND_ACTOR_KEYWORD = 'EC';
 const EMPTY_FHIRCAST_CONTEXT = {
   'context.type': '',
@@ -114,6 +116,7 @@ const ACTOR_PRESETS = [
 const HUB_DEFINITIONS = {
   volviewLocal: {
     hubEndpoint: 'http://127.0.0.1:4014/api/hub',
+    authorizeEndpoint: 'http://127.0.0.1:4014/oauth/authorize',
     authEndpoint: 'http://127.0.0.1:4014/oauth/token',
     product_name: 'VTKJS-WKLST',
     product_version: '1.0',
@@ -123,6 +126,8 @@ const HUB_DEFINITIONS = {
   volviewCloud: {
     hubEndpoint:
       'https://volview-server-with-hub-g2d9hcc5esahgxe8.westeurope-01.azurewebsites.net/api/hub',
+    authorizeEndpoint:
+      'https://volview-server-with-hub-g2d9hcc5esahgxe8.westeurope-01.azurewebsites.net/oauth/authorize',
     authEndpoint:
       'https://volview-server-with-hub-g2d9hcc5esahgxe8.westeurope-01.azurewebsites.net/oauth/token',
     product_name: 'VTKJS-WKLST',
@@ -132,6 +137,7 @@ const HUB_DEFINITIONS = {
   },
   local: {
     hubEndpoint: 'http://127.0.0.1:2017/api/hub',
+    authorizeEndpoint: 'http://127.0.0.1:2017/oauth/authorize',
     authEndpoint: 'http://127.0.0.1:2017/oauth/token',
     product_name: 'SLICER-HUB',
     product_version: '1.0',
@@ -141,6 +147,8 @@ const HUB_DEFINITIONS = {
   cloud: {
     hubEndpoint:
       'https://cast-hub-g6abetanhjesb6cx.westeurope-01.azurewebsites.net/api/hub',
+    authorizeEndpoint:
+      'https://cast-hub-g6abetanhjesb6cx.westeurope-01.azurewebsites.net/oauth/authorize',
     authEndpoint:
       'https://cast-hub-g6abetanhjesb6cx.westeurope-01.azurewebsites.net/oauth/token',
     product_name: 'SLICERHUB',
@@ -151,16 +159,17 @@ const HUB_DEFINITIONS = {
 };
 
 function headerInstructionsHtml() {
-  return `<p>This example demonstrate using the IO module cast client  as a worklist client and an evidence creator (EC) with the 3D Slicer hub and the OHIF viewer.</p>
+  return `<p>This example demonstrate using the IO module cast client for IHE roles worklist client and evidence creator (EC).</p>
 <ol>
-<li><strong>Authenticate</strong> — Click the Authenticate button to request a token and user id. When the status strip shows token ready, you can subscribe.</li>
+<li><strong>Authenticate</strong> — Click the Authenticate button to request a user id and code.</li>
+<li><strong>Authorize</strong> — Click the Authorize button to get an access token.</li>
 <li><strong>Open the hub admin portal</strong> — Click Open the hub admin portal button to see the  subscriptions and messaging.</li>
-<li><strong>Subscribe to the hub</strong> — Click the Subscribe button to establish a subscription to the hub. This will also establish a websocket connection to receive events and requests for data.</li>
-<li><strong>Publish ImagingStudy-open</strong> — Click the publish button to send an ImagingStudy-open event to the hub.  You should see the message received in the hub and delivered to no one.</li>
-<li><strong>Open a viewer</strong> — Click the Open a viewer with this topic button in the Subscribe section.  The OHIF instance will automatically authenticate, subscribe to the hub and request the context from the WORKLIST_CLIENT actors.  If a study is found, it is opened in the viewer.</li>
+<li><strong>Subscribe to the hub</strong> — Click the Subscribe button. This will also establish a websocket connection to receive events and requests for data.</li>
+<li><strong>Publish ImagingStudy-open</strong> — Click the Publish button to send an ImagingStudy-open event to the hub.  You should see the message received in the hub and delivered to no one.</li>
+<li><strong>Open a viewer</strong> — Click the Open a viewer button in the Subscribe section.  The viewer will automatically aget an access token, subscribe to the hub and request the context from the WORKLIST_CLIENT actors.  If a study is found, it is opened in the viewer.</li>
 <li><strong>Publish AI results with DICOM-send</strong> — Change the event type to DICOM-send and click the Publish button. This will send a DICOM file to the viewer and the segmentation should appear.</li>
 <li><strong>Request context from the worklist client</strong> —Click the Request button to query the context of the worklist client. </li>
-<li><strong>Request an image from the viewer</strong> — Choose datatype to "JPGFULLSIZE" and change the actor to ID (Image Display). This will request the image of the viewer display</li>
+<li><strong>Request an image from the viewer</strong> — Choose datatype to "JPGFULLSIZE" and change the actor to ID (Image Display). This will request the image of the selected viewport</li>
 <li><strong>Test websocket reconnect</strong> — Click Reset server in the hub admin portal on the bottom right. Wait a few seconds and the websocket should reconnect and the status strip should show connected. Open an additional viewer, it should open with the current study even though the hub was restarted.</li>
 <li><strong>Publish ImagingStudy-close</strong> — Change the event type to ImagingStudy-close and click the Publish button. This will close the study in the viewer. </li>
 </ol>`;
@@ -186,7 +195,7 @@ function openInstructionsWindow() {
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>IO module cast example — Instructions</title>
+<title>IO module cast example</title>
 <style>
   body {
     margin: 0;
@@ -210,7 +219,7 @@ function openInstructionsWindow() {
 </style>
 </head>
 <body>
-<h1>IO module cast example — Instructions</h1>
+<h1>IO module cast example</h1>
 ${headerInstructionsHtml()}
 </body>
 </html>`;
@@ -222,23 +231,47 @@ ${headerInstructionsHtml()}
 
 function buildPageHtml() {
   return `<div class="${style.container}">
-  <div class="${style.castHeader}"><div class="${style.headerTitleWrap}"><span class="${style.headerTitle}">IO module cast example</span><button type="button" id="instructionsBtn" class="${style.instructionsBtn}" aria-label="Show cast client instructions" title="Show cast client instructions">Instructions</button></div></div>
+  <div class="${style.castHeader}"><div class="${
+    style.headerTitleWrap
+  }"><span class="${
+    style.headerTitle
+  }">IO module cast example</span><button type="button" id="instructionsBtn" class="${
+    style.instructionsBtn
+  }" aria-label="Read me" title="Read me">Read me</button></div></div>
   <div class="${style.layout}">
   <div class="${style.controlGrid}">
   <div class="${style.connectionControls} ${style.section} ${style.panelCard}">
     <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>Authenticate</h2>
     <div class="${style.grid} ${style.connectionControlsInnerGrid}">
-      <div><label for="authSelect">Auth</label><div class="${style.hubAuthRow}"><select id="authSelect"><option value="hubTestAuth" selected>Hub test auth</option><option value="openIDConnect">OIDC</option><option value="other">Other</option></select><button type="button" id="authTokenBtn">Authenticate</button></div></div>
+      <div><label for="authSelect">Auth</label><div class="${
+        style.hubAuthRow
+      }"><select id="authSelect"><option value="hubTestAuth" selected>Hub test auth</option><option value="openIDConnect">OIDC</option><option value="other">Other</option></select><button type="button" id="authTokenBtn">Authenticate</button></div></div>
       <div class="${style.gridFullWidth}"></div>
-      <div><label for="hubSelect">Hub</label><div class="${style.hubAuthRow}"><select id="hubSelect"><option value="volviewLocal">VolView server local</option><option value="volviewCloud" selected>VolView server cloud</option><option value="local">3D Slicer local</option><option value="cloud">3D Slicer cloud</option></select><button type="button" id="tokenBtn">Authorize</button></div><div class="${style.hubAdminPortalRow}"><button type="button" id="hubAdminPortalBtn" class="${style.hubAdminPortalBtn}" disabled>Open the hub admin portal</button></div></div>
+      <div><label for="hubSelect">Hub</label><div class="${
+        style.hubAuthRow
+      }"><select id="hubSelect"><option value="volviewLocal">VolView server local</option><option value="volviewCloud" selected>VolView server cloud</option><option value="local">3D Slicer local</option><option value="cloud">3D Slicer cloud</option></select><button type="button" id="tokenBtn">Authorize</button></div><div class="${
+    style.hubAdminPortalRow
+  }"><button type="button" id="hubAdminPortalBtn" class="${
+    style.hubAdminPortalBtn
+  }" disabled>Open the hub admin portal</button></div></div>
 
     </div>
   </div>
-  <span class="${style.castHiddenEndpoint}"><div><label for="tokenEndpoint">auth endpoint</label><input id="tokenEndpoint" /></div></span>
+  <span class="${
+    style.castHiddenEndpoint
+  }"><div><label for="authorizeEndpoint">authorize endpoint</label><input id="authorizeEndpoint" /></div><div><label for="tokenEndpoint">token endpoint</label><input id="tokenEndpoint" /></div></span>
   <div class="${style.section} ${style.panelCard}">
-    <div class="${style.subscribeSectionHeader}"><h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>Subscribe</h2><div id="connectionStatus" class="${style.status} ${style.statusHeader} ${style.disconnected}"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div>
+    <div class="${
+      style.subscribeSectionHeader
+    }"><h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>Subscribe</h2><div id="connectionStatus" class="${
+    style.status
+  } ${style.statusHeader} ${
+    style.disconnected
+  }"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div>
     <div class="${style.grid}">
-      <div class="${style.castHiddenEndpoint}"><label for="hubEndpoint">hub_endpoint</label><input id="hubEndpoint" /></div>
+      <div class="${
+        style.castHiddenEndpoint
+      }"><label for="hubEndpoint">hub_endpoint</label><input id="hubEndpoint" /></div>
       <div class="${style.subscribeSubscriberProductRow}">
         <div><label for="subscriberName">Subscriber</label><input id="subscriberName" /></div>
         <div><label for="productName">Product Name</label><input id="productName" value="VTKJS-WKLST" /></div>
@@ -247,7 +280,9 @@ function buildPageHtml() {
       <div class="${style.subscribeEventsTopicActors}">
         <div><label for="events">Events</label><input id="events" value="*" /></div>
         <div><label for="topic">Topic</label><input id="topic" /></div>
-        <div><label for="subscribeActors">Actors</label><input id="subscribeActors" class="${style.subscribeActorsJson}" type="text" spellcheck="false" value='${DEFAULT_SUBSCRIBE_ACTORS_JSON}' /></div>
+        <div><label for="subscribeActors">Actors</label><input id="subscribeActors" class="${
+          style.subscribeActorsJson
+        }" type="text" spellcheck="false" value='${DEFAULT_SUBSCRIBE_ACTORS_JSON}' /></div>
       </div>
     </div>
     <div class="${style.actions} ${style.subscribeActions}">
@@ -255,8 +290,14 @@ function buildPageHtml() {
         <button type="button" id="subscribeBtn" disabled>Subscribe</button>
         <button type="button" id="unsubscribeBtn" disabled>Unsubscribe</button>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;"><button type="button" id="openTopicViewerBtn" class="${style.openTopicViewerBtn}" disabled>Open a viewer</button><select id="viewerSelect"><option value="volview" selected>VolView</option><option value="ohif">OHIF</option></select></div>
-      <div class="${style.subscribeActionsEnd}"><button type="button" id="startConferenceBtn" class="${style.startConferenceBtn}" disabled>Start a conference</button></div>
+      <div style="display:flex;align-items:center;gap:8px;"><button type="button" id="openTopicViewerBtn" class="${
+        style.openTopicViewerBtn
+      }" disabled>Open a viewer</button><select id="viewerSelect"><option value="volview" selected>VolView</option><option value="ohif">OHIF</option></select></div>
+      <div class="${
+        style.subscribeActionsEnd
+      }"><button type="button" id="startConferenceBtn" class="${
+    style.startConferenceBtn
+  }" disabled>Start a conference</button></div>
     </div>
   </div>
   <div class="${style.section} ${style.panelCard}">
@@ -273,7 +314,9 @@ function buildPageHtml() {
             <option value="patient-close">patient-close</option>
             <option value="custom">Other (custom)</option>
           </select>
-          <input id="eventTypeCustom" class="${style.eventTypeCustom}" placeholder="Custom event type" />
+          <input id="eventTypeCustom" class="${
+            style.eventTypeCustom
+          }" placeholder="Custom event type" />
         </div>
         <div><label for="publishTopic">Topic</label><input id="publishTopic" /></div>
         <div><label for="publishActorPreset">Actor</label><select id="publishActorPreset"></select></div>
@@ -283,27 +326,57 @@ function buildPageHtml() {
       <label for="eventData">Event data</label>
       <textarea id="eventData"></textarea>
     </div>
-    <div id="dicomFileLabel" class="${style.dicomFileLabel}"><label for="dicomFileValue">File</label><div class="${style.dicomFilePickerRow}"><input id="dicomFileValue" class="${style.dicomFileValue}" value="AI-Results-SEG.dcm" readonly /><button type="button" id="chooseDicomFilesBtn">Choose files</button><button type="button" id="chooseDicomFoldersBtn">Choose folders</button><input id="dicomFilesInput" type="file" multiple class="${style.castHiddenEndpoint}" /><input id="dicomFoldersInput" type="file" webkitdirectory directory multiple class="${style.castHiddenEndpoint}" /></div></div>
-    <div id="publishActions" class="${style.actions} ${style.publishActions}"><button id="publishBtn" disabled>Publish</button></div>
+    <div id="dicomFileLabel" class="${
+      style.dicomFileLabel
+    }"><label for="dicomFileValue">File</label><div class="${
+    style.dicomFilePickerRow
+  }"><input id="dicomFileValue" class="${
+    style.dicomFileValue
+  }" value="AI-Results-SEG.dcm" readonly /><button type="button" id="chooseDicomFilesBtn">Choose files</button><button type="button" id="chooseDicomFoldersBtn">Choose folders</button><input id="dicomFilesInput" type="file" multiple class="${
+    style.castHiddenEndpoint
+  }" /><input id="dicomFoldersInput" type="file" webkitdirectory directory multiple class="${
+    style.castHiddenEndpoint
+  }" /></div></div>
+    <div id="publishActions" class="${style.actions} ${
+    style.publishActions
+  }"><button id="publishBtn" disabled>Publish</button></div>
   </div>
   <div class="${style.section} ${style.panelCard}">
     <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Request</h2>
     <div class="${style.grid}">
-      <div class="${style.castHiddenEndpoint}"><label for="getEndpoint">GET endpoint</label><input id="getEndpoint" /></div>
-      <div class="${style.castHiddenEndpoint}"><label for="getSubscriber">Subscriber</label><input id="getSubscriber" /></div>
+      <div class="${
+        style.castHiddenEndpoint
+      }"><label for="getEndpoint">GET endpoint</label><input id="getEndpoint" /></div>
+      <div class="${
+        style.castHiddenEndpoint
+      }"><label for="getSubscriber">Subscriber</label><input id="getSubscriber" /></div>
       <div class="${style.getDatatypeTopicActorRow}">
-        <div><label for="getDataType">Data Type</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="PNGFULLSIZE">PNGFULLSIZE</option><option value="PNGTHUMBNAIL">PNGTHUMBNAIL</option><option value="JPGFULLSIZE">JPGFULLSIZE</option><option value="JPGTHUMBNAIL">JPGTHUMBNAIL</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select></div>
+        <div><label for="getDataType">Data Type</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="PNGFULLSIZE">PNGFULLSIZE</option><option value="PNGTHUMBNAIL">PNGTHUMBNAIL</option><option value="JPGFULLSIZE">JPGFULLSIZE</option><option value="JPGTHUMBNAIL">JPGTHUMBNAIL</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select><div id="getDataTypeHint" class="${
+          style.dataTypeHint || ''
+        }" style="font-size:11px;opacity:0.7;margin-top:2px"></div></div>
         <div><label for="getTopic">Topic</label><input id="getTopic" /></div>
         <div><label for="getActorPreset">Actor</label><select id="getActorPreset"></select></div>
+        <div><label for="getProductName">Product (optional, * = any)</label><input id="getProductName" placeholder="*" /></div>
       </div>
     </div>
     <div id="getResponseRow">
       <label for="getResponseData">Response</label>
       <textarea id="getResponseData" readonly></textarea>
+      <div id="getResponseSummary" style="margin-top:6px;font-size:12px;opacity:0.85"></div>
     </div>
-    <div class="${style.actions} ${style.requestActions}"><button id="getBtn" disabled>Request</button><button id="openRetrievedImageBtn" disabled>Open retrieved image</button></div>
+    <div class="${style.actions} ${
+    style.requestActions
+  }"><button id="getBtn" disabled>Request</button><div id="retrievedImagesList" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
   </div>
-  <div class="${style.section} ${style.logsSection}"><h2>Messages received <span id="messageCount" class="${style.messageCount}">(0)</span></h2><div class="${style.actions}"><button id="clearBtn">Clear Messages</button></div><div id="messages" class="${style.messages}"></div></div>
+  <div class="${style.section} ${
+    style.logsSection
+  }"><h2>Messages received <span id="messageCount" class="${
+    style.messageCount
+  }">(0)</span></h2><div class="${
+    style.actions
+  }"><button id="clearBtn">Clear Messages</button></div><div id="messages" class="${
+    style.messages
+  }"></div></div>
   </div>
   </div>`;
 }
@@ -441,7 +514,7 @@ function addMessage(el, state, kind, label, payload) {
 
 function handleIncomingGetRequest(el, state, message) {
   const event = message?.event;
-  if (!event || getHubEventLower(event) !== 'cast-request') {
+  if (!event || !isRequestEvent(getHubEventLower(event))) {
     return false;
   }
   const context =
@@ -459,6 +532,8 @@ function handleIncomingGetRequest(el, state, message) {
     return false;
   }
 
+  // The example app only knows how to answer FHIRcastContext requests; ignore
+  // image / dicom / sceneview requests so they can route elsewhere.
   if (context.dataType !== 'FHIRcastContext') {
     return false;
   }
@@ -472,6 +547,7 @@ function handleIncomingGetRequest(el, state, message) {
 
   state.client.sendCastRequestResponse(
     requestId,
+    context.dataType,
     responseData,
     event['hub.topic']
   );
@@ -483,38 +559,55 @@ function handleIncomingGetRequest(el, state, message) {
   return true;
 }
 
-function findImageResource(payload) {
+function isCastImageBinaryNode(node) {
+  return (
+    node &&
+    typeof node === 'object' &&
+    typeof node.contentType === 'string' &&
+    typeof node.data === 'string' &&
+    /^image\/(png|jpeg)$/i.test(node.contentType.trim())
+  );
+}
+
+/** Every binary PNG/JPEG blob found in ``payload`` (breadth-first walk). */
+function findAllImageResources(payload) {
+  const results = [];
   if (!payload || typeof payload !== 'object') {
-    return null;
+    return results;
   }
 
-  const stack = [payload];
-  while (stack.length) {
-    const current = stack.pop();
-    if (current && typeof current === 'object') {
-      if (
-        typeof current.contentType === 'string' &&
-        typeof current.data === 'string' &&
-        /^image\/(png|jpeg)$/i.test(current.contentType.trim())
-      ) {
-        return {
-          contentType: current.contentType.trim().toLowerCase(),
-          data: current.data.trim(),
-        };
-      }
-      if (Array.isArray(current)) {
-        current.forEach((item) => stack.push(item));
-      } else {
-        Object.values(current).forEach((value) => {
+  const queue = [payload];
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== 'object') {
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+    if (isCastImageBinaryNode(current)) {
+      results.push({
+        contentType: current.contentType.trim().toLowerCase(),
+        data: current.data.trim(),
+      });
+    }
+    if (Array.isArray(current)) {
+      current.forEach((item) => {
+        if (item && typeof item === 'object') {
+          queue.push(item);
+        }
+      });
+    } else {
+      Object.keys(current)
+        .sort()
+        .forEach((key) => {
+          const value = current[key];
           if (value && typeof value === 'object') {
-            stack.push(value);
+            queue.push(value);
           }
         });
-      }
     }
   }
 
-  return null;
+  return results;
 }
 
 function imageToObjectUrl(contentType, base64Data) {
@@ -562,18 +655,11 @@ async function buildDicomSendContext(viewer) {
 function setConnection(el, status, text) {
   const statusClass = CONNECTION_STATUS_CLASS[status] || style.disconnected;
   el.connectionStatus.className = `${style.status} ${style.statusHeader} ${statusClass}`;
-  const productName = el.productName?.value?.trim() || 'VTKJS-WKLST';
-  const prefixedText = `${productName}: ${text}`;
-  el.statusText.textContent = prefixedText;
-  updateBrowserTitle(el, text);
+  el.statusText.textContent = text;
 }
 
-function updateBrowserTitle(el, text) {
-  const topic = el.topic?.value?.trim();
-  const productName = el.productName?.value?.trim() || 'VTKJS-WKLST';
-  document.title = topic
-    ? `${productName}: ${topic} - ${text}`
-    : `${productName}: ${text}`;
+function getHubLabel(hubKey) {
+  return HUB_DEFINITIONS[hubKey]?.label || 'Hub';
 }
 
 function applyWebsocketStatus(el, wsState) {
@@ -582,7 +668,11 @@ function applyWebsocketStatus(el, wsState) {
       setConnection(el, 'connecting', 'Websocket connecting');
       break;
     case 'connected':
-      setConnection(el, 'connected', `${getHubLabel(el.hubSelect.value)} connected`);
+      setConnection(
+        el,
+        'connected',
+        `${getHubLabel(el.hubSelect.value)} connected`
+      );
       break;
     case 'error':
       setConnection(el, 'error', 'Websocket error');
@@ -594,13 +684,10 @@ function applyWebsocketStatus(el, wsState) {
   }
 }
 
-function getHubLabel(hubKey) {
-  return HUB_DEFINITIONS[hubKey]?.label || 'Hub';
-}
-
 function applyHubPreset(el, state, hubKey) {
   const hubDef = HUB_DEFINITIONS[hubKey];
   el.hubEndpoint.value = hubDef.hubEndpoint;
+  el.authorizeEndpoint.value = hubDef.authorizeEndpoint || '';
   el.tokenEndpoint.value = hubDef.authEndpoint;
   el.productName.value = hubDef.product_name;
   el.productVersion.value = hubDef.product_version || '1.0';
@@ -619,6 +706,7 @@ function buildHubConfig(el, state) {
     name: 'demo',
     version: el.productVersion.value.trim() || '1.0',
     hub_endpoint: el.hubEndpoint.value.trim(),
+    authorization_endpoint: el.authorizeEndpoint.value.trim(),
     token_endpoint: el.tokenEndpoint.value.trim(),
     client_id: state.selectedClientId || undefined,
     client_secret: state.selectedClientSecret || undefined,
@@ -676,40 +764,81 @@ function ensureClient(el, state, recreate = false) {
   return state.client;
 }
 
-async function handleToken(el, state) {
-  setConnection(el, 'connecting', 'Getting token');
+async function handleAuthenticate(el, state) {
+  setConnection(el, 'connecting', 'Authenticating');
+  el.tokenBtn.disabled = true;
+  el.subscribeBtn.disabled = true;
+  el.hubAdminPortalBtn.disabled = true;
   try {
     const castClient = ensureClient(el, state, true);
-    const tokenFormData = new URLSearchParams();
-    tokenFormData.append('client_id', state.selectedClientId || '');
-    tokenFormData.append('grant_type', 'client_credentials');
-    tokenFormData.append('client_secret', state.selectedClientSecret || '');
-    tokenFormData.append(
-      'client_product_name',
-      el.productName.value.trim() || 'VTKJS-WKLST'
-    );
-    const response = await fetch(el.tokenEndpoint.value.trim(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: tokenFormData,
-    });
-    let ok = false;
-    if (response.ok) {
-      const data = await response.json();
-      castClient.setToken(data.access_token || '');
-      if (typeof data.topic === 'string' && data.topic) {
-        castClient.setTopic(data.topic);
-      }
-      ok = Boolean(castClient.getConnectionState().token);
+    const result = await castClient.authenticate();
+    const userName = result?.user_name || '';
+    const code = result?.code || '';
+    state.lastAuthUserName = userName;
+    state.lastAuthCode = code;
+    if (!code) {
+      setConnection(el, 'disconnected', 'Authenticate failed');
+      addMessage(el, state, 'err', 'Authenticate error', 'No code returned');
+      return;
     }
-    el.subscribeBtn.disabled = !ok;
-    el.hubAdminPortalBtn.disabled = !ok;
+    el.tokenBtn.disabled = false;
+    setConnection(el, 'token-ready', `${userName} code obtained`);
+    addMessage(el, state, 'received', 'Authenticated', {
+      user_name: userName,
+      code,
+    });
+  } catch (error) {
+    state.lastAuthCode = '';
+    el.tokenBtn.disabled = true;
+    setConnection(el, 'disconnected', 'Authenticate failed');
+    addMessage(
+      el,
+      state,
+      'err',
+      'Authenticate exception',
+      String(error?.message || error)
+    );
+  }
+}
+
+async function handleGetToken(el, state) {
+  if (!state.lastAuthCode) {
+    addMessage(
+      el,
+      state,
+      'err',
+      'Authorize error',
+      'Click Authenticate first.'
+    );
+    return;
+  }
+  setConnection(el, 'connecting', 'Getting token');
+  const castClient = state.client;
+  if (!castClient) {
+    addMessage(
+      el,
+      state,
+      'err',
+      'Authorize error',
+      'No client available; click Authenticate first.'
+    );
+    return;
+  }
+  const code = state.lastAuthCode;
+  state.lastAuthCode = ''; // single-use; force re-authenticate to get a new one
+  el.tokenBtn.disabled = true;
+  try {
+    const ok = await castClient.getToken(code);
     if (!ok) {
+      el.subscribeBtn.disabled = true;
+      el.hubAdminPortalBtn.disabled = true;
       setConnection(el, 'disconnected', 'Token failed');
       addMessage(el, state, 'err', 'Token error', 'Failed to get token');
       return;
     }
-    setConnection(el, 'token-ready', 'Token ready');
+    el.subscribeBtn.disabled = false;
+    el.hubAdminPortalBtn.disabled = false;
+    setConnection(el, 'token-ready', 'Access token ready');
     const session = castClient.getSessionConfig();
     if (session.subscriberName) {
       el.subscriberName.value = session.subscriberName;
@@ -719,14 +848,19 @@ async function handleToken(el, state) {
       el.topic.value = session.topic;
       el.publishTopic.value = session.topic;
       el.getTopic.value = session.topic;
-      setConnection(el, 'token-ready', 'Token ready');
     }
     addMessage(el, state, 'received', 'Token', 'Token obtained');
   } catch (error) {
     el.subscribeBtn.disabled = true;
     el.hubAdminPortalBtn.disabled = true;
     setConnection(el, 'disconnected', 'Token error');
-    addMessage(el, state, 'err', 'Token exception', String(error));
+    addMessage(
+      el,
+      state,
+      'err',
+      'Token exception',
+      String(error?.message || error)
+    );
   }
 }
 
@@ -829,16 +963,52 @@ async function handlePublish(el, state) {
   }
 }
 
+function clearRetrievedImages(el, state) {
+  if (Array.isArray(state.retrievedImages)) {
+    state.retrievedImages.forEach((entry) => {
+      if (entry && entry.url) {
+        URL.revokeObjectURL(entry.url);
+      }
+    });
+  }
+  state.retrievedImages = [];
+  if (el && el.retrievedImagesList) {
+    el.retrievedImagesList.replaceChildren();
+  }
+}
+
+function renderRetrievedImageButtons(el, state) {
+  if (!el || !el.retrievedImagesList) {
+    return;
+  }
+  el.retrievedImagesList.replaceChildren();
+  state.retrievedImages.forEach((entry) => {
+    if (!entry || !entry.url) {
+      return;
+    }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.disabled = false;
+    btn.textContent = entry.label;
+    btn.title = entry.subscriber || '';
+    btn.addEventListener('click', () => {
+      window.open(entry.url, '_blank', 'noopener,noreferrer');
+    });
+    el.retrievedImagesList.appendChild(btn);
+  });
+}
+
 async function handleCastRequest(el, state) {
   if (!state.client) {
     addMessage(el, state, 'err', 'Request error', 'Client not started');
     return;
   }
-  if (state.retrievedImageUrl) {
-    URL.revokeObjectURL(state.retrievedImageUrl);
-    state.retrievedImageUrl = '';
-  }
-  el.openRetrievedImageBtn.disabled = true;
+  clearRetrievedImages(el, state);
+  if (el.getResponseSummary) el.getResponseSummary.textContent = '';
+
+  const productNameInput = el.getProductName
+    ? el.getProductName.value.trim()
+    : '';
 
   let result;
   try {
@@ -847,6 +1017,7 @@ async function handleCastRequest(el, state) {
       topic: el.getTopic.value.trim() || undefined,
       dataType: el.getDataType.value || undefined,
       actor: el.getActorPreset.value.trim() || undefined,
+      productName: productNameInput || undefined,
       endpoint: el.getEndpoint.value.trim() || undefined,
     });
   } catch (err) {
@@ -873,18 +1044,98 @@ async function handleCastRequest(el, state) {
     return;
   }
 
-  const imageResource = findImageResource(result.data);
-  if (imageResource) {
-    const imageUrl = imageToObjectUrl(
-      imageResource.contentType,
-      imageResource.data
-    );
-    if (imageUrl) {
-      state.retrievedImageUrl = imageUrl;
-      el.openRetrievedImageBtn.disabled = false;
-    }
+  // New collated reply: { responses: [{ id, subscriber, actor, productName, data }], expected, missing, timedOut }
+  const envelope =
+    result.data && typeof result.data === 'object' ? result.data : {};
+  const responses = Array.isArray(envelope.responses) ? envelope.responses : [];
+  const expected = Array.isArray(envelope.expected) ? envelope.expected : [];
+  const missing = Array.isArray(envelope.missing) ? envelope.missing : [];
+
+  if (el.getResponseSummary) {
+    const parts = [
+      `responses: ${responses.length}/${expected.length || responses.length}`,
+    ];
+    if (missing.length) parts.push(`missing: ${missing.join(', ')}`);
+    if (envelope.timedOut) parts.push('timedOut');
+    el.getResponseSummary.textContent = parts.join(' | ');
   }
-  addMessage(el, state, 'received', 'Request', 'Response received.');
+
+  // Build one button per image in each response payload. A single response
+  // can embed several Binary image resources; collated replies can add one
+  // set per responder.
+  const collected = [];
+  responses.forEach((item, idx) => {
+    const subscriber = (item && item.subscriber) || `responder-${idx + 1}`;
+    const productName = (item && item.productName) || '';
+    const shortId =
+      item && typeof item.id === 'string' && item.id.trim()
+        ? item.id.trim().slice(0, 8)
+        : '';
+    const images = findAllImageResources(item && item.data);
+    images.forEach((imageResource, imgIdx) => {
+      const url = imageToObjectUrl(
+        imageResource.contentType,
+        imageResource.data
+      );
+      if (!url) {
+        return;
+      }
+      const part = images.length > 1 ? ` #${imgIdx + 1}/${images.length}` : '';
+      const suffix = shortId ? ` [${shortId}]` : '';
+      const label =
+        productName !== ''
+          ? `Open image: ${subscriber}${suffix} (${productName})${part}`
+          : `Open image: ${subscriber}${suffix}${part}`;
+      collected.push({ url, subscriber, productName, label });
+    });
+  });
+  if (collected.length === 0) {
+    const legacyImages = findAllImageResources(result.data);
+    legacyImages.forEach((imageResource, imgIdx) => {
+      const url = imageToObjectUrl(
+        imageResource.contentType,
+        imageResource.data
+      );
+      if (!url) {
+        return;
+      }
+      const part =
+        legacyImages.length > 1 ? ` #${imgIdx + 1}/${legacyImages.length}` : '';
+      collected.push({
+        url,
+        subscriber: '',
+        productName: '',
+        label: `Open retrieved image${part}`,
+      });
+    });
+  }
+  state.retrievedImages = collected;
+  renderRetrievedImageButtons(el, state);
+
+  if (responses.length === 0) {
+    addMessage(
+      el,
+      state,
+      envelope.timedOut ? 'err' : 'received',
+      'Request',
+      envelope.timedOut
+        ? `Timed out. Missing: ${missing.join(', ') || '(unknown)'}`
+        : 'No responders matched this request.'
+    );
+  } else {
+    addMessage(el, state, 'received', 'Request', {
+      requestId: envelope.requestId,
+      received: responses.length,
+      expected: expected.length,
+      missing,
+      timedOut: !!envelope.timedOut,
+      responders: responses.map((r) => ({
+        subscriber: r && r.subscriber,
+        actor: r && r.actor,
+        productName: r && r.productName,
+      })),
+    });
+  }
 }
 
 function boot() {
@@ -905,6 +1156,7 @@ function boot() {
 
   const el = {
     authSelect: byId('authSelect'),
+    authorizeEndpoint: byId('authorizeEndpoint'),
     tokenEndpoint: byId('tokenEndpoint'),
     hubEndpoint: byId('hubEndpoint'),
     hubSelect: byId('hubSelect'),
@@ -925,6 +1177,9 @@ function boot() {
     getTopic: byId('getTopic'),
     getActorPreset: byId('getActorPreset'),
     getDataType: byId('getDataType'),
+    getDataTypeHint: byId('getDataTypeHint'),
+    getProductName: byId('getProductName'),
+    getResponseSummary: byId('getResponseSummary'),
     subscribeBtn: byId('subscribeBtn'),
     unsubscribeBtn: byId('unsubscribeBtn'),
     startConferenceBtn: byId('startConferenceBtn'),
@@ -939,7 +1194,7 @@ function boot() {
     dicomFilesInput: byId('dicomFilesInput'),
     dicomFoldersInput: byId('dicomFoldersInput'),
     getBtn: byId('getBtn'),
-    openRetrievedImageBtn: byId('openRetrievedImageBtn'),
+    retrievedImagesList: byId('retrievedImagesList'),
     tokenBtn: byId('tokenBtn'),
     authTokenBtn: byId('authTokenBtn'),
     hubAdminPortalBtn: byId('hubAdminPortalBtn'),
@@ -955,10 +1210,12 @@ function boot() {
   const state = {
     client: null,
     messageCount: 0,
-    retrievedImageUrl: '',
+    retrievedImages: [],
     selectedClientId: '',
     selectedClientSecret: '',
     lastImagingStudyOpenContext: [],
+    lastAuthCode: '',
+    lastAuthUserName: '',
     defaultTopic:
       new URLSearchParams(window.location.search).get('topic') || '',
   };
@@ -977,6 +1234,14 @@ function boot() {
     const isImageType =
       normalized.startsWith('PNG') || normalized.startsWith('JPG');
     el.getActorPreset.value = isImageType ? 'ID' : DEFAULT_GET_ACTOR_KEYWORD;
+    if (el.getDataTypeHint) {
+      const eventName = el.getDataType.value
+        ? requestEventFor(el.getDataType.value)
+        : '';
+      el.getDataTypeHint.textContent = eventName
+        ? `Will publish ${eventName}`
+        : '';
+    }
   });
   el.getDataType.dispatchEvent(new Event('change'));
 
@@ -1048,8 +1313,6 @@ function boot() {
     const nextTopic = el.topic.value.trim();
     el.publishTopic.value = nextTopic;
     el.getTopic.value = nextTopic;
-    const statusText = el.statusText?.textContent?.trim() || 'Ready';
-    updateBrowserTitle(el, statusText);
   });
 
   el.hubSelect.addEventListener('change', () => {
@@ -1134,7 +1397,8 @@ function boot() {
     const url = new URL(viewerBaseUrl);
     const token = state.client?.getConnectionState?.().token?.trim();
     if (token) {
-      url.searchParams.set('cast-token', token);
+      // Viewer reads hub JWT from `id-token` to recover FHIRcast topic (not legacy `cast-token`).
+      url.searchParams.set('id-token', token);
     }
     const popupWidth = 800;
     const popupHeight = 600;
@@ -1207,8 +1471,12 @@ function boot() {
       files.length === 1 ? folderName : `${folderName} (${files.length} files)`;
   });
 
-  el.tokenBtn.addEventListener('click', async () => handleToken(el, state));
-  el.authTokenBtn.addEventListener('click', async () => handleToken(el, state));
+  // Authorize button is meaningless until we have a code from authenticate().
+  el.tokenBtn.disabled = true;
+  el.tokenBtn.addEventListener('click', async () => handleGetToken(el, state));
+  el.authTokenBtn.addEventListener('click', async () =>
+    handleAuthenticate(el, state)
+  );
   el.subscribeBtn.addEventListener('click', async () =>
     handleSubscribe(el, state)
   );
@@ -1217,12 +1485,6 @@ function boot() {
   );
   el.publishBtn.addEventListener('click', async () => handlePublish(el, state));
   el.getBtn.addEventListener('click', async () => handleCastRequest(el, state));
-  el.openRetrievedImageBtn.addEventListener('click', () => {
-    if (!state.retrievedImageUrl) {
-      return;
-    }
-    window.open(state.retrievedImageUrl, '_blank', 'noopener,noreferrer');
-  });
   el.clearBtn.addEventListener('click', () => {
     el.messages.innerHTML = '';
     state.messageCount = 0;
@@ -1230,8 +1492,13 @@ function boot() {
   });
 
   window.addEventListener('beforeunload', () => {
-    if (state.retrievedImageUrl) {
-      URL.revokeObjectURL(state.retrievedImageUrl);
+    if (Array.isArray(state.retrievedImages)) {
+      state.retrievedImages.forEach((entry) => {
+        if (entry && entry.url) {
+          URL.revokeObjectURL(entry.url);
+        }
+      });
+      state.retrievedImages = [];
     }
     if (state.client) {
       state.client.destroy();
