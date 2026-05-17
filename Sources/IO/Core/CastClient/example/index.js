@@ -62,6 +62,7 @@ const DEFAULT_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const DEFAULT_SUBSCRIBE_EVENTS = 'imagingstudy-open,imagingstudy-close';
 const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}"]`;
 const DEFAULT_GET_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
+const DEFAULT_TARGET_ACTOR_KEYWORD = 'EC';
 const DICOM_SEND_ACTOR_KEYWORD = 'EC';
 const EMPTY_FHIRCAST_CONTEXT = {
   'context.type': '',
@@ -319,8 +320,8 @@ function buildPageHtml() {
             style.eventTypeCustom
           }" placeholder="Custom event type" />
         </div>
-        <div><label for="publishTopic">Topic</label><input id="publishTopic" /></div>
         <div><label for="publishActorPreset">Actor</label><select id="publishActorPreset"></select></div>
+        <div><label for="publishTargetActorPreset">Target actor</label><select id="publishTargetActorPreset"></select></div>
       </div>
     </div>
     <div id="eventDataRow">
@@ -355,8 +356,8 @@ function buildPageHtml() {
         <div><label for="getDataType">Data Type</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="PNGFULLSIZE">PNGFULLSIZE</option><option value="PNGTHUMBNAIL">PNGTHUMBNAIL</option><option value="JPGFULLSIZE">JPGFULLSIZE</option><option value="JPGTHUMBNAIL">JPGTHUMBNAIL</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select><div id="getDataTypeHint" class="${
           style.dataTypeHint || ''
         }" style="font-size:11px;opacity:0.7;margin-top:2px"></div></div>
-        <div><label for="getTopic">Topic</label><input id="getTopic" /></div>
         <div><label for="getActorPreset">Actor</label><select id="getActorPreset"></select></div>
+        <div><label for="getTargetActorPreset">Target actor</label><select id="getTargetActorPreset"></select></div>
         <div><label for="getProductName">Product (optional, * = any)</label><input id="getProductName" placeholder="*" /></div>
       </div>
     </div>
@@ -408,6 +409,39 @@ function fillActorPresetSelect(select, firstOption) {
     option.title = `${preset.name}\n\n${preset.description}`;
     select.append(option);
   });
+}
+
+function fillTargetActorPresetSelect(select, firstOption) {
+  select.replaceChildren();
+  const anyOption = document.createElement('option');
+  anyOption.value = '*';
+  anyOption.textContent = '*';
+  anyOption.title = 'Any target (no destination filter)';
+  select.append(anyOption);
+  if (firstOption) {
+    const head = document.createElement('option');
+    head.value = firstOption.value;
+    head.textContent = firstOption.label;
+    if (firstOption.title) {
+      head.title = firstOption.title;
+    }
+    select.append(head);
+  }
+  ACTOR_PRESETS.forEach((preset) => {
+    const option = document.createElement('option');
+    option.value = preset.keyword;
+    option.textContent = preset.keyword;
+    option.title = `${preset.name}\n\n${preset.description}`;
+    select.append(option);
+  });
+}
+
+function resolveTargetActorForWire(selectValue) {
+  const text = String(selectValue || '').trim();
+  if (!text || text === '*') {
+    return undefined;
+  }
+  return text;
 }
 
 function parseEvents(raw) {
@@ -522,10 +556,17 @@ function handleIncomingGetRequest(el, state, message) {
     return false;
   }
 
-  const requestedActors = extractActorKeywords(message.actor);
+  const targetRaw =
+    message.targetActor !== undefined &&
+    message.targetActor !== null &&
+    String(message.targetActor).trim() !== ''
+      ? message.targetActor
+      : message.actor;
+  const requestedTargets = extractActorKeywords(targetRaw);
   if (
-    requestedActors.length > 0 &&
-    !requestedActors.includes(DEFAULT_GET_ACTOR_KEYWORD)
+    requestedTargets.length > 0 &&
+    !requestedTargets.includes('*') &&
+    !requestedTargets.includes(DEFAULT_GET_ACTOR_KEYWORD)
   ) {
     return false;
   }
@@ -721,6 +762,7 @@ function buildSessionConfig(el) {
     topic: el.topic.value.trim(),
     events: parseEvents(el.events.value),
     lease: 7200,
+    defaultTargetActor: DEFAULT_TARGET_ACTOR_KEYWORD,
   };
 }
 
@@ -844,8 +886,6 @@ async function handleGetToken(el, state) {
     }
     if (session.topic) {
       el.topic.value = session.topic;
-      el.publishTopic.value = session.topic;
-      el.getTopic.value = session.topic;
     }
     addMessage(el, state, 'received', 'Token', 'Token obtained');
   } catch (error) {
@@ -927,7 +967,7 @@ async function handlePublish(el, state) {
   }
   const payload = {
     event: {
-      'hub.topic': el.publishTopic.value.trim(),
+      'hub.topic': el.topic.value.trim(),
       'hub.event': eventType,
       context,
     },
@@ -935,6 +975,12 @@ async function handlePublish(el, state) {
   const actorValue = parseActorField(el.publishActorPreset.value.trim());
   if (actorValue !== undefined) {
     payload.actor = actorValue;
+  }
+  const targetActorValue = resolveTargetActorForWire(
+    el.publishTargetActorPreset.value
+  );
+  if (targetActorValue) {
+    payload.targetActor = targetActorValue;
   }
   try {
     const res = await state.client.publish(payload);
@@ -1010,14 +1056,21 @@ async function handleCastRequest(el, state) {
 
   let result;
   try {
-    result = await state.client.request({
+    const requestArgs = {
       subscriber: el.getSubscriber.value.trim(),
-      topic: el.getTopic.value.trim() || undefined,
+      topic: el.topic.value.trim(),
       dataType: el.getDataType.value || undefined,
       actor: el.getActorPreset.value.trim() || undefined,
       productName: productNameInput || undefined,
       endpoint: el.getEndpoint.value.trim() || undefined,
-    });
+    };
+    const targetActorValue = resolveTargetActorForWire(
+      el.getTargetActorPreset.value
+    );
+    if (targetActorValue) {
+      requestArgs.targetActor = targetActorValue;
+    }
+    result = await state.client.request(requestArgs);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     el.getResponseData.value = msg;
@@ -1164,16 +1217,16 @@ function boot() {
     events: byId('events'),
     productName: byId('productName'),
     productVersion: byId('productVersion'),
-    publishTopic: byId('publishTopic'),
     publishActorPreset: byId('publishActorPreset'),
+    publishTargetActorPreset: byId('publishTargetActorPreset'),
     eventType: byId('eventType'),
     eventTypeCustom: byId('eventTypeCustom'),
     eventData: byId('eventData'),
     eventDataRow: byId('eventDataRow'),
     getEndpoint: byId('getEndpoint'),
     getSubscriber: byId('getSubscriber'),
-    getTopic: byId('getTopic'),
     getActorPreset: byId('getActorPreset'),
+    getTargetActorPreset: byId('getTargetActorPreset'),
     getDataType: byId('getDataType'),
     getDataTypeHint: byId('getDataTypeHint'),
     getProductName: byId('getProductName'),
@@ -1219,13 +1272,21 @@ function boot() {
   };
 
   fillActorPresetSelect(el.publishActorPreset);
+  fillTargetActorPresetSelect(el.publishTargetActorPreset);
   fillActorPresetSelect(el.getActorPreset, {
     value: 'OpenIGTLink',
     label: 'OpenIGTLink',
     title: OPENIGT_LINK_ACTOR_TOOLTIP,
   });
+  fillTargetActorPresetSelect(el.getTargetActorPreset, {
+    value: 'OpenIGTLink',
+    label: 'OpenIGTLink',
+    title: OPENIGT_LINK_ACTOR_TOOLTIP,
+  });
   el.publishActorPreset.value = DEFAULT_ACTOR_KEYWORD;
+  el.publishTargetActorPreset.value = DEFAULT_TARGET_ACTOR_KEYWORD;
   el.getActorPreset.value = DEFAULT_GET_ACTOR_KEYWORD;
+  el.getTargetActorPreset.value = DEFAULT_TARGET_ACTOR_KEYWORD;
 
   el.getDataType.addEventListener('change', () => {
     const normalized = el.getDataType.value.trim().toUpperCase();
@@ -1246,10 +1307,8 @@ function boot() {
   el.hubSelect.value = 'volviewCloud';
   applyHubPreset(el, state, 'volviewCloud');
   el.topic.value = state.defaultTopic;
-  el.publishTopic.value = state.defaultTopic;
   el.subscriberName.value = '';
   el.getSubscriber.value = '';
-  el.getTopic.value = state.defaultTopic;
   el.dicomFileValue.value = getDefaultDicomSendFileName(el.viewerSelect.value);
   el.eventData.value = `[
   {
@@ -1287,9 +1346,13 @@ function boot() {
 ]`;
 
   el.eventType.addEventListener('change', () => {
-    const isDicomSend = el.eventType.value === 'dicom-send';
+    const eventTypeValue = el.eventType.value;
+    const isDicomSend = eventTypeValue === 'dicom-send';
+    const isImagingStudyOpenOrClose =
+      eventTypeValue === 'ImagingStudy-open' ||
+      eventTypeValue === 'ImagingStudy-close';
     el.eventTypeCustom.className =
-      el.eventType.value === 'custom'
+      eventTypeValue === 'custom'
         ? `${style.eventTypeCustom} ${style.eventTypeCustomVisible}`
         : style.eventTypeCustom;
     el.eventDataRow.style.display = isDicomSend ? 'none' : '';
@@ -1304,13 +1367,17 @@ function boot() {
     } else {
       el.publishActorPreset.value = DEFAULT_ACTOR_KEYWORD;
     }
+    el.publishTargetActorPreset.value = isImagingStudyOpenOrClose
+      ? 'ID'
+      : DEFAULT_TARGET_ACTOR_KEYWORD;
   });
   el.eventType.dispatchEvent(new Event('change'));
 
   el.topic.addEventListener('input', () => {
     const nextTopic = el.topic.value.trim();
-    el.publishTopic.value = nextTopic;
-    el.getTopic.value = nextTopic;
+    if (state.client) {
+      state.client.setTopic(nextTopic);
+    }
   });
 
   el.hubSelect.addEventListener('change', () => {

@@ -204,7 +204,19 @@ function createSessionConfig() {
     events: [],
     lease: 999,
     userName: '',
+    defaultTargetActor: '',
   };
+}
+
+function resolveTargetActorForWire(value) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const text = String(value).trim();
+  if (!text || text === '*') {
+    return undefined;
+  }
+  return text;
 }
 
 function createHubRuntimeState() {
@@ -871,6 +883,15 @@ function vtkCastClient(publicAPI, model) {
       msg.event['hub.topic'] = model.session.topic;
     }
 
+    if (msg.targetActor === undefined && model.session.defaultTargetActor) {
+      const wireTarget = resolveTargetActorForWire(
+        model.session.defaultTargetActor
+      );
+      if (wireTarget) {
+        msg.targetActor = wireTarget;
+      }
+    }
+
     msg = await normalizeDicomSendMessageStrict(msg);
     model.lastSentMessage = msg;
 
@@ -917,6 +938,13 @@ function vtkCastClient(publicAPI, model) {
     }
     if (args.actor && String(args.actor).trim()) {
       body.actor = String(args.actor).trim();
+    }
+    let wireTarget = resolveTargetActorForWire(args.targetActor);
+    if (wireTarget === undefined && model.session.defaultTargetActor) {
+      wireTarget = resolveTargetActorForWire(model.session.defaultTargetActor);
+    }
+    if (wireTarget) {
+      body.targetActor = wireTarget;
     }
     if (args.productName && String(args.productName).trim()) {
       body.productName = String(args.productName).trim();
