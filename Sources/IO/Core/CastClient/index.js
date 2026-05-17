@@ -1,23 +1,33 @@
 import macro from 'vtk.js/Sources/macros';
 import { responseEventFor } from './eventNames';
 
-const DEFAULT_MESSAGE_ID_PREFIX = 'VTKJS-';
+const DEFAULT_PRODUCT_NAME = 'VTKJS';
 const RECONNECT_INTERVAL_MS = 10000;
 const SUBSCRIBE_TIMEOUT_MS = 5000;
 const SUBSCRIBER_ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-function generateMessageId(prefix = DEFAULT_MESSAGE_ID_PREFIX) {
+
+function sanitizeProductBase(productName, fallback = DEFAULT_PRODUCT_NAME) {
+  return (
+    String(productName || fallback)
+      .trim()
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || fallback
+  );
+}
+
+function productNameToMessageIdPrefix(productName) {
+  return `${sanitizeProductBase(productName)}-`;
+}
+
+function generateMessageId(prefix) {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return prefix + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
   }
   return prefix + Math.random().toString(36).substring(2, 18);
 }
 
-function generateSubscriberName(productName = 'VTKJS') {
-  const base =
-    String(productName || 'VTKJS')
-      .trim()
-      .replace(/[^a-zA-Z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'VTKJS';
+function generateSubscriberName(productName = DEFAULT_PRODUCT_NAME) {
+  const base = sanitizeProductBase(productName);
   let suffix = '';
   for (let i = 0; i < 6; i++) {
     const index = Math.floor(Math.random() * SUBSCRIBER_ID_ALPHABET.length);
@@ -245,7 +255,6 @@ const DEFAULT_VALUES = {
     autoStart: false,
     autoReconnect: false,
     preserveSessionTopicFromToken: false,
-    messageIdPrefix: DEFAULT_MESSAGE_ID_PREFIX,
   },
   hub: null,
   session: null,
@@ -254,6 +263,7 @@ const DEFAULT_VALUES = {
   onConnectionStateChangeCallback: null,
   lastSentMessage: null,
   pendingDicomSendCastMessage: null,
+  skipNextDicomBinary: false,
 };
 
 function vtkCastClient(publicAPI, model) {
@@ -266,17 +276,27 @@ function vtkCastClient(publicAPI, model) {
   }
 
   function messageIdPrefix() {
-    return model.config.messageIdPrefix || DEFAULT_MESSAGE_ID_PREFIX;
+    const product =
+      model.session.productName ||
+      model.config.productName ||
+      DEFAULT_PRODUCT_NAME;
+    return productNameToMessageIdPrefix(product);
   }
 
   function websocketClose() {
     console.debug('CastClient: websocket is closed.');
     model.pendingDicomSendCastMessage = null;
+    model.skipNextDicomBinary = false;
     model.hub.resubscribeRequested = true;
     emitConnectionState('disconnected');
   }
 
   function processBinaryMessage(buf) {
+    if (model.skipNextDicomBinary) {
+      model.skipNextDicomBinary = false;
+      return;
+    }
+
     const pending = model.pendingDicomSendCastMessage;
     if (!pending || !pending.event) {
       console.warn('CastClient: unexpected binary WebSocket message');
@@ -339,6 +359,9 @@ function vtkCastClient(publicAPI, model) {
       }
 
       if (castMessage.id === model.hub.lastPublishedMessageID) {
+        if (dicomSendEventWaitsForBinaryFrame(event)) {
+          model.skipNextDicomBinary = true;
+        }
         return;
       }
 

@@ -59,7 +59,8 @@ const MESSAGE_KIND_CLASS = {
 };
 
 const DEFAULT_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
-const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}","EC","WATCHER"]`;
+const DEFAULT_SUBSCRIBE_EVENTS = 'imagingstudy-open,imagingstudy-close';
+const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}"]`;
 const DEFAULT_GET_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const DICOM_SEND_ACTOR_KEYWORD = 'EC';
 const EMPTY_FHIRCAST_CONTEXT = {
@@ -278,7 +279,7 @@ function buildPageHtml() {
         <div><label for="productVersion">Version</label><input id="productVersion" value="1.0" /></div>
       </div>
       <div class="${style.subscribeEventsTopicActors}">
-        <div><label for="events">Events</label><input id="events" value="*" /></div>
+        <div><label for="events">Events</label><input id="events" value="${DEFAULT_SUBSCRIBE_EVENTS}" /></div>
         <div><label for="topic">Topic</label><input id="topic" /></div>
         <div><label for="subscribeActors">Actors</label><input id="subscribeActors" class="${
           style.subscribeActorsJson
@@ -308,8 +309,8 @@ function buildPageHtml() {
           <label for="eventType">Event type</label>
           <select id="eventType">
             <option value="ImagingStudy-open">ImagingStudy-open</option>
-            <option value="dicom-send">DICOM-send</option>
             <option value="ImagingStudy-close">ImagingStudy-close</option>
+            <option value="dicom-send">DICOM-send</option>
             <option value="patient-open">patient-open</option>
             <option value="patient-close">patient-close</option>
             <option value="custom">Other (custom)</option>
@@ -410,10 +411,7 @@ function fillActorPresetSelect(select, firstOption) {
 }
 
 function parseEvents(raw) {
-  const value = raw.trim();
-  if (!value) {
-    return ['*'];
-  }
+  const value = (raw.trim() || DEFAULT_SUBSCRIBE_EVENTS).trim();
   return value
     .split(',')
     .map((entry) => entry.trim())
@@ -1374,7 +1372,26 @@ function boot() {
       if (topic) {
         url.searchParams.set('topic', topic);
       }
-      window.open(url.toString(), '_blank', 'noopener,noreferrer');
+      const popupWidth = 800;
+      const popupHeight = 600;
+      const left = Math.max(
+        0,
+        Math.floor((window.screen.width - popupWidth) / 2)
+      );
+      const top = Math.max(
+        0,
+        Math.floor((window.screen.height - popupHeight) / 2)
+      );
+      const features = [
+        'popup',
+        `width=${popupWidth}`,
+        `height=${popupHeight}`,
+        `left=${left}`,
+        `top=${top}`,
+        'noopener',
+        'noreferrer',
+      ].join(',');
+      window.open(url.toString(), 'castConferenceClientWindow', features);
     } catch (err) {
       addMessage(el, state, 'err', 'Conference', 'Invalid hub_endpoint URL');
     }

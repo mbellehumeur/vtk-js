@@ -1,18 +1,15 @@
 // Shared helpers for Cast hub.event names.
 //
-// Per-dataType events only: '<dataType.lower()>-request' / '-response'.
-// Legacy generic cast-request / cast-response are rejected by is* helpers.
+// Per-dataType events: '<dataType.lower()>-request' / '-response'.
+// isRequestEvent / isResponseEvent use the suffixes only.
 //
 // Keep this mapping in sync with:
-// - VolView/server/cast_api/event_names.py
+// - VolView/server/cast_api/cast_client.py
 // - VolView/src/io/cast/event-names.ts
 // - the OHIF Cast extension's event-names.ts
 
 export const REQUEST_SUFFIX = '-request';
 export const RESPONSE_SUFFIX = '-response';
-
-const REJECT_REQUEST = 'cast-request';
-const REJECT_RESPONSE = 'cast-response';
 
 export function normalizeDataType(dataType) {
   if (typeof dataType !== 'string') {
@@ -41,9 +38,6 @@ export function isRequestEvent(name) {
   if (typeof name !== 'string') {
     return false;
   }
-  if (name === REJECT_REQUEST) {
-    return false;
-  }
   return name.endsWith(REQUEST_SUFFIX);
 }
 
@@ -51,17 +45,11 @@ export function isResponseEvent(name) {
   if (typeof name !== 'string') {
     return false;
   }
-  if (name === REJECT_RESPONSE) {
-    return false;
-  }
   return name.endsWith(RESPONSE_SUFFIX);
 }
 
 export function dataTypeFromEventName(name) {
   if (typeof name !== 'string') {
-    return '';
-  }
-  if (name === REJECT_REQUEST || name === REJECT_RESPONSE) {
     return '';
   }
   if (name.endsWith(REQUEST_SUFFIX)) {

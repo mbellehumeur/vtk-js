@@ -60,7 +60,6 @@ export interface CastClientConfig {
   autoStart?: boolean;
   autoReconnect?: boolean;
   preserveSessionTopicFromToken?: boolean;
-  messageIdPrefix?: string;
 }
 
 export interface CastRequestArgs {
