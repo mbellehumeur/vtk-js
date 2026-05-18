@@ -118,6 +118,11 @@
   gap: 12px;
 }
 
+.section label[title],
+.castHiddenEndpoint label[title] {
+  cursor: help;
+}
+
 .section label,
 .castHiddenEndpoint label {
   display: block;
@@ -324,11 +329,18 @@
   align-items: start;
 }
 
-.subscribeEventsTopicActors,
-.publishEventTopicActorRow {
+.subscribeEventsTopicActors {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.publishEventTopicActorRow {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   align-items: start;
 }

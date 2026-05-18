@@ -42,7 +42,9 @@ export interface CastMessage {
   id?: string;
   'hub.mode'?: string;
   'subscriber.name'?: string;
-  'subscriber.product'?: string;
+  'subscriber.product.name'?: string;
+  'target.product.name'?: string;
+  targetActor?: string;
   'subscriber.version'?: string;
   event?: {
     'hub.event': string;
@@ -67,12 +69,8 @@ export interface CastRequestArgs {
   topic?: string;
   dataType?: string;
   actor?: string;
-  /**
-   * Optional product-name filter. Use ``"*"`` (or omit the field) to match
-   * subscribers of any product. Otherwise the hub matches subscribers whose
-   * ``client_info.productName`` equals this value (case-sensitive trim).
-   */
-  productName?: string;
+  /** Destination product filter (wire key ``target.product.name``). */
+  'target.product.name'?: string;
   endpoint?: string;
 }
 
@@ -169,9 +167,12 @@ export function extend(
 
 export function newInstance(initialValues?: CastClientConfig): vtkCastClient;
 
+export function generateSubscriberName(productName?: string): string;
+
 export declare const vtkCastClient: {
   newInstance: typeof newInstance;
   extend: typeof extend;
+  generateSubscriberName: typeof generateSubscriberName;
 };
 
 export default vtkCastClient;

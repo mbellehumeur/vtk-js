@@ -39,7 +39,9 @@
 
 import '@kitware/vtk.js/favicon';
 
-import vtkCastClient from 'vtk.js/Sources/IO/Core/CastClient';
+import vtkCastClient, {
+  generateSubscriberName,
+} from 'vtk.js/Sources/IO/Core/CastClient';
 import { isRequestEvent, requestEventFor } from '../eventNames';
 
 import style from './CastClient.module.css';
@@ -62,7 +64,9 @@ const DEFAULT_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const DEFAULT_SUBSCRIBE_EVENTS = 'imagingstudy-open,imagingstudy-close';
 const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}"]`;
 const DEFAULT_GET_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
-const DEFAULT_TARGET_ACTOR_KEYWORD = 'EC';
+const DEFAULT_TARGET_ACTOR_KEYWORD = '*';
+const DEFAULT_TARGET_PRODUCT = '*';
+const TARGET_PRODUCT_PRESETS = ['*', 'VOLVIEW', 'OHIF', 'AIBRAIN'];
 const DICOM_SEND_ACTOR_KEYWORD = 'EC';
 const EMPTY_FHIRCAST_CONTEXT = {
   'context.type': '',
@@ -114,6 +118,23 @@ const ACTOR_PRESETS = [
     description: 'Providing a reporting worklist to the user.',
   },
 ];
+
+function escapeHtmlAttr(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
+}
+
+function formatIheActorsTooltip() {
+  return ACTOR_PRESETS.map((actor) => `${actor.keyword} — ${actor.name}`).join(
+    '\n'
+  );
+}
+
+const IHE_ACTORS_LABEL_TITLE = ` title="${escapeHtmlAttr(
+  formatIheActorsTooltip()
+)}"`;
 
 const HUB_DEFINITIONS = {
   volviewLocal: {
@@ -197,7 +218,7 @@ function openInstructionsWindow() {
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>IO module cast example</title>
+<title>IO module worklist example</title>
 <style>
   body {
     margin: 0;
@@ -221,7 +242,7 @@ function openInstructionsWindow() {
 </style>
 </head>
 <body>
-<h1>IO module cast example</h1>
+<h1>IO module worklist example</h1>
 ${headerInstructionsHtml()}
 </body>
 </html>`;
@@ -237,7 +258,7 @@ function buildPageHtml() {
     style.headerTitleWrap
   }"><span class="${
     style.headerTitle
-  }">IO module cast example</span><button type="button" id="instructionsBtn" class="${
+  }">IO module worklist example</span><button type="button" id="instructionsBtn" class="${
     style.instructionsBtn
   }" aria-label="Read me" title="Read me">Read me</button></div></div>
   <div class="${style.layout}">
@@ -282,9 +303,9 @@ function buildPageHtml() {
       <div class="${style.subscribeEventsTopicActors}">
         <div><label for="events">Events</label><input id="events" value="${DEFAULT_SUBSCRIBE_EVENTS}" /></div>
         <div><label for="topic">Topic</label><input id="topic" /></div>
-        <div><label for="subscribeActors">Actors</label><input id="subscribeActors" class="${
-          style.subscribeActorsJson
-        }" type="text" spellcheck="false" value='${DEFAULT_SUBSCRIBE_ACTORS_JSON}' /></div>
+        <div><label for="subscribeActors"${IHE_ACTORS_LABEL_TITLE}>Actors</label><input id="subscribeActors" class="${
+    style.subscribeActorsJson
+  }" type="text" spellcheck="false" value='${DEFAULT_SUBSCRIBE_ACTORS_JSON}' /></div>
       </div>
     </div>
     <div class="${style.actions} ${style.subscribeActions}">
@@ -320,8 +341,9 @@ function buildPageHtml() {
             style.eventTypeCustom
           }" placeholder="Custom event type" />
         </div>
-        <div><label for="publishActorPreset">Actor</label><select id="publishActorPreset"></select></div>
+        <div><label for="publishActorPreset"${IHE_ACTORS_LABEL_TITLE}>Actor</label><select id="publishActorPreset"></select></div>
         <div><label for="publishTargetActorPreset">Target actor</label><select id="publishTargetActorPreset"></select></div>
+        <div><label for="publishTargetProductName">Target product</label><select id="publishTargetProductName"></select></div>
       </div>
     </div>
     <div id="eventDataRow">
@@ -356,9 +378,9 @@ function buildPageHtml() {
         <div><label for="getDataType">Data Type</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="PNGFULLSIZE">PNGFULLSIZE</option><option value="PNGTHUMBNAIL">PNGTHUMBNAIL</option><option value="JPGFULLSIZE">JPGFULLSIZE</option><option value="JPGTHUMBNAIL">JPGTHUMBNAIL</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select><div id="getDataTypeHint" class="${
           style.dataTypeHint || ''
         }" style="font-size:11px;opacity:0.7;margin-top:2px"></div></div>
-        <div><label for="getActorPreset">Actor</label><select id="getActorPreset"></select></div>
+        <div><label for="getActorPreset"${IHE_ACTORS_LABEL_TITLE}>Actor</label><select id="getActorPreset"></select></div>
         <div><label for="getTargetActorPreset">Target actor</label><select id="getTargetActorPreset"></select></div>
-        <div><label for="getProductName">Product (optional, * = any)</label><input id="getProductName" placeholder="*" /></div>
+        <div><label for="getProductName">Target product</label><select id="getProductName"></select></div>
       </div>
     </div>
     <div id="getResponseRow">
@@ -369,6 +391,13 @@ function buildPageHtml() {
     <div class="${style.actions} ${
     style.requestActions
   }"><button id="getBtn" disabled>Request</button><div id="retrievedImagesList" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
+  </div>
+  <div class="${style.section} ${style.panelCard} ${style.gridFullWidth}">
+    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Worklist Context</h2>
+    <div id="worklistContextRow">
+      <label for="worklistContextDisplay">Current context</label>
+      <textarea id="worklistContextDisplay" readonly></textarea>
+    </div>
   </div>
   <div class="${style.section} ${
     style.logsSection
@@ -438,6 +467,27 @@ function fillTargetActorPresetSelect(select, firstOption) {
 
 function resolveTargetActorForWire(selectValue) {
   const text = String(selectValue || '').trim();
+  if (!text || text === '*') {
+    return undefined;
+  }
+  return text;
+}
+
+function fillTargetProductPresetSelect(select) {
+  select.replaceChildren();
+  TARGET_PRODUCT_PRESETS.forEach((name) => {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    if (name === '*') {
+      option.title = 'Any product (no destination filter)';
+    }
+    select.append(option);
+  });
+}
+
+function resolveTargetProductNameForWire(inputValue) {
+  const text = String(inputValue || '').trim();
   if (!text || text === '*') {
     return undefined;
   }
@@ -522,13 +572,29 @@ function cloneContextArray(context) {
   return Array.isArray(context) ? context.map((item) => ({ ...item })) : [];
 }
 
-function updateFhircastContextState(state, eventType, context) {
+function formatWorklistContextForDisplay(state) {
+  const ctx = cloneContextArray(state.lastImagingStudyOpenContext);
+  if (!ctx.length) {
+    return '[]';
+  }
+  return JSON.stringify(ctx, null, 2);
+}
+
+function updateWorklistContextDisplay(el, state) {
+  if (el.worklistContextDisplay) {
+    el.worklistContextDisplay.value = formatWorklistContextForDisplay(state);
+  }
+}
+
+function updateFhircastContextState(el, state, eventType, context) {
   if (eventType.includes('close')) {
     state.lastImagingStudyOpenContext = [];
+    updateWorklistContextDisplay(el, state);
     return;
   }
   if (eventType === 'imagingstudy-open') {
     state.lastImagingStudyOpenContext = cloneContextArray(context);
+    updateWorklistContextDisplay(el, state);
   }
 }
 
@@ -982,10 +1048,16 @@ async function handlePublish(el, state) {
   if (targetActorValue) {
     payload.targetActor = targetActorValue;
   }
+  const targetProductValue = resolveTargetProductNameForWire(
+    el.publishTargetProductName ? el.publishTargetProductName.value : ''
+  );
+  if (targetProductValue) {
+    payload['target.product.name'] = targetProductValue;
+  }
   try {
     const res = await state.client.publish(payload);
     if (res && res.ok) {
-      updateFhircastContextState(state, eventType.toLowerCase(), context);
+      updateFhircastContextState(el, state, eventType.toLowerCase(), context);
       addMessage(el, state, 'sent', 'Publish', payload);
       return;
     }
@@ -1050,7 +1122,7 @@ async function handleCastRequest(el, state) {
   clearRetrievedImages(el, state);
   if (el.getResponseSummary) el.getResponseSummary.textContent = '';
 
-  const productNameInput = el.getProductName
+  const targetProductInput = el.getProductName
     ? el.getProductName.value.trim()
     : '';
 
@@ -1061,9 +1133,13 @@ async function handleCastRequest(el, state) {
       topic: el.topic.value.trim(),
       dataType: el.getDataType.value || undefined,
       actor: el.getActorPreset.value.trim() || undefined,
-      productName: productNameInput || undefined,
       endpoint: el.getEndpoint.value.trim() || undefined,
     };
+    const targetProductValue =
+      resolveTargetProductNameForWire(targetProductInput);
+    if (targetProductValue) {
+      requestArgs['target.product.name'] = targetProductValue;
+    }
     const targetActorValue = resolveTargetActorForWire(
       el.getTargetActorPreset.value
     );
@@ -1219,6 +1295,7 @@ function boot() {
     productVersion: byId('productVersion'),
     publishActorPreset: byId('publishActorPreset'),
     publishTargetActorPreset: byId('publishTargetActorPreset'),
+    publishTargetProductName: byId('publishTargetProductName'),
     eventType: byId('eventType'),
     eventTypeCustom: byId('eventTypeCustom'),
     eventData: byId('eventData'),
@@ -1256,6 +1333,7 @@ function boot() {
     connectionStatus: byId('connectionStatus'),
     messageCount: byId('messageCount'),
     getResponseData: byId('getResponseData'),
+    worklistContextDisplay: byId('worklistContextDisplay'),
   };
 
   const state = {
@@ -1271,6 +1349,8 @@ function boot() {
       new URLSearchParams(window.location.search).get('topic') || '',
   };
 
+  updateWorklistContextDisplay(el, state);
+
   fillActorPresetSelect(el.publishActorPreset);
   fillTargetActorPresetSelect(el.publishTargetActorPreset);
   fillActorPresetSelect(el.getActorPreset, {
@@ -1283,8 +1363,12 @@ function boot() {
     label: 'OpenIGTLink',
     title: OPENIGT_LINK_ACTOR_TOOLTIP,
   });
+  fillTargetProductPresetSelect(el.publishTargetProductName);
+  fillTargetProductPresetSelect(el.getProductName);
   el.publishActorPreset.value = DEFAULT_ACTOR_KEYWORD;
   el.publishTargetActorPreset.value = DEFAULT_TARGET_ACTOR_KEYWORD;
+  el.publishTargetProductName.value = DEFAULT_TARGET_PRODUCT;
+  el.getProductName.value = DEFAULT_TARGET_PRODUCT;
   el.getActorPreset.value = DEFAULT_GET_ACTOR_KEYWORD;
   el.getTargetActorPreset.value = DEFAULT_TARGET_ACTOR_KEYWORD;
 
@@ -1293,6 +1377,7 @@ function boot() {
     const isImageType =
       normalized.startsWith('PNG') || normalized.startsWith('JPG');
     el.getActorPreset.value = isImageType ? 'ID' : DEFAULT_GET_ACTOR_KEYWORD;
+    el.getTargetActorPreset.value = DEFAULT_TARGET_ACTOR_KEYWORD;
     if (el.getDataTypeHint) {
       const eventName = el.getDataType.value
         ? requestEventFor(el.getDataType.value)
@@ -1307,8 +1392,11 @@ function boot() {
   el.hubSelect.value = 'volviewCloud';
   applyHubPreset(el, state, 'volviewCloud');
   el.topic.value = state.defaultTopic;
-  el.subscriberName.value = '';
-  el.getSubscriber.value = '';
+  const initialSubscriberName = generateSubscriberName(
+    el.productName.value.trim() || 'VTKJS-WKLST'
+  );
+  el.subscriberName.value = initialSubscriberName;
+  el.getSubscriber.value = initialSubscriberName;
   el.dicomFileValue.value = getDefaultDicomSendFileName(el.viewerSelect.value);
   el.eventData.value = `[
   {

@@ -26,7 +26,7 @@ function generateMessageId(prefix) {
   return prefix + Math.random().toString(36).substring(2, 18);
 }
 
-function generateSubscriberName(productName = DEFAULT_PRODUCT_NAME) {
+export function generateSubscriberName(productName = DEFAULT_PRODUCT_NAME) {
   const base = sanitizeProductBase(productName);
   let suffix = '';
   for (let i = 0; i < 6; i++) {
@@ -209,6 +209,17 @@ function createSessionConfig() {
 }
 
 function resolveTargetActorForWire(value) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const text = String(value).trim();
+  if (!text || text === '*') {
+    return undefined;
+  }
+  return text;
+}
+
+function resolveTargetProductNameForWire(value) {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -600,12 +611,6 @@ function vtkCastClient(publicAPI, model) {
         if (typeof config.id_token === 'string' && config.id_token) {
           model.hub.lastIdToken = config.id_token;
         }
-        if (
-          typeof config.subscriber_name === 'string' &&
-          config.subscriber_name
-        ) {
-          model.session.subscriberName = config.subscriber_name;
-        }
         if (config.topic && typeof config.topic === 'string') {
           if (!model.config.preserveSessionTopicFromToken) {
             publicAPI.setTopic(config.topic);
@@ -637,6 +642,14 @@ function vtkCastClient(publicAPI, model) {
       );
       return 'error: topic not defined';
     }
+    if (
+      !model.session.subscriberName ||
+      !String(model.session.subscriberName).trim()
+    ) {
+      model.session.subscriberName = generateSubscriberName(
+        model.session.productName || model.config.productName || 'VTKJS'
+      );
+    }
     if (!model.hub.token) {
       console.warn(
         'CastClient: Error. subscription not sent. No token available.'
@@ -664,7 +677,7 @@ function vtkCastClient(publicAPI, model) {
       model.session.subscriberName || ''
     );
     subscribeFormData.append(
-      'subscriber.product',
+      'subscriber.product.name',
       model.session.productName || ''
     );
     subscribeFormData.append(
@@ -802,7 +815,7 @@ function vtkCastClient(publicAPI, model) {
       model.session.subscriberName || ''
     );
     unsubscribeFormData.append(
-      'subscriber.product',
+      'subscriber.product.name',
       model.session.productName || ''
     );
     unsubscribeFormData.append(
@@ -872,8 +885,8 @@ function vtkCastClient(publicAPI, model) {
     if (subscriberName && msg['subscriber.name'] === undefined) {
       msg['subscriber.name'] = subscriberName;
     }
-    if (subscriberProduct && msg['subscriber.product'] === undefined) {
-      msg['subscriber.product'] = subscriberProduct;
+    if (subscriberProduct && msg['subscriber.product.name'] === undefined) {
+      msg['subscriber.product.name'] = subscriberProduct;
     }
     if (subscriberVersion && msg['subscriber.version'] === undefined) {
       msg['subscriber.version'] = subscriberVersion;
@@ -946,8 +959,13 @@ function vtkCastClient(publicAPI, model) {
     if (wireTarget) {
       body.targetActor = wireTarget;
     }
-    if (args.productName && String(args.productName).trim()) {
-      body.productName = String(args.productName).trim();
+    const targetProduct =
+      args['target.product.name'] !== undefined
+        ? args['target.product.name']
+        : args.targetProductName;
+    const wireTargetProduct = resolveTargetProductNameForWire(targetProduct);
+    if (wireTargetProduct) {
+      body['target.product.name'] = wireTargetProduct;
     }
 
     const response = await fetch(endpoint, {
@@ -1005,7 +1023,7 @@ function vtkCastClient(publicAPI, model) {
       timestamp: new Date().toJSON(),
       id: generateMessageId(messageIdPrefix()),
       'subscriber.name': model.session.subscriberName || undefined,
-      'subscriber.product': model.session.productName || undefined,
+      'subscriber.product.name': model.session.productName || undefined,
       'subscriber.version':
         model.session.productVersion ||
         model.config.productVersion ||
@@ -1067,4 +1085,4 @@ export function extend(publicAPI, model, initialValues = {}) {
 
 export const newInstance = macro.newInstance(extend, 'vtkCastClient');
 
-export default { newInstance, extend };
+export default { newInstance, extend, generateSubscriberName };
