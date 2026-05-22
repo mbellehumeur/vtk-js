@@ -145,7 +145,7 @@ export interface vtkCastClient extends vtkObject {
   onConnectionStateChange(
     callback: (state: ConnectionState, detail?: unknown) => void
   ): void;
-  destroy(): void;
+  delete(): void;
   getHubConfig(): HubConfig;
   getSessionConfig(): SessionConfig;
   getConnectionState(): HubRuntimeState;

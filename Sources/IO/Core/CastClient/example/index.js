@@ -840,7 +840,7 @@ function buildSessionConfig(el) {
 function ensureClient(el, state, recreate = false) {
   if (!state.client || recreate) {
     if (state.client) {
-      state.client.destroy();
+      state.client.delete();
     }
     state.client = vtkCastClient.newInstance({
       hub: buildHubConfig(el, state),
@@ -1690,7 +1690,7 @@ function boot() {
       state.retrievedImages = [];
     }
     if (state.client) {
-      state.client.destroy();
+      state.client.delete();
     }
   });
 }

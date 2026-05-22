@@ -1,353 +1,36 @@
 import macro from 'vtk.js/Sources/macros';
 import { responseEventFor } from './eventNames';
+import {
+  DEFAULT_PRODUCT_NAME,
+  generateMessageId,
+  generateSubscriberName,
+  productNameToMessageIdPrefix,
+} from './identity';
+import {
+  castBinaryTransferEventWaitsForBinaryFrame,
+  normalizeDicomSendMessageStrict,
+  normalizeNiftiSendMessageStrict,
+} from './sendNormalize';
+import {
+  createHubConfig,
+  createHubRuntimeState,
+  createSessionConfig,
+  getClientInfoPayload,
+  resolveTargetActorForWire,
+  resolveTargetProductNameForWire,
+} from './wireEnvelope';
 
 // API and usage: Documentation/api/IO_Core_CastClient.md (npm run docs:generate-api);
 // live example: /examples/CastClient.html
 
-const DEFAULT_PRODUCT_NAME = 'VTKJS';
+export { generateSubscriberName };
+
 const RECONNECT_INTERVAL_MS = 10000;
 const SUBSCRIBE_TIMEOUT_MS = 5000;
-const SUBSCRIBER_ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
-// --- Module internals (function declarations hoist in this module) ---
-
-function sanitizeProductBase(productName, fallback = DEFAULT_PRODUCT_NAME) {
-  return (
-    String(productName || fallback)
-      .trim()
-      .replace(/[^a-zA-Z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || fallback
-  );
-}
-
-function productNameToMessageIdPrefix(productName) {
-  return `${sanitizeProductBase(productName)}-`;
-}
-
-function generateMessageId(prefix) {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return prefix + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
-  }
-  return prefix + Math.random().toString(36).substring(2, 18);
-}
-
-export function generateSubscriberName(productName = DEFAULT_PRODUCT_NAME) {
-  const base = sanitizeProductBase(productName);
-  let suffix = '';
-  for (let i = 0; i < 6; i++) {
-    const index = Math.floor(Math.random() * SUBSCRIBER_ID_ALPHABET.length);
-    suffix += SUBSCRIBER_ID_ALPHABET[index];
-  }
-  return `${base}-${suffix}`;
-}
-
-function isArrayBufferView(value) {
-  return typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(value);
-}
-
-async function toArrayBufferStrict(data) {
-  if (data instanceof ArrayBuffer) {
-    return data;
-  }
-
-  if (isArrayBufferView(data)) {
-    const { buffer, byteOffset, byteLength } = data;
-    return buffer.slice(byteOffset, byteOffset + byteLength);
-  }
-
-  if (
-    typeof Blob !== 'undefined' &&
-    data instanceof Blob &&
-    typeof data.arrayBuffer === 'function'
-  ) {
-    return data.arrayBuffer();
-  }
-
-  throw new Error(
-    'CastClient: dicom-send resource.data must be ArrayBuffer, TypedArray, DataView, Blob, or File'
-  );
-}
-
-function arrayBufferToBase64(arrayBuffer) {
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(arrayBuffer).toString('base64');
-  }
-
-  const bytes = new Uint8Array(arrayBuffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  if (typeof btoa === 'function') {
-    return btoa(binary);
-  }
-  throw new Error('CastClient: no base64 encoder available in this runtime');
-}
-
-async function normalizeDicomSendContextItem(item) {
-  if (!item || typeof item !== 'object') {
-    throw new Error('CastClient: dicom-send context items must be objects');
-  }
-  const resource = item.resource;
-  if (!resource || typeof resource !== 'object') {
-    throw new Error(
-      'CastClient: dicom-send context item missing resource object'
-    );
-  }
-  if (!('data' in resource)) {
-    throw new Error('CastClient: dicom-send resource.data is required');
-  }
-  if (typeof resource.data === 'string') {
-    throw new Error(
-      'CastClient: dicom-send string payloads are not supported; pass binary input instead'
-    );
-  }
-
-  const normalizedResource = { ...resource };
-  const binaryData = await toArrayBufferStrict(resource.data);
-  normalizedResource.data = arrayBufferToBase64(binaryData);
-  normalizedResource.fileName =
-    typeof normalizedResource.fileName === 'string' &&
-    normalizedResource.fileName.trim()
-      ? normalizedResource.fileName
-      : 'dicom-send.dcm';
-  normalizedResource.mimeType =
-    typeof normalizedResource.mimeType === 'string' &&
-    normalizedResource.mimeType.trim()
-      ? normalizedResource.mimeType
-      : 'application/dicom';
-  normalizedResource.binaryTransfer = true;
-
-  return { ...item, resource: normalizedResource };
-}
-
-async function normalizeDicomSendMessageStrict(msg) {
-  if (!msg.event || typeof msg.event !== 'object') {
-    throw new Error('CastClient: dicom-send requires event object');
-  }
-  const event = msg.event;
-  if (event['hub.event'] !== 'dicom-send') {
-    return msg;
-  }
-
-  const contextValue = event.context;
-  let contextItems = [];
-  if (Array.isArray(contextValue)) {
-    contextItems = contextValue;
-  } else if (contextValue != null) {
-    contextItems = [contextValue];
-  }
-  if (!contextItems.length) {
-    throw new Error('CastClient: dicom-send requires non-empty event.context');
-  }
-
-  const normalizedContext = await Promise.all(
-    contextItems.map((contextItem) =>
-      normalizeDicomSendContextItem(contextItem)
-    )
-  );
-
-  return {
-    ...msg,
-    event: {
-      ...event,
-      context: normalizedContext,
-    },
-  };
-}
-
-const CAST_BINARY_TRANSFER_EVENTS = new Set(['dicom-send', 'nifti-send']);
-
-function castBinaryTransferEventWaitsForBinaryFrame(event) {
-  if (!CAST_BINARY_TRANSFER_EVENTS.has(event['hub.event'])) {
-    return false;
-  }
-
-  const context = event.context;
-  let items = [];
-  if (Array.isArray(context)) {
-    items = context;
-  } else if (context != null) {
-    items = [context];
-  }
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item && typeof item === 'object') {
-      const resource = item.resource;
-      if (
-        resource &&
-        typeof resource === 'object' &&
-        resource.binaryTransfer === true &&
-        (typeof resource.data !== 'string' || resource.data.length === 0)
-      ) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-async function normalizeNiftiSendContextItem(item) {
-  if (!item || typeof item !== 'object') {
-    throw new Error('CastClient: nifti-send context items must be objects');
-  }
-  const resource = item.resource;
-  if (!resource || typeof resource !== 'object') {
-    throw new Error(
-      'CastClient: nifti-send context item missing resource object'
-    );
-  }
-  if (!('data' in resource)) {
-    throw new Error('CastClient: nifti-send resource.data is required');
-  }
-  if (typeof resource.data === 'string') {
-    throw new Error(
-      'CastClient: nifti-send string payloads are not supported; pass binary input instead'
-    );
-  }
-
-  const normalizedResource = { ...resource };
-  const binaryData = await toArrayBufferStrict(resource.data);
-  normalizedResource.data = arrayBufferToBase64(binaryData);
-  normalizedResource.fileName =
-    typeof normalizedResource.fileName === 'string' &&
-    normalizedResource.fileName.trim()
-      ? normalizedResource.fileName
-      : 'nifti-send.nii.gz';
-  normalizedResource.mimeType =
-    typeof normalizedResource.mimeType === 'string' &&
-    normalizedResource.mimeType.trim()
-      ? normalizedResource.mimeType
-      : 'application/vnd.unknown.nifti-1';
-  normalizedResource.binaryTransfer = true;
-
-  return { ...item, resource: normalizedResource };
-}
-
-async function normalizeNiftiSendMessageStrict(msg) {
-  if (!msg.event || typeof msg.event !== 'object') {
-    throw new Error('CastClient: nifti-send requires event object');
-  }
-  const event = msg.event;
-  if (event['hub.event'] !== 'nifti-send') {
-    return msg;
-  }
-
-  const contextValue = event.context;
-  let contextItems = [];
-  if (Array.isArray(contextValue)) {
-    contextItems = contextValue;
-  } else if (contextValue != null) {
-    contextItems = [contextValue];
-  }
-  if (!contextItems.length) {
-    throw new Error('CastClient: nifti-send requires non-empty event.context');
-  }
-
-  const normalizedContext = await Promise.all(
-    contextItems.map((contextItem) =>
-      normalizeNiftiSendContextItem(contextItem)
-    )
-  );
-
-  return {
-    ...msg,
-    event: {
-      ...event,
-      context: normalizedContext,
-    },
-  };
-}
-
-function createHubConfig() {
-  return {
-    name: '',
-    friendlyName: '',
-    version: '',
-    hub_endpoint: '',
-    authorization_endpoint: '',
-    token_endpoint: '',
-    client_id: '',
-    client_secret: '',
-  };
-}
-
-function createSessionConfig() {
-  return {
-    subscriberName: '',
-    productName: '',
-    productVersion: '',
-    actors: [],
-    topic: '',
-    events: [],
-    lease: 999,
-    userName: '',
-    defaultTargetActor: '',
-  };
-}
-
-function resolveTargetActorForWire(value) {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-  const text = String(value).trim();
-  if (!text || text === '*') {
-    return undefined;
-  }
-  return text;
-}
-
-function resolveTargetProductNameForWire(value) {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-  const text = String(value).trim();
-  if (!text || text === '*') {
-    return undefined;
-  }
-  return text;
-}
-
-function createHubRuntimeState() {
-  return {
-    token: '',
-    lastIdToken: '',
-    lastPublishedMessageID: '',
-    subscribed: false,
-    resubscribeRequested: false,
-    websocket: null,
-  };
-}
-
-function getClientInfoPayload() {
-  if (typeof navigator === 'undefined') {
-    return null;
-  }
-
-  const info = {};
-  if (typeof navigator.userAgent === 'string' && navigator.userAgent.trim()) {
-    info.userAgent = navigator.userAgent.trim();
-  }
-  if (typeof navigator.platform === 'string' && navigator.platform.trim()) {
-    info.platform = navigator.platform.trim();
-  }
-  if (typeof navigator.language === 'string' && navigator.language.trim()) {
-    info.language = navigator.language.trim();
-  }
-  try {
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (typeof timezone === 'string' && timezone.trim()) {
-      info.timezone = timezone.trim();
-    }
-  } catch (err) {
-    // Intl/timezone may be unavailable in some runtimes.
-  }
-
-  return Object.keys(info).length ? info : null;
-}
-
-// --- vtkCastClient factory ---
+// ----------------------------------------------------------------------------
+// Object factory
+// ----------------------------------------------------------------------------
 
 const DEFAULT_VALUES = {
   config: {
@@ -374,26 +57,177 @@ function vtkCastClient(publicAPI, model) {
   model.classHierarchy.push('vtkCastClient');
 
   // --------------------------------------------------------------------------
-  // Public API (listed first for readability; internal helpers hoist below)
+  // Internal
   // --------------------------------------------------------------------------
 
-  /* eslint-disable no-use-before-define */
+  function emitConnectionState(state, detail) {
+    if (model.onConnectionStateChangeCallback) {
+      model.onConnectionStateChangeCallback(state, detail);
+    }
+  }
+
+  function messageIdPrefix() {
+    const product =
+      model.session.productName ||
+      model.config.productName ||
+      DEFAULT_PRODUCT_NAME;
+    return productNameToMessageIdPrefix(product);
+  }
+
+  function resolveAuthorizationEndpoint() {
+    const explicit = model.hub.authorization_endpoint;
+    if (typeof explicit === 'string' && explicit.trim()) {
+      return explicit.trim();
+    }
+    // Fallback: derive from token_endpoint origin (back-compat with hub
+    // configs that haven't been updated to expose authorization_endpoint).
+    try {
+      const tokenUrl = new URL(model.hub.token_endpoint);
+      return `${tokenUrl.origin}/oauth/authorize`;
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function websocketClose() {
+    console.debug('CastClient: websocket is closed.');
+    model.pendingDicomSendCastMessage = null;
+    model.skipNextDicomBinary = false;
+    model.hub.resubscribeRequested = true;
+    emitConnectionState('disconnected');
+  }
+
+  function processBinaryMessage(buf) {
+    if (model.skipNextDicomBinary) {
+      model.skipNextDicomBinary = false;
+      return;
+    }
+
+    const pending = model.pendingDicomSendCastMessage;
+    if (!pending || !pending.event) {
+      console.warn('CastClient: unexpected binary WebSocket message');
+      return;
+    }
+
+    model.pendingDicomSendCastMessage = null;
+    const context = pending.event.context;
+    let items = [];
+    if (Array.isArray(context)) {
+      items = context;
+    } else if (context != null) {
+      items = [context];
+    }
+    let attached = false;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item && typeof item === 'object') {
+        const resource = item.resource;
+        if (
+          resource &&
+          typeof resource === 'object' &&
+          resource.binaryTransfer === true
+        ) {
+          delete resource.binaryTransfer;
+          resource.data = buf;
+          attached = true;
+          break;
+        }
+      }
+    }
+
+    if (!attached) {
+      console.warn(
+        'CastClient: binary frame did not match pending binary Cast message'
+      );
+      return;
+    }
+
+    if (pending.id === model.hub.lastPublishedMessageID) {
+      return;
+    }
+
+    if (model.onMessageCallback) {
+      model.onMessageCallback(pending);
+    }
+  }
+
+  function processTextMessage(eventData) {
+    try {
+      const castMessage = JSON.parse(eventData);
+      if (castMessage['hub.mode']) {
+        return;
+      }
+
+      const event = castMessage.event;
+      if (!event) {
+        return;
+      }
+      if (event['hub.event'] === 'heartbeat') {
+        return;
+      }
+
+      if (castMessage.id === model.hub.lastPublishedMessageID) {
+        if (castBinaryTransferEventWaitsForBinaryFrame(event)) {
+          model.skipNextDicomBinary = true;
+        }
+        return;
+      }
+
+      if (castBinaryTransferEventWaitsForBinaryFrame(event)) {
+        model.pendingDicomSendCastMessage = castMessage;
+        return;
+      }
+
+      if (model.onMessageCallback) {
+        model.onMessageCallback(castMessage);
+      }
+    } catch (err) {
+      console.warn('CastClient: websocket processing error:', err);
+    }
+  }
+
+  async function checkWebsocket() {
+    if (
+      model.hub.resubscribeRequested &&
+      model.hub.subscribed &&
+      model.config.autoReconnect
+    ) {
+      console.debug('CastClient: Try to resubscribe');
+      model.hub.resubscribeRequested = false;
+      const response = await publicAPI.subscribe();
+      if (response !== 202) {
+        model.hub.resubscribeRequested = true;
+      }
+    } else if (!model.hub.subscribed && model.hub.resubscribeRequested) {
+      model.hub.resubscribeRequested = false;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // PublicAPI
+  // --------------------------------------------------------------------------
 
   publicAPI.onMessage = (callback) => {
     model.onMessageCallback = callback;
   };
 
+  // --------------------------------------------------------------------------
+
   publicAPI.onConnectionStateChange = (callback) => {
     model.onConnectionStateChangeCallback = callback;
   };
 
-  publicAPI.destroy = () => {
+  // --------------------------------------------------------------------------
+
+  publicAPI.delete = macro.chain(() => {
     if (model.reconnectInterval) {
       clearInterval(model.reconnectInterval);
       model.reconnectInterval = null;
     }
     publicAPI.unsubscribe();
-  };
+  }, publicAPI.delete);
+
+  // --------------------------------------------------------------------------
 
   publicAPI.getHubConfig = () => {
     const hub = model.hub;
@@ -409,6 +243,8 @@ function vtkCastClient(publicAPI, model) {
     };
   };
 
+  // --------------------------------------------------------------------------
+
   publicAPI.getSessionConfig = () => {
     const session = model.session;
     return {
@@ -422,6 +258,8 @@ function vtkCastClient(publicAPI, model) {
     };
   };
 
+  // --------------------------------------------------------------------------
+
   publicAPI.getConnectionState = () => {
     const hub = model.hub;
     return {
@@ -433,22 +271,32 @@ function vtkCastClient(publicAPI, model) {
     };
   };
 
+  // --------------------------------------------------------------------------
+
   publicAPI.setTopic = (topic) => {
     console.debug('CastClient: setting topic to', topic);
     model.session.topic = topic;
   };
 
+  // --------------------------------------------------------------------------
+
   publicAPI.setToken = (token) => {
     model.hub.token = token;
   };
+
+  // --------------------------------------------------------------------------
 
   publicAPI.setSubscriberName = (subscriberName) => {
     model.session.subscriberName = subscriberName;
   };
 
+  // --------------------------------------------------------------------------
+
   publicAPI.setUserName = (userName) => {
     model.session.userName = userName || '';
   };
+
+  // --------------------------------------------------------------------------
 
   publicAPI.authenticate = async () => {
     const authorizeEndpoint = resolveAuthorizationEndpoint();
@@ -516,6 +364,8 @@ function vtkCastClient(publicAPI, model) {
     };
   };
 
+  // --------------------------------------------------------------------------
+
   publicAPI.getToken = async (code) => {
     if (typeof code !== 'string' || !code) {
       console.error(
@@ -559,9 +409,17 @@ function vtkCastClient(publicAPI, model) {
         }
         if (config.topic && typeof config.topic === 'string') {
           if (!model.config.preserveSessionTopicFromToken) {
+            // --------------------------------------------------------------------------
+
+            // --------------------------------------------------------------------------
+
             publicAPI.setTopic(config.topic);
           }
           if (model.config.autoStart) {
+            // --------------------------------------------------------------------------
+
+            // --------------------------------------------------------------------------
+
             publicAPI.subscribe();
           }
         }
@@ -579,6 +437,8 @@ function vtkCastClient(publicAPI, model) {
       return false;
     }
   };
+
+  // --------------------------------------------------------------------------
 
   publicAPI.subscribe = async () => {
     const topic = model.session.topic && model.session.topic.trim();
@@ -737,6 +597,8 @@ function vtkCastClient(publicAPI, model) {
     }
   };
 
+  // --------------------------------------------------------------------------
+
   publicAPI.unsubscribe = async () => {
     model.hub.subscribed = false;
     model.hub.resubscribeRequested = false;
@@ -816,6 +678,8 @@ function vtkCastClient(publicAPI, model) {
     emitConnectionState('disconnected');
   };
 
+  // --------------------------------------------------------------------------
+
   publicAPI.publish = async (castMessage, hub = model.hub) => {
     let msg = { ...castMessage, timestamp: new Date().toJSON() };
     msg.id = generateMessageId(messageIdPrefix());
@@ -865,6 +729,8 @@ function vtkCastClient(publicAPI, model) {
       return null;
     }
   };
+
+  // --------------------------------------------------------------------------
 
   publicAPI.request = async (args = {}) => {
     const subscriber = String(args['subscriber.name'] || '').trim();
@@ -949,6 +815,11 @@ function vtkCastClient(publicAPI, model) {
   // Signature: (requestId, dataType, data, topic?). The hub.event is derived
   // from ``dataType`` (e.g. PNGFULLSIZE -> pngfullsize-response). ``dataType``
   // is required; omitting it is an error (no generic cast-response emission).
+
+  // --------------------------------------------------------------------------
+
+  // --------------------------------------------------------------------------
+
   publicAPI.sendCastRequestResponse = (requestId, dataType, data, topic) => {
     if (
       !model.hub.websocket ||
@@ -996,155 +867,6 @@ function vtkCastClient(publicAPI, model) {
     model.hub.websocket.send(JSON.stringify(response));
   };
 
-  /* eslint-enable no-use-before-define */
-
-  // --------------------------------------------------------------------------
-  // Internal
-  // --------------------------------------------------------------------------
-
-  function emitConnectionState(state, detail) {
-    if (model.onConnectionStateChangeCallback) {
-      model.onConnectionStateChangeCallback(state, detail);
-    }
-  }
-
-  function messageIdPrefix() {
-    const product =
-      model.session.productName ||
-      model.config.productName ||
-      DEFAULT_PRODUCT_NAME;
-    return productNameToMessageIdPrefix(product);
-  }
-
-  function resolveAuthorizationEndpoint() {
-    const explicit = model.hub.authorization_endpoint;
-    if (typeof explicit === 'string' && explicit.trim()) {
-      return explicit.trim();
-    }
-    // Fallback: derive from token_endpoint origin (back-compat with hub
-    // configs that haven't been updated to expose authorization_endpoint).
-    try {
-      const tokenUrl = new URL(model.hub.token_endpoint);
-      return `${tokenUrl.origin}/oauth/authorize`;
-    } catch (err) {
-      return '';
-    }
-  }
-
-  function websocketClose() {
-    console.debug('CastClient: websocket is closed.');
-    model.pendingDicomSendCastMessage = null;
-    model.skipNextDicomBinary = false;
-    model.hub.resubscribeRequested = true;
-    emitConnectionState('disconnected');
-  }
-
-  function processBinaryMessage(buf) {
-    if (model.skipNextDicomBinary) {
-      model.skipNextDicomBinary = false;
-      return;
-    }
-
-    const pending = model.pendingDicomSendCastMessage;
-    if (!pending || !pending.event) {
-      console.warn('CastClient: unexpected binary WebSocket message');
-      return;
-    }
-
-    model.pendingDicomSendCastMessage = null;
-    const context = pending.event.context;
-    let items = [];
-    if (Array.isArray(context)) {
-      items = context;
-    } else if (context != null) {
-      items = [context];
-    }
-    let attached = false;
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item && typeof item === 'object') {
-        const resource = item.resource;
-        if (
-          resource &&
-          typeof resource === 'object' &&
-          resource.binaryTransfer === true
-        ) {
-          delete resource.binaryTransfer;
-          resource.data = buf;
-          attached = true;
-          break;
-        }
-      }
-    }
-
-    if (!attached) {
-      console.warn(
-        'CastClient: binary frame did not match pending binary Cast message'
-      );
-      return;
-    }
-
-    if (pending.id === model.hub.lastPublishedMessageID) {
-      return;
-    }
-
-    if (model.onMessageCallback) {
-      model.onMessageCallback(pending);
-    }
-  }
-
-  function processTextMessage(eventData) {
-    try {
-      const castMessage = JSON.parse(eventData);
-      if (castMessage['hub.mode']) {
-        return;
-      }
-
-      const event = castMessage.event;
-      if (!event) {
-        return;
-      }
-      if (event['hub.event'] === 'heartbeat') {
-        return;
-      }
-
-      if (castMessage.id === model.hub.lastPublishedMessageID) {
-        if (castBinaryTransferEventWaitsForBinaryFrame(event)) {
-          model.skipNextDicomBinary = true;
-        }
-        return;
-      }
-
-      if (castBinaryTransferEventWaitsForBinaryFrame(event)) {
-        model.pendingDicomSendCastMessage = castMessage;
-        return;
-      }
-
-      if (model.onMessageCallback) {
-        model.onMessageCallback(castMessage);
-      }
-    } catch (err) {
-      console.warn('CastClient: websocket processing error:', err);
-    }
-  }
-
-  async function checkWebsocket() {
-    if (
-      model.hub.resubscribeRequested &&
-      model.hub.subscribed &&
-      model.config.autoReconnect
-    ) {
-      console.debug('CastClient: Try to resubscribe');
-      model.hub.resubscribeRequested = false;
-      const response = await publicAPI.subscribe();
-      if (response !== 202) {
-        model.hub.resubscribeRequested = true;
-      }
-    } else if (!model.hub.subscribed && model.hub.resubscribeRequested) {
-      model.hub.resubscribeRequested = false;
-    }
-  }
-
   // --------------------------------------------------------------------------
   // Init
   // --------------------------------------------------------------------------
@@ -1156,6 +878,8 @@ function vtkCastClient(publicAPI, model) {
     );
   }
 }
+
+// ----------------------------------------------------------------------------
 
 export function extend(publicAPI, model, initialValues = {}) {
   Object.assign(model, DEFAULT_VALUES, initialValues);
@@ -1185,6 +909,10 @@ export function extend(publicAPI, model, initialValues = {}) {
   vtkCastClient(publicAPI, model);
 }
 
+// ----------------------------------------------------------------------------
+
 export const newInstance = macro.newInstance(extend, 'vtkCastClient');
+
+// ----------------------------------------------------------------------------
 
 export default { newInstance, extend, generateSubscriberName };
