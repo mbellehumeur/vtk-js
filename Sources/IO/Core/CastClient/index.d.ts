@@ -57,11 +57,13 @@ export interface CastEvent {
   context?: unknown;
   [key: string]: unknown;
 }
-/** Publish notification (`POST /api/hub/`). */
-export interface CastPublishMessage {
-  timestamp?: string;
+/**
+ * Cast JSON envelope: publish (`POST /api/hub/`), request (`POST /api/hub/request`),
+ * and WebSocket notifications.
+ */
+export interface CastMessage {
   id?: string;
-  'hub.mode'?: string;
+  timestamp?: string;
   'subscriber.name'?: string;
   'subscriber.actor'?: string;
   'subscriber.product.name'?: string;
@@ -71,28 +73,14 @@ export interface CastPublishMessage {
   [key: string]: unknown;
 }
 
+/** @deprecated Use {@link CastMessage}. */
+export type CastPublishMessage = CastMessage;
 
-/** `POST /api/hub/request` body. */
-export interface CastRequestMessage {
-  'subscriber.name': string;
-  'subscriber.actor'?: string;
-  'subscriber.product.name'?: string;
-  'target.actor'?: string;
-  'target.product.name'?: string;
-  event: {
-    'hub.topic'?: string;
-    'hub.event': string;
-    context?: {
-      dataType?: string;
-      [key: string]: unknown;
-    };
-  };
+/** @deprecated Use {@link CastMessage}. */
+export type CastRequestMessage = CastMessage;
 
-  endpoint?: string;
-}
-
-/** @deprecated Use {@link CastRequestMessage}. */
-export type CastRequestArgs = CastRequestMessage;
+/** @deprecated Use {@link CastMessage}. */
+export type CastRequestArgs = CastMessage;
 
 /**
  * One responder's contribution to a fan-out cast-request. ``id`` is the Cast
@@ -113,7 +101,7 @@ export interface CastRequestResponseItem {
  */
 export interface CastRequestResponseEnvelope {
   ok: boolean;
-  requestId: string | null;
+  id: string | null;
   'subscriber.name': string;
   dataType: string | null;
   actor: string | null;
@@ -141,7 +129,7 @@ export interface CastRequestResult {
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 export interface vtkCastClient extends vtkObject {
-  onMessage(callback: (message: CastPublishMessage) => void): void;
+  onMessage(callback: (message: CastMessage) => void): void;
   onConnectionStateChange(
     callback: (state: ConnectionState, detail?: unknown) => void
   ): void;
@@ -158,7 +146,7 @@ export interface vtkCastClient extends vtkObject {
   subscribe(): Promise<number | string>;
   unsubscribe(): Promise<void>;
   publish(
-    castMessage: CastPublishMessage,
+    castMessage: CastMessage,
     hub?: HubConfig & HubRuntimeState
   ): Promise<Response | null>;
   /**
@@ -170,12 +158,12 @@ export interface vtkCastClient extends vtkObject {
    * no websocket message is sent.
    */
   sendCastRequestResponse(
-    requestId: string,
+    id: string,
     dataType: string,
     data: unknown,
     topic?: string
   ): void;
-  request(args: CastRequestMessage): Promise<CastRequestResult>;
+  request(args: CastMessage): Promise<CastRequestResult>;
   getConfig(): CastClientConfig;
 }
 

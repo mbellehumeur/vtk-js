@@ -745,11 +745,20 @@ function vtkCastClient(publicAPI, model) {
       );
     }
 
-    const endpoint =
-      (args.endpoint && args.endpoint.trim()) ||
-      `${(hub.hub_endpoint || '').replace(/\/+$/, '')}/request`;
+    const requestUrl = `${(hub.hub_endpoint || '').replace(
+      /\/+$/,
+      ''
+    )}/request`;
 
-    const body = { 'subscriber.name': subscriber };
+    const body = {
+      'subscriber.name': subscriber,
+      id:
+        (args.id && String(args.id).trim()) ||
+        generateMessageId(messageIdPrefix()),
+      timestamp:
+        (args.timestamp && String(args.timestamp).trim()) ||
+        new Date().toJSON(),
+    };
     if (args.event && typeof args.event === 'object') {
       body.event = { ...args.event };
       const sessionTopic =
@@ -787,7 +796,7 @@ function vtkCastClient(publicAPI, model) {
       body['target.product.name'] = wireTargetProduct;
     }
 
-    const response = await fetch(endpoint, {
+    const response = await fetch(requestUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -812,15 +821,12 @@ function vtkCastClient(publicAPI, model) {
 
   // Send a response to a previously-received <datatype>-request.
   //
-  // Signature: (requestId, dataType, data, topic?). The hub.event is derived
-  // from ``dataType`` (e.g. PNGFULLSIZE -> pngfullsize-response). ``dataType``
-  // is required; omitting it is an error (no generic cast-response emission).
+  // Signature: (id, dataType, data, topic?). Correlation ``id`` matches the
+  // inbound *-request context.id. The hub.event is derived from ``dataType``.
 
   // --------------------------------------------------------------------------
 
-  // --------------------------------------------------------------------------
-
-  publicAPI.sendCastRequestResponse = (requestId, dataType, data, topic) => {
+  publicAPI.sendCastRequestResponse = (id, dataType, data, topic) => {
     if (
       !model.hub.websocket ||
       typeof WebSocket === 'undefined' ||
@@ -852,7 +858,7 @@ function vtkCastClient(publicAPI, model) {
         'hub.topic': topic || model.session.topic,
         'hub.event': eventName,
         context: {
-          requestId,
+          id,
           dataType: dt,
           data,
         },

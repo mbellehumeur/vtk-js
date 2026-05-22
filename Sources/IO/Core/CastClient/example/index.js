@@ -380,9 +380,6 @@ function buildPageHtml() {
     <div class="${style.grid}">
       <div class="${
         style.castHiddenEndpoint
-      }"><label for="getEndpoint">GET endpoint</label><input id="getEndpoint" /></div>
-      <div class="${
-        style.castHiddenEndpoint
       }"><label for="getSubscriber">Subscriber</label><input id="getSubscriber" /></div>
       <div class="${style.getDatatypeTopicActorRow}">
         <div><label for="getDataType">Data Type</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="PNGFULLSIZE">PNGFULLSIZE</option><option value="PNGTHUMBNAIL">PNGTHUMBNAIL</option><option value="JPGFULLSIZE">JPGFULLSIZE</option><option value="JPGTHUMBNAIL">JPGTHUMBNAIL</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select><div id="getDataTypeHint" class="${
@@ -627,8 +624,8 @@ function handleIncomingGetRequest(el, state, message) {
   }
   const context =
     event.context && typeof event.context === 'object' ? event.context : {};
-  const requestId = context.requestId;
-  if (typeof requestId !== 'string' || !requestId) {
+  const correlationId = context.id;
+  if (typeof correlationId !== 'string' || !correlationId) {
     return false;
   }
 
@@ -656,13 +653,13 @@ function handleIncomingGetRequest(el, state, message) {
     : EMPTY_FHIRCAST_CONTEXT;
 
   state.client.sendCastRequestResponse(
-    requestId,
+    correlationId,
     context.dataType,
     responseData,
     event['hub.topic']
   );
   addMessage(el, state, 'sent', 'Get response', {
-    requestId,
+    id: correlationId,
     dataType: context.dataType,
     responseData,
   });
@@ -803,12 +800,6 @@ function applyHubPreset(el, state, hubKey) {
   el.productVersion.value = hubDef.product_version || '1.0';
   state.selectedClientId = hubDef.client_id;
   state.selectedClientSecret = hubDef.client_secret;
-  try {
-    const hubUrl = new URL(el.hubEndpoint.value.trim());
-    el.getEndpoint.value = `${hubUrl.origin}/api/hub/request`;
-  } catch (err) {
-    // noop
-  }
 }
 
 function buildHubConfig(el, state) {
@@ -1150,7 +1141,6 @@ async function handleCastRequest(el, state) {
       'subscriber.name': el.getSubscriber.value.trim(),
       event: requestEvent,
       'subscriber.actor': el.getActorPreset.value.trim() || undefined,
-      endpoint: el.getEndpoint.value.trim() || undefined,
     };
     const targetProductValue =
       resolveTargetProductNameForWire(targetProductInput);
@@ -1268,7 +1258,7 @@ async function handleCastRequest(el, state) {
     );
   } else {
     addMessage(el, state, 'received', 'Request', {
-      requestId: envelope.requestId,
+      id: envelope.id,
       received: responses.length,
       expected: expected.length,
       missing,
@@ -1317,7 +1307,6 @@ function boot() {
     eventTypeCustom: byId('eventTypeCustom'),
     eventData: byId('eventData'),
     eventDataRow: byId('eventDataRow'),
-    getEndpoint: byId('getEndpoint'),
     getSubscriber: byId('getSubscriber'),
     getActorPreset: byId('getActorPreset'),
     getTargetActorPreset: byId('getTargetActorPreset'),
