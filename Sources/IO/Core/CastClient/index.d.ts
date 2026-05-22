@@ -37,21 +37,6 @@ export interface AuthorizeResult {
   expires_in?: number;
 }
 
-export interface CastMessage {
-  timestamp?: string;
-  id?: string;
-  'hub.mode'?: string;
-  'subscriber.name'?: string;
-  'subscriber.product.name'?: string;
-  'target.product.name'?: string;
-  targetActor?: string;
-  'subscriber.version'?: string;
-  event?: {
-    'hub.event': string;
-    'hub.topic'?: string;
-    context?: unknown;
-  };
-}
 
 export interface CastClientConfig {
   hub?: Partial<HubConfig>;
@@ -64,15 +49,50 @@ export interface CastClientConfig {
   preserveSessionTopicFromToken?: boolean;
 }
 
-export interface CastRequestArgs {
-  subscriber: string;
-  topic?: string;
-  dataType?: string;
-  actor?: string;
-  /** Destination product filter (wire key ``target.product.name``). */
+
+export interface CastEvent {
+  'hub.event'?: string;
+  'hub.topic'?: string;
+  'hub.source'?: string;
+  context?: unknown;
+  [key: string]: unknown;
+}
+/** Publish notification (`POST /api/hub/`). */
+export interface CastPublishMessage {
+  timestamp?: string;
+  id?: string;
+  'hub.mode'?: string;
+  'subscriber.name'?: string;
+  'subscriber.actor'?: string;
+  'subscriber.product.name'?: string;
   'target.product.name'?: string;
+  'target.actor'?: string;
+  event?: CastEvent;
+  [key: string]: unknown;
+}
+
+
+/** `POST /api/hub/request` body. */
+export interface CastRequestMessage {
+  'subscriber.name': string;
+  'subscriber.actor'?: string;
+  'subscriber.product.name'?: string;
+  'target.actor'?: string;
+  'target.product.name'?: string;
+  event: {
+    'hub.topic'?: string;
+    'hub.event': string;
+    context?: {
+      dataType?: string;
+      [key: string]: unknown;
+    };
+  };
+
   endpoint?: string;
 }
+
+/** @deprecated Use {@link CastRequestMessage}. */
+export type CastRequestArgs = CastRequestMessage;
 
 /**
  * One responder's contribution to a fan-out cast-request. ``id`` is the Cast
@@ -94,7 +114,7 @@ export interface CastRequestResponseItem {
 export interface CastRequestResponseEnvelope {
   ok: boolean;
   requestId: string | null;
-  subscriber: string;
+  'subscriber.name': string;
   dataType: string | null;
   actor: string | null;
   productName?: string | null;
@@ -121,7 +141,7 @@ export interface CastRequestResult {
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 export interface vtkCastClient extends vtkObject {
-  onMessage(callback: (message: CastMessage) => void): void;
+  onMessage(callback: (message: CastPublishMessage) => void): void;
   onConnectionStateChange(
     callback: (state: ConnectionState, detail?: unknown) => void
   ): void;
@@ -138,7 +158,7 @@ export interface vtkCastClient extends vtkObject {
   subscribe(): Promise<number | string>;
   unsubscribe(): Promise<void>;
   publish(
-    castMessage: Record<string, unknown>,
+    castMessage: CastPublishMessage,
     hub?: HubConfig & HubRuntimeState
   ): Promise<Response | null>;
   /**
@@ -155,7 +175,7 @@ export interface vtkCastClient extends vtkObject {
     data: unknown,
     topic?: string
   ): void;
-  request(args: CastRequestArgs): Promise<CastRequestResult>;
+  request(args: CastRequestMessage): Promise<CastRequestResult>;
   getConfig(): CastClientConfig;
 }
 
@@ -169,6 +189,50 @@ export function newInstance(initialValues?: CastClientConfig): vtkCastClient;
 
 export function generateSubscriberName(productName?: string): string;
 
+/**
+ * Cast hub client: OAuth, subscribe, WebSocket bind, publish, and typed
+ * request/response (`POST /api/hub/request` fan-out).
+ *
+ * Typical flow: `onMessage` → `authenticate` → `getToken` → `subscribe` →
+ * `publish` / `request` → `sendCastRequestResponse` on inbound `*-request` events.
+ *
+ * @example
+ * import vtkCastClient, { generateSubscriberName } from '@kitware/vtk.js/Sources/IO/Core/CastClient';
+ * import { requestEventFor } from '@kitware/vtk.js/Sources/IO/Core/CastClient/eventNames';
+ *
+ * const client = vtkCastClient.newInstance({
+ *   hub: {
+ *     hub_endpoint: 'https://host/api/hub',
+ *     authorization_endpoint: 'https://host/oauth/authorize',
+ *     token_endpoint: 'https://host/oauth/token',
+ *     client_id: 'client_id',
+ *     client_secret: 'client_secret',
+ *   },
+ *   session: {
+ *     subscriberName: generateSubscriberName('MYAPP'),
+ *     topic: 'my-topic',
+ *     events: ['*'],
+ *   },
+ *   autoReconnect: true,
+ * });
+ *
+ * client.onMessage((message) => console.log(message));
+ * const { code } = await client.authenticate();
+ * if (await client.getToken(code)) {
+ *   await client.subscribe();
+ *   await client.request({
+ *     'subscriber.name': client.getSessionConfig().subscriberName,
+ *     event: {
+ *       'hub.topic': 'my-topic',
+ *       'hub.event': requestEventFor('FHIRcastContext'),
+ *       context: { dataType: 'FHIRcastContext' },
+ *     },
+ *     'target.actor': 'WORKLIST_CLIENT',
+ *   });
+ * }
+ *
+ * @see /examples/CastClient.html
+ */
 export declare const vtkCastClient: {
   newInstance: typeof newInstance;
   extend: typeof extend;

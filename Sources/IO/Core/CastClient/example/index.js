@@ -34,6 +34,16 @@
  *       context: [],
  *     },
  *   });
+ *   await client.request({
+ *     'subscriber.name': client.getSessionConfig().subscriberName,
+ *     event: {
+ *       'hub.topic': 'my-topic',
+ *       'hub.event': 'fhircastcontext-request',
+ *       context: { dataType: 'FHIRcastContext' },
+ *     },
+ *     'subscriber.actor': 'WORKLIST_CLIENT',
+ *     'target.actor': 'WORKLIST_CLIENT',
+ *   });
  * }
  */
 
@@ -622,12 +632,7 @@ function handleIncomingGetRequest(el, state, message) {
     return false;
   }
 
-  const targetRaw =
-    message.targetActor !== undefined &&
-    message.targetActor !== null &&
-    String(message.targetActor).trim() !== ''
-      ? message.targetActor
-      : message.actor;
+  const targetRaw = message['target.actor'];
   const requestedTargets = extractActorKeywords(targetRaw);
   if (
     requestedTargets.length > 0 &&
@@ -1046,7 +1051,7 @@ async function handlePublish(el, state) {
     el.publishTargetActorPreset.value
   );
   if (targetActorValue) {
-    payload.targetActor = targetActorValue;
+    payload['target.actor'] = targetActorValue;
   }
   const targetProductValue = resolveTargetProductNameForWire(
     el.publishTargetProductName ? el.publishTargetProductName.value : ''
@@ -1128,11 +1133,23 @@ async function handleCastRequest(el, state) {
 
   let result;
   try {
+    const dataTypeToken = (el.getDataType.value || '').trim();
+    const hubEvent = requestEventFor(dataTypeToken);
+    if (!hubEvent) {
+      addMessage(el, state, 'err', 'Request error', 'Select a data type');
+      return;
+    }
+    const requestEvent = {
+      'hub.event': hubEvent,
+      'hub.topic': el.topic.value.trim(),
+    };
+    if (dataTypeToken) {
+      requestEvent.context = { dataType: dataTypeToken };
+    }
     const requestArgs = {
-      subscriber: el.getSubscriber.value.trim(),
-      topic: el.topic.value.trim(),
-      dataType: el.getDataType.value || undefined,
-      actor: el.getActorPreset.value.trim() || undefined,
+      'subscriber.name': el.getSubscriber.value.trim(),
+      event: requestEvent,
+      'subscriber.actor': el.getActorPreset.value.trim() || undefined,
       endpoint: el.getEndpoint.value.trim() || undefined,
     };
     const targetProductValue =
@@ -1144,7 +1161,7 @@ async function handleCastRequest(el, state) {
       el.getTargetActorPreset.value
     );
     if (targetActorValue) {
-      requestArgs.targetActor = targetActorValue;
+      requestArgs['target.actor'] = targetActorValue;
     }
     result = await state.client.request(requestArgs);
   } catch (err) {
