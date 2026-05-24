@@ -47,6 +47,11 @@ async function normalizeDicomSendContextItem(item) {
   if (!item || typeof item !== 'object') {
     throw new Error('CastClient: dicom-send context items must be objects');
   }
+  const status =
+    typeof item.status === 'string' ? item.status.trim().toLowerCase() : '';
+  if (status === 'complete') {
+    return { ...item };
+  }
   const resource = item.resource;
   if (!resource || typeof resource !== 'object') {
     throw new Error(

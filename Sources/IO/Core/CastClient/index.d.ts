@@ -53,7 +53,6 @@ export interface CastClientConfig {
 export interface CastEvent {
   'hub.event'?: string;
   'hub.topic'?: string;
-  'hub.source'?: string;
   context?: unknown;
   [key: string]: unknown;
 }
@@ -73,14 +72,6 @@ export interface CastMessage {
   [key: string]: unknown;
 }
 
-/** @deprecated Use {@link CastMessage}. */
-export type CastPublishMessage = CastMessage;
-
-/** @deprecated Use {@link CastMessage}. */
-export type CastRequestMessage = CastMessage;
-
-/** @deprecated Use {@link CastMessage}. */
-export type CastRequestArgs = CastMessage;
 
 /**
  * One responder's contribution to a fan-out cast-request. ``id`` is the Cast
@@ -176,6 +167,32 @@ export function extend(
 export function newInstance(initialValues?: CastClientConfig): vtkCastClient;
 
 export function generateSubscriberName(productName?: string): string;
+
+export const DICOM_TRANSFER_DATA_TYPE: 'dicomtransfer';
+
+export function buildDicomTransferRequestMessage(options: {
+  subscriberName: string;
+  subscriberActor?: string;
+  topic: string;
+  manifest: {
+    dicomTransferId: string;
+    files: unknown[];
+  };
+}): CastMessage;
+
+export function buildDicomTransferFilePublishMessage(options: {
+  topic: string;
+  dicomTransferId: string;
+  fileName: string;
+  data: ArrayBuffer;
+  mimeType?: string;
+}): { event: CastEvent };
+
+export function buildDicomTransferCompletePublishMessage(options: {
+  topic: string;
+  dicomTransferId: string;
+  message?: string;
+}): { event: CastEvent };
 
 /**
  * Cast hub client: OAuth, subscribe, WebSocket bind, publish, and typed

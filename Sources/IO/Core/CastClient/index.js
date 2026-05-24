@@ -24,6 +24,12 @@ import {
 // live example: /examples/CastClient.html
 
 export { generateSubscriberName };
+export {
+  buildDicomTransferRequestMessage,
+  buildDicomTransferFilePublishMessage,
+  buildDicomTransferCompletePublishMessage,
+  DICOM_TRANSFER_DATA_TYPE,
+} from './dicomTransfer';
 
 const RECONNECT_INTERVAL_MS = 10000;
 const SUBSCRIBE_TIMEOUT_MS = 5000;
@@ -784,7 +790,7 @@ function vtkCastClient(publicAPI, model) {
     if (wireTarget === undefined && model.session.defaultTargetActor) {
       wireTarget = resolveTargetActorForWire(model.session.defaultTargetActor);
     }
-    if (wireTarget) {
+    if (wireTarget !== undefined) {
       body['target.actor'] = wireTarget;
     }
     const targetProduct =
@@ -792,7 +798,7 @@ function vtkCastClient(publicAPI, model) {
         ? args['target.product.name']
         : args.targetProductName;
     const wireTargetProduct = resolveTargetProductNameForWire(targetProduct);
-    if (wireTargetProduct) {
+    if (wireTargetProduct !== undefined) {
       body['target.product.name'] = wireTargetProduct;
     }
 
