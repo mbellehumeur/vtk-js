@@ -7,9 +7,14 @@ import {
   productNameToMessageIdPrefix,
 } from './identity';
 import {
-  castBinaryTransferEventWaitsForBinaryFrame,
+  castBinaryTransferHttpUrl,
+  castBinaryTransferMode,
   normalizeDicomSendMessageStrict,
+  normalizeNiftiSendMessageMetadataOnly,
   normalizeNiftiSendMessageStrict,
+  niftiFileNameFromMessage,
+  stampHttpBinaryTransferForBinaryEvents,
+  toArrayBufferStrict,
 } from './sendNormalize';
 import {
   createHubConfig,
@@ -55,8 +60,6 @@ const DEFAULT_VALUES = {
   onMessageCallback: null,
   onConnectionStateChangeCallback: null,
   lastSentMessage: null,
-  pendingDicomSendCastMessage: null,
-  skipNextDicomBinary: false,
 };
 
 function vtkCastClient(publicAPI, model) {
@@ -97,33 +100,19 @@ function vtkCastClient(publicAPI, model) {
 
   function websocketClose() {
     console.debug('CastClient: websocket is closed.');
-    model.pendingDicomSendCastMessage = null;
-    model.skipNextDicomBinary = false;
     model.hub.resubscribeRequested = true;
     emitConnectionState('disconnected');
   }
 
-  function processBinaryMessage(buf) {
-    if (model.skipNextDicomBinary) {
-      model.skipNextDicomBinary = false;
-      return;
-    }
-
-    const pending = model.pendingDicomSendCastMessage;
-    if (!pending || !pending.event) {
-      console.warn('CastClient: unexpected binary WebSocket message');
-      return;
-    }
-
-    model.pendingDicomSendCastMessage = null;
-    const context = pending.event.context;
+  function attachBinaryToBinaryResource(castMessage, buf, expectedMarker) {
+    const event = castMessage && castMessage.event;
+    const context = event && event.context;
     let items = [];
     if (Array.isArray(context)) {
       items = context;
     } else if (context != null) {
       items = [context];
     }
-    let attached = false;
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (item && typeof item === 'object') {
@@ -131,29 +120,88 @@ function vtkCastClient(publicAPI, model) {
         if (
           resource &&
           typeof resource === 'object' &&
-          resource.binaryTransfer === true
+          (expectedMarker === undefined ||
+            resource.binaryTransfer === expectedMarker)
         ) {
           delete resource.binaryTransfer;
+          delete resource.url;
+          delete resource.expiresAt;
           resource.data = buf;
-          attached = true;
-          break;
+          return true;
         }
       }
     }
+    return false;
+  }
 
-    if (!attached) {
-      console.warn(
-        'CastClient: binary frame did not match pending binary Cast message'
+  function processBinaryMessage(buf) {
+    console.warn(
+      `CastClient: unexpected binary WebSocket message (${buf.byteLength} bytes); hub uses http payloads`
+    );
+  }
+
+  function resolveHttpPayloadUrl(rawUrl) {
+    if (!rawUrl) {
+      return '';
+    }
+    try {
+      return new URL(rawUrl, model.hub.hub_endpoint).toString();
+    } catch (err) {
+      console.warn('CastClient: invalid http payload url', rawUrl, err);
+      return '';
+    }
+  }
+
+  async function processHttpPayloadMessage(castMessage, rawUrl) {
+    const resolved = resolveHttpPayloadUrl(rawUrl);
+    if (!resolved) {
+      return;
+    }
+    const startedAt =
+      typeof performance !== 'undefined' && performance.now
+        ? performance.now()
+        : Date.now();
+    try {
+      const response = await fetch(resolved, {
+        method: 'GET',
+        // Hub stores raw bytes by random token; no Authorization header for now.
+        // CORS: hub allows all origins by default (see cast_api.py CORSMiddleware).
+        credentials: 'omit',
+      });
+      if (!response.ok) {
+        console.warn(
+          `CastClient: http payload fetch ${response.status} ${response.statusText} url=${resolved}`
+        );
+        return;
+      }
+      const buf = await response.arrayBuffer();
+      const elapsedMs =
+        (typeof performance !== 'undefined' && performance.now
+          ? performance.now()
+          : Date.now()) - startedAt;
+      const throughput =
+        elapsedMs > 0
+          ? (buf.byteLength / (1024 * 1024) / (elapsedMs / 1000)).toFixed(2)
+          : 'n/a';
+      console.debug(
+        `CastClient: http payload received bytes=${buf.byteLength} ` +
+          `elapsed=${(elapsedMs / 1000).toFixed(
+            2
+          )}s throughput=${throughput} MB/s`
       );
-      return;
-    }
-
-    if (pending.id === model.hub.lastPublishedMessageID) {
-      return;
-    }
-
-    if (model.onMessageCallback) {
-      model.onMessageCallback(pending);
+      const attached = attachBinaryToBinaryResource(castMessage, buf, 'http');
+      if (!attached) {
+        console.warn('CastClient: http payload had no matching resource slot');
+        return;
+      }
+      if (castMessage.id === model.hub.lastPublishedMessageID) {
+        return;
+      }
+      if (model.onMessageCallback) {
+        model.onMessageCallback(castMessage);
+      }
+    } catch (err) {
+      console.warn('CastClient: http payload fetch error', err);
     }
   }
 
@@ -172,15 +220,23 @@ function vtkCastClient(publicAPI, model) {
         return;
       }
 
+      const mode = castBinaryTransferMode(event);
+
       if (castMessage.id === model.hub.lastPublishedMessageID) {
-        if (castBinaryTransferEventWaitsForBinaryFrame(event)) {
-          model.skipNextDicomBinary = true;
-        }
         return;
       }
 
-      if (castBinaryTransferEventWaitsForBinaryFrame(event)) {
-        model.pendingDicomSendCastMessage = castMessage;
+      if (mode === 'http') {
+        const url = castBinaryTransferHttpUrl(event);
+        if (!url) {
+          // Hub stripped the http marker (no payload) or marker arrived
+          // without a URL. Deliver as a plain JSON event.
+          if (model.onMessageCallback) {
+            model.onMessageCallback(castMessage);
+          }
+          return;
+        }
+        processHttpPayloadMessage(castMessage, url);
         return;
       }
 
@@ -715,6 +771,7 @@ function vtkCastClient(publicAPI, model) {
       }
     }
 
+    msg = stampHttpBinaryTransferForBinaryEvents(msg);
     msg = await normalizeDicomSendMessageStrict(msg);
     msg = await normalizeNiftiSendMessageStrict(msg);
     model.lastSentMessage = msg;
@@ -727,6 +784,71 @@ function vtkCastClient(publicAPI, model) {
           Authorization: `Bearer ${hub.token}`,
         },
         body: JSON.stringify(msg),
+      });
+      return response;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.debug('CastClient:', message);
+      return null;
+    }
+  };
+
+  // --------------------------------------------------------------------------
+
+  publicAPI.publishNiftiMultipart = async (
+    castMessage,
+    fileBytes,
+    hub = model.hub
+  ) => {
+    let msg = { ...castMessage, timestamp: new Date().toJSON() };
+    msg.id = generateMessageId(messageIdPrefix());
+    hub.lastPublishedMessageID = msg.id;
+
+    const subscriberName =
+      model.session.subscriberName && model.session.subscriberName.trim();
+    const subscriberProduct =
+      model.session.productName && model.session.productName.trim();
+    if (subscriberName && msg['subscriber.name'] === undefined) {
+      msg['subscriber.name'] = subscriberName;
+    }
+    if (subscriberProduct && msg['subscriber.product.name'] === undefined) {
+      msg['subscriber.product.name'] = subscriberProduct;
+    }
+
+    if (msg.event && !msg.event['hub.topic']) {
+      msg.event['hub.topic'] = model.session.topic;
+    }
+
+    if (msg['target.actor'] === undefined && model.session.defaultTargetActor) {
+      const wireTarget = resolveTargetActorForWire(
+        model.session.defaultTargetActor
+      );
+      if (wireTarget) {
+        msg['target.actor'] = wireTarget;
+      }
+    }
+
+    const raw = await toArrayBufferStrict(fileBytes);
+    msg = stampHttpBinaryTransferForBinaryEvents(msg);
+    msg = await normalizeNiftiSendMessageMetadataOnly(msg);
+    model.lastSentMessage = msg;
+
+    const fileName = niftiFileNameFromMessage(msg);
+    const formData = new FormData();
+    formData.append('message', JSON.stringify(msg));
+    formData.append(
+      'file',
+      new Blob([raw], { type: 'application/gzip' }),
+      fileName
+    );
+
+    try {
+      const response = await fetch(hub.hub_endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${hub.token}`,
+        },
+        body: formData,
       });
       return response;
     } catch (err) {

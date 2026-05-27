@@ -1,4 +1,4 @@
-export const BASE_URL: string = '/vtk-js/'
+export const BASE_URL: string = '/'
 
 export const withBase = (path: string): string => `${ BASE_URL + path }`.replace(/\/+/g, '/')
 
