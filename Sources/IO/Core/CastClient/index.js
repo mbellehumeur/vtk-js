@@ -7,13 +7,16 @@ import {
   productNameToMessageIdPrefix,
 } from './identity';
 import {
-  castBinaryTransferHttpUrl,
-  castBinaryTransferMode,
-  normalizeDicomSendMessageStrict,
-  normalizeNiftiSendMessageMetadataOnly,
-  normalizeNiftiSendMessageStrict,
-  niftiFileNameFromMessage,
-  stampHttpBinaryTransferForBinaryEvents,
+  binaryFileNameFromMessage,
+  extractFirstBinaryFileBytes,
+  extractStowBatchFileBytes,
+  firstPendingPayloadSlot,
+  hasPendingPayload,
+  listPendingPayloadSlots,
+  messageNeedsMultipartPublish,
+  messageNeedsStowBatchPublish,
+  normalizeBinaryPublishMessageMetadataOnly,
+  normalizeStowBatchMessageMetadataOnly,
   toArrayBufferStrict,
 } from './sendNormalize';
 import {
@@ -29,15 +32,22 @@ import {
 // live example: /examples/CastClient.html
 
 export { generateSubscriberName };
-export {
-  buildDicomTransferRequestMessage,
-  buildDicomTransferFilePublishMessage,
-  buildDicomTransferCompletePublishMessage,
-  DICOM_TRANSFER_DATA_TYPE,
-} from './dicomTransfer';
 
 const RECONNECT_INTERVAL_MS = 10000;
 const SUBSCRIBE_TIMEOUT_MS = 5000;
+const HTTP_PAYLOAD_MAX_CONCURRENT = 25;
+
+function normalizeLoopbackUrl(urlString) {
+  try {
+    const parsed = new URL(urlString);
+    if (parsed.hostname.toLowerCase() === 'localhost') {
+      parsed.hostname = '127.0.0.1';
+    }
+    return parsed.toString();
+  } catch (err) {
+    return urlString;
+  }
+}
 
 // ----------------------------------------------------------------------------
 // Object factory
@@ -104,8 +114,67 @@ function vtkCastClient(publicAPI, model) {
     emitConnectionState('disconnected');
   }
 
-  function attachBinaryToBinaryResource(castMessage, buf, expectedMarker) {
+  function attachPayloadToSlot(castMessage, buf, slot) {
     const event = castMessage && castMessage.event;
+    if (!event || !slot) {
+      return false;
+    }
+    if (slot.kind === 'files') {
+      const ctx = event.context;
+      const files = ctx && ctx.files;
+      const entry = files && files[slot.index];
+      if (entry && typeof entry === 'object') {
+        delete entry.binaryTransfer;
+        delete entry.url;
+        delete entry.payloadId;
+        delete entry.expiresAt;
+        entry.data = buf;
+        entry.byteLength = buf.byteLength;
+        return true;
+      }
+      return false;
+    }
+    const context = event.context;
+    let items = [];
+    if (Array.isArray(context)) {
+      items = context;
+    } else if (context != null) {
+      items = [context];
+    }
+    const item = items[slot.index];
+    if (item && typeof item === 'object') {
+      const resource = item.resource;
+      if (resource && typeof resource === 'object') {
+        delete resource.binaryTransfer;
+        delete resource.url;
+        delete resource.payloadId;
+        delete resource.expiresAt;
+        resource.data = buf;
+        resource.byteLength = buf.byteLength;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function attachPayloadToResource(castMessage, buf) {
+    const event = castMessage && castMessage.event;
+    const slot = event && firstPendingPayloadSlot(event);
+    if (slot && slot.kind === 'files') {
+      const ctx = event.context;
+      const files = ctx && ctx.files;
+      const entry = files && files[slot.index];
+      if (entry && typeof entry === 'object') {
+        delete entry.binaryTransfer;
+        delete entry.url;
+        delete entry.payloadId;
+        delete entry.expiresAt;
+        entry.data = buf;
+        entry.byteLength = buf.byteLength;
+        return true;
+      }
+      return false;
+    }
     const context = event && event.context;
     let items = [];
     if (Array.isArray(context)) {
@@ -117,16 +186,13 @@ function vtkCastClient(publicAPI, model) {
       const item = items[i];
       if (item && typeof item === 'object') {
         const resource = item.resource;
-        if (
-          resource &&
-          typeof resource === 'object' &&
-          (expectedMarker === undefined ||
-            resource.binaryTransfer === expectedMarker)
-        ) {
+        if (resource && typeof resource === 'object') {
           delete resource.binaryTransfer;
           delete resource.url;
+          delete resource.payloadId;
           delete resource.expiresAt;
           resource.data = buf;
+          resource.byteLength = buf.byteLength;
           return true;
         }
       }
@@ -134,75 +200,55 @@ function vtkCastClient(publicAPI, model) {
     return false;
   }
 
-  function processBinaryMessage(buf) {
-    console.warn(
-      `CastClient: unexpected binary WebSocket message (${buf.byteLength} bytes); hub uses http payloads`
+  function buildStowRelatedBody(boundary, jsonText, dicomBuffers) {
+    const enc = new TextEncoder();
+    const crlf = enc.encode('\r\n');
+    const chunks = [];
+    const pushText = (text) => {
+      chunks.push(enc.encode(text));
+    };
+    pushText(
+      `--${boundary}\r\nContent-Type: application/dicom+json\r\n\r\n${jsonText}\r\n`
     );
+    for (let i = 0; i < dicomBuffers.length; i++) {
+      pushText(`--${boundary}\r\nContent-Type: application/dicom\r\n\r\n`);
+      chunks.push(new Uint8Array(dicomBuffers[i]));
+      chunks.push(crlf);
+    }
+    pushText(`--${boundary}--\r\n`);
+    return new Blob(chunks);
   }
 
-  function resolveHttpPayloadUrl(rawUrl) {
-    if (!rawUrl) {
+  function resolvePayloadUrl(payloadId) {
+    if (!payloadId) {
       return '';
     }
     try {
-      return new URL(rawUrl, model.hub.hub_endpoint).toString();
-    } catch (err) {
-      console.warn('CastClient: invalid http payload url', rawUrl, err);
-      return '';
-    }
-  }
-
-  async function processHttpPayloadMessage(castMessage, rawUrl) {
-    const resolved = resolveHttpPayloadUrl(rawUrl);
-    if (!resolved) {
-      return;
-    }
-    const startedAt =
-      typeof performance !== 'undefined' && performance.now
-        ? performance.now()
-        : Date.now();
-    try {
-      const response = await fetch(resolved, {
-        method: 'GET',
-        // Hub stores raw bytes by random token; no Authorization header for now.
-        // CORS: hub allows all origins by default (see cast_api.py CORSMiddleware).
-        credentials: 'omit',
-      });
-      if (!response.ok) {
-        console.warn(
-          `CastClient: http payload fetch ${response.status} ${response.statusText} url=${resolved}`
-        );
-        return;
-      }
-      const buf = await response.arrayBuffer();
-      const elapsedMs =
-        (typeof performance !== 'undefined' && performance.now
-          ? performance.now()
-          : Date.now()) - startedAt;
-      const throughput =
-        elapsedMs > 0
-          ? (buf.byteLength / (1024 * 1024) / (elapsedMs / 1000)).toFixed(2)
-          : 'n/a';
-      console.debug(
-        `CastClient: http payload received bytes=${buf.byteLength} ` +
-          `elapsed=${(elapsedMs / 1000).toFixed(
-            2
-          )}s throughput=${throughput} MB/s`
+      const path = `/api/hub/payloads/${encodeURIComponent(payloadId)}`;
+      return normalizeLoopbackUrl(
+        new URL(path, model.hub.hub_endpoint).toString()
       );
-      const attached = attachBinaryToBinaryResource(castMessage, buf, 'http');
-      if (!attached) {
-        console.warn('CastClient: http payload had no matching resource slot');
-        return;
-      }
-      if (castMessage.id === model.hub.lastPublishedMessageID) {
-        return;
-      }
-      if (model.onMessageCallback) {
-        model.onMessageCallback(castMessage);
-      }
     } catch (err) {
-      console.warn('CastClient: http payload fetch error', err);
+      console.warn('CastClient: invalid payloadId url', payloadId, err);
+      return '';
     }
+  }
+
+  async function downloadPayloadBytes(payloadId) {
+    const resolved = resolvePayloadUrl(payloadId);
+    if (!resolved) {
+      throw new Error('CastClient.fetchPayload: missing or invalid payloadId');
+    }
+    const response = await fetch(resolved, {
+      method: 'GET',
+      credentials: 'omit',
+    });
+    if (!response.ok) {
+      throw new Error(
+        `CastClient.fetchPayload: GET ${response.status} ${response.statusText}`
+      );
+    }
+    return response.arrayBuffer();
   }
 
   function processTextMessage(eventData) {
@@ -220,23 +266,7 @@ function vtkCastClient(publicAPI, model) {
         return;
       }
 
-      const mode = castBinaryTransferMode(event);
-
       if (castMessage.id === model.hub.lastPublishedMessageID) {
-        return;
-      }
-
-      if (mode === 'http') {
-        const url = castBinaryTransferHttpUrl(event);
-        if (!url) {
-          // Hub stripped the http marker (no payload) or marker arrived
-          // without a URL. Deliver as a plain JSON event.
-          if (model.onMessageCallback) {
-            model.onMessageCallback(castMessage);
-          }
-          return;
-        }
-        processHttpPayloadMessage(castMessage, url);
         return;
       }
 
@@ -606,7 +636,6 @@ function vtkCastClient(publicAPI, model) {
         }
 
         model.hub.websocket = new WebSocket(normalizedWebsocketUrl);
-        model.hub.websocket.binaryType = 'arraybuffer';
         model.hub.websocket.onopen = function onOpen() {
           this.send(`{"hub.channel.endpoint":"${normalizedWebsocketUrl}"}`);
           emitConnectionState('connected');
@@ -614,8 +643,6 @@ function vtkCastClient(publicAPI, model) {
         model.hub.websocket.addEventListener('message', (ev) => {
           if (typeof ev.data === 'string') {
             processTextMessage(ev.data);
-          } else if (ev.data instanceof ArrayBuffer) {
-            processBinaryMessage(ev.data);
           }
         });
         model.hub.websocket.addEventListener('close', websocketClose);
@@ -742,8 +769,8 @@ function vtkCastClient(publicAPI, model) {
 
   // --------------------------------------------------------------------------
 
-  publicAPI.publish = async (castMessage, hub = model.hub) => {
-    let msg = { ...castMessage, timestamp: new Date().toJSON() };
+  function preparePublishMessage(castMessage, hub = model.hub) {
+    const msg = { ...castMessage, timestamp: new Date().toJSON() };
     msg.id = generateMessageId(messageIdPrefix());
     hub.lastPublishedMessageID = msg.id;
 
@@ -771,9 +798,183 @@ function vtkCastClient(publicAPI, model) {
       }
     }
 
-    msg = stampHttpBinaryTransferForBinaryEvents(msg);
-    msg = await normalizeDicomSendMessageStrict(msg);
-    msg = await normalizeNiftiSendMessageStrict(msg);
+    return msg;
+  }
+
+  // --------------------------------------------------------------------------
+
+  publicAPI.fetchPayload = async (castMessage) => {
+    const event = castMessage && castMessage.event;
+    if (!event || !hasPendingPayload(event)) {
+      return castMessage;
+    }
+    const slot = firstPendingPayloadSlot(event);
+    const payloadId = slot ? slot.payloadId : '';
+    const startedAt =
+      typeof performance !== 'undefined' && performance.now
+        ? performance.now()
+        : Date.now();
+    const buf = await downloadPayloadBytes(payloadId);
+    const enriched = JSON.parse(JSON.stringify(castMessage));
+    const attached = attachPayloadToResource(enriched, buf);
+    if (!attached) {
+      throw new Error('CastClient.fetchPayload: no payload slot on message');
+    }
+    const elapsedMs =
+      (typeof performance !== 'undefined' && performance.now
+        ? performance.now()
+        : Date.now()) - startedAt;
+    console.debug(
+      `CastClient: payload fetched payloadId=${payloadId.slice(0, 8)}... ` +
+        `bytes=${buf.byteLength} elapsed=${(elapsedMs / 1000).toFixed(2)}s`
+    );
+    return enriched;
+  };
+
+  publicAPI.fetchAllPayloads = async (castMessage) => {
+    const event = castMessage && castMessage.event;
+    const slots = event ? listPendingPayloadSlots(event) : [];
+    if (!slots.length) {
+      return castMessage;
+    }
+    let msg = castMessage;
+    for (let start = 0; start < slots.length; start += HTTP_PAYLOAD_MAX_CONCURRENT) {
+      const batch = slots.slice(start, start + HTTP_PAYLOAD_MAX_CONCURRENT);
+      // eslint-disable-next-line no-await-in-loop
+      const buffers = await Promise.all(
+        batch.map((slot) => downloadPayloadBytes(slot.payloadId))
+      );
+      for (let i = 0; i < batch.length; i++) {
+        if (!attachPayloadToSlot(msg, buffers[i], batch[i])) {
+          throw new Error('CastClient.fetchAllPayloads: attach failed');
+        }
+      }
+    }
+    return msg;
+  };
+
+  publicAPI.hasPendingPayload = (castMessage) => {
+    const event = castMessage && castMessage.event;
+    return Boolean(event && hasPendingPayload(event));
+  };
+
+  function firstResourceMime(msg) {
+    const event = msg && msg.event;
+    const contextValue = event && event.context;
+    let items = [];
+    if (Array.isArray(contextValue)) {
+      items = contextValue;
+    } else if (contextValue != null) {
+      items = [contextValue];
+    }
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item && typeof item === 'object' && item.resource) {
+        return item.resource;
+      }
+    }
+    return null;
+  }
+
+  // --------------------------------------------------------------------------
+
+  publicAPI.publishMultipart = async (
+    castMessage,
+    fileBytes,
+    hub = model.hub
+  ) => {
+    let msg = preparePublishMessage(castMessage, hub);
+    const raw = await toArrayBufferStrict(fileBytes);
+    msg = await normalizeBinaryPublishMessageMetadataOnly(msg);
+    model.lastSentMessage = msg;
+
+    const hubEvent =
+      msg.event && typeof msg.event['hub.event'] === 'string'
+        ? msg.event['hub.event']
+        : '';
+    const defaultName =
+      hubEvent === 'dicom-send' ? 'dicom-send.dcm' : 'nifti-send.nii.gz';
+    const fileName = binaryFileNameFromMessage(msg, defaultName);
+    const resource = msg.event && firstResourceMime(msg);
+    const formData = new FormData();
+    formData.append('message', JSON.stringify(msg));
+    formData.append(
+      'file',
+      new Blob([raw], {
+        type: (resource && resource.mimeType) || 'application/octet-stream',
+      }),
+      fileName
+    );
+
+    try {
+      const response = await fetch(hub.hub_endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${hub.token}`,
+        },
+        body: formData,
+      });
+      return response;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.debug('CastClient:', message);
+      return null;
+    }
+  };
+
+  // --------------------------------------------------------------------------
+
+  publicAPI.publishStowBatch = async (
+    castMessage,
+    fileBytesList,
+    hub = model.hub
+  ) => {
+    let msg = preparePublishMessage(castMessage, hub);
+    const rawList = await Promise.all(
+      (fileBytesList || []).map((bytes) => toArrayBufferStrict(bytes))
+    );
+    msg = await normalizeStowBatchMessageMetadataOnly(msg);
+    model.lastSentMessage = msg;
+
+    const boundary = `cast-stow-${generateMessageId(messageIdPrefix())}`;
+    const body = buildStowRelatedBody(boundary, JSON.stringify(msg), rawList);
+
+    try {
+      const response = await fetch(hub.hub_endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${hub.token}`,
+          'Content-Type': `multipart/related; boundary="${boundary}"; type="application/dicom"`,
+        },
+        body,
+      });
+      return response;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.debug('CastClient:', message);
+      return null;
+    }
+  };
+
+  // --------------------------------------------------------------------------
+
+  publicAPI.publish = async (castMessage, hub = model.hub) => {
+    const msg = preparePublishMessage(castMessage, hub);
+
+    if (messageNeedsStowBatchPublish(msg)) {
+      const fileBytesList = await extractStowBatchFileBytes(msg);
+      if (fileBytesList.length) {
+        return publicAPI.publishStowBatch(msg, fileBytesList, hub);
+      }
+    }
+
+    if (messageNeedsMultipartPublish(msg)) {
+      const fileBytes = await extractFirstBinaryFileBytes(msg);
+      if (fileBytes) {
+        return publicAPI.publishMultipart(msg, fileBytes, hub);
+      }
+    }
+
     model.lastSentMessage = msg;
 
     try {
@@ -795,68 +996,8 @@ function vtkCastClient(publicAPI, model) {
 
   // --------------------------------------------------------------------------
 
-  publicAPI.publishNiftiMultipart = async (
-    castMessage,
-    fileBytes,
-    hub = model.hub
-  ) => {
-    let msg = { ...castMessage, timestamp: new Date().toJSON() };
-    msg.id = generateMessageId(messageIdPrefix());
-    hub.lastPublishedMessageID = msg.id;
-
-    const subscriberName =
-      model.session.subscriberName && model.session.subscriberName.trim();
-    const subscriberProduct =
-      model.session.productName && model.session.productName.trim();
-    if (subscriberName && msg['subscriber.name'] === undefined) {
-      msg['subscriber.name'] = subscriberName;
-    }
-    if (subscriberProduct && msg['subscriber.product.name'] === undefined) {
-      msg['subscriber.product.name'] = subscriberProduct;
-    }
-
-    if (msg.event && !msg.event['hub.topic']) {
-      msg.event['hub.topic'] = model.session.topic;
-    }
-
-    if (msg['target.actor'] === undefined && model.session.defaultTargetActor) {
-      const wireTarget = resolveTargetActorForWire(
-        model.session.defaultTargetActor
-      );
-      if (wireTarget) {
-        msg['target.actor'] = wireTarget;
-      }
-    }
-
-    const raw = await toArrayBufferStrict(fileBytes);
-    msg = stampHttpBinaryTransferForBinaryEvents(msg);
-    msg = await normalizeNiftiSendMessageMetadataOnly(msg);
-    model.lastSentMessage = msg;
-
-    const fileName = niftiFileNameFromMessage(msg);
-    const formData = new FormData();
-    formData.append('message', JSON.stringify(msg));
-    formData.append(
-      'file',
-      new Blob([raw], { type: 'application/gzip' }),
-      fileName
-    );
-
-    try {
-      const response = await fetch(hub.hub_endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${hub.token}`,
-        },
-        body: formData,
-      });
-      return response;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.debug('CastClient:', message);
-      return null;
-    }
-  };
+  publicAPI.publishNiftiMultipart = async (castMessage, fileBytes, hub) =>
+    publicAPI.publishMultipart(castMessage, fileBytes, hub);
 
   // --------------------------------------------------------------------------
 
