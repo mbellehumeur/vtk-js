@@ -50,8 +50,15 @@
 import '@kitware/vtk.js/favicon';
 
 import vtkCastClient, {
+  buildDicomwebImagingStudyOpenContext,
+  buildFilesImagingStudyOpenContext,
+  extractVolviewSampleId,
   generateSubscriberName,
+  isHubEndpointInCloud,
+  isRunningInCloud,
+  selectFirstMatchingHubKey,
 } from 'vtk.js/Sources/IO/Core/CastClient';
+import html2canvas from 'html2canvas';
 import { isRequestEvent, requestEventFor } from '../eventNames';
 
 import style from './CastClient.module.css';
@@ -70,8 +77,13 @@ const MESSAGE_KIND_CLASS = {
   err: style.msgErr,
 };
 
+/** Worklist client identity (not derived from hub preset). */
+const EXAMPLE_PRODUCT_NAME = 'VTKJS-WKLST';
+const EXAMPLE_SUBSCRIBER_PREFIX = EXAMPLE_PRODUCT_NAME;
+
 const DEFAULT_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
-const DEFAULT_SUBSCRIBE_EVENTS = 'imagingstudy-open,imagingstudy-close';
+const DEFAULT_SUBSCRIBE_EVENTS =
+  'imagingstudy-open,imagingstudy-close,fhircastcontext-request,subscription-removed';
 const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}"]`;
 const DEFAULT_GET_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const DEFAULT_TARGET_ACTOR_KEYWORD = '*';
@@ -82,6 +94,406 @@ const EMPTY_FHIRCAST_CONTEXT = {
   'context.type': '',
   context: [],
 };
+
+const WORKLIST_SPECIALITY_VOLVIEW = 'volviewSample';
+const WORKLIST_SPECIALITY_SLICER = 'slicerSamples';
+const WORKLIST_SPECIALITY_IDC = 'idcSelection';
+
+/** IDC-maintained DICOMweb proxy (see learn.canceridc.dev). */
+const IDC_DICOMWEB_ROOT =
+  'https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb';
+
+const SLICER_TESTING_DATA_URL =
+  'https://github.com/Slicer/SlicerTestingData/releases/download/';
+const SLICER_DATA_STORE_URL =
+  'https://github.com/Slicer/SlicerDataStore/releases/download/';
+
+const EXAMPLE_PAGE_TITLE_SUB = 'vtk.js IO module example';
+
+const CAST_STANDARD_CAST = 'cast';
+const CAST_STANDARD_FHIRCAST_V3 = 'fhircast-v3';
+const CAST_STANDARD_DEFAULT = CAST_STANDARD_CAST;
+const FHIRCAST_V3_COMING_SOON_MESSAGE =
+  'FHIRcast v3.0 is coming this fall to this client library !';
+
+const TITLE_BY_CAST_STANDARD = {
+  [CAST_STANDARD_CAST]: 'Worklist with cast interface',
+  [CAST_STANDARD_FHIRCAST_V3]: 'Worklist with FHIRcast interface',
+};
+
+function titleMainForCastStandard(standard) {
+  return (
+    TITLE_BY_CAST_STANDARD[standard] ||
+    TITLE_BY_CAST_STANDARD[CAST_STANDARD_DEFAULT]
+  );
+}
+
+/** Mirrors VolView ``SAMPLE_DATA`` (VolView/src/config.ts). */
+const VOLVIEW_SAMPLE_STUDIES = [
+  {
+    id: 'cta-head',
+    name: 'CTA Head and Neck',
+    filename: 'CTA-Head_and_Neck.zip',
+    size: '80 MB',
+    description: 'CTA head and neck scan of elderly patient with tumor.',
+    url: 'https://data.kitware.com/api/v1/item/6347159711dab81428208e24/download',
+  },
+  {
+    id: 'mra-head',
+    name: 'MRA Head and Neck',
+    filename: 'MRA-Head_and_Neck.zip',
+    size: '15 MB',
+    description: 'MRA from Patient Contributed Image Repository.',
+    url: 'https://data.kitware.com/api/v1/item/6352a2b311dab8142820a33b/download',
+  },
+  {
+    id: 'mri-cardiac',
+    name: 'MRI Cardiac 3D and Cine',
+    filename: 'MRI-Cardiac-3D_and_Cine.zip',
+    size: '4 MB',
+    description:
+      'MRI scan with two series: 3D axial non-gated and 2 chamber cine.',
+    url: 'https://data.kitware.com/api/v1/item/6350b28f11dab8142820949d/download',
+  },
+  {
+    id: 'mri-prostatex',
+    name: 'MRI PROSTATEx',
+    filename: 'MRI-PROSTATEx-0004.zip',
+    size: '3 MB',
+    description: 'MRI from the SPIE-AAPM-NCI PROSTATEx challenge.',
+    url: 'https://data.kitware.com/api/v1/item/63527c7311dab8142820a338/download',
+  },
+  {
+    id: 'us-fetus',
+    name: '3D US Fetus',
+    filename: '3DUS-Fetus.mha',
+    size: '8 MB',
+    description: '3D ultrasound of a baby. Downloaded from tomovision.com.',
+    url: 'https://data.kitware.com/api/v1/item/635679c311dab8142820a4f4/download',
+  },
+];
+
+/**
+ * Mirrors 3D Slicer SampleData ``registerBuiltInSampleDataSources()`` (General).
+ * @see Slicer/Modules/Scripted/SampleData/SampleData.py
+ */
+const SLICER_SAMPLE_STUDIES = [
+  {
+    id: 'MRHead',
+    name: 'MRHead',
+    size: '~15 MB',
+    description: 'MR head (Slicer built-in sample).',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/cc211f0dfd9a05ca3841ce1141b292898b2dd2d3f08286affadf823a7e58df93`,
+        fileName: 'MR-head.nrrd',
+        label: 'MRHead',
+      },
+    ],
+  },
+  {
+    id: 'CTChest',
+    name: 'CTChest',
+    size: '~25 MB',
+    description: 'CT chest (Slicer built-in sample).',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/4507b664690840abb6cb9af2d919377ffc4ef75b167cb6fd0f747befdb12e38e`,
+        fileName: 'CT-chest.nrrd',
+        label: 'CTChest',
+      },
+    ],
+  },
+  {
+    id: 'CTACardio',
+    name: 'CTACardio',
+    size: '~40 MB',
+    description: 'CTA cardio (Slicer built-in sample).',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/3b0d4eb1a7d8ebb0c5a89cc0504640f76a030b4e869e33ff34c564c3d3b88ad2`,
+        fileName: 'CTA-cardio.nrrd',
+        label: 'CTACardio',
+      },
+    ],
+  },
+  {
+    id: 'DTIBrain',
+    name: 'DTIBrain',
+    size: '~20 MB',
+    description: 'DTI brain (Slicer built-in sample).',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/5c78d00c86ae8d968caa7a49b870ef8e1c04525b1abc53845751d8bce1f0b91a`,
+        fileName: 'DTI-Brain.nrrd',
+        label: 'DTIBrain',
+      },
+    ],
+  },
+  {
+    id: 'MRBrainTumor1',
+    name: 'MRBrainTumor1',
+    size: '~25 MB',
+    description: 'MR brain tumor — registration library case 1.',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95`,
+        fileName: 'RegLib_C01_1.nrrd',
+        label: 'MRBrainTumor1',
+      },
+    ],
+  },
+  {
+    id: 'MRBrainTumor2',
+    name: 'MRBrainTumor2',
+    size: '~25 MB',
+    description: 'MR brain tumor — registration library case 2.',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97`,
+        fileName: 'RegLib_C01_2.nrrd',
+        label: 'MRBrainTumor2',
+      },
+    ],
+  },
+  {
+    id: 'BaselineVolume',
+    name: 'BaselineVolume',
+    size: '~30 MB',
+    description: 'Baseline volume (Slicer built-in sample).',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/dff28a7711d20b6e16d5416535f6010eb99fd0c8468aaa39be4e39da78e93ec2`,
+        fileName: 'BaselineVolume.nrrd',
+        label: 'BaselineVolume',
+      },
+    ],
+  },
+  {
+    id: 'DTIVolume',
+    name: 'DTIVolume',
+    size: 'Multi-file',
+    description: 'DTI volume (.nhdr + .raw.gz pair).',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/67564aa42c7e2eec5c3fd68afb5a910e9eab837b61da780933716a3b922e50fe`,
+        fileName: 'DTIVolume.nhdr',
+        role: 'header',
+        label: 'DTIVolume',
+      },
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/d785837276758ddd9d21d76a3694e7fd866505a05bc305793517774c117cb38d`,
+        fileName: 'DTIVolume.raw.gz',
+        role: 'data',
+        label: 'DTIVolume',
+      },
+    ],
+  },
+  {
+    id: 'DWIVolume',
+    name: 'DWIVolume',
+    size: 'Multi-file',
+    description: 'DWI volume (.nhdr + .raw.gz pair).',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/7666d83bc205382e418444ea60ab7df6dba6a0bd684933df8809da6b476b0fed`,
+        fileName: 'dwi.nhdr',
+        role: 'header',
+        label: 'dwi',
+      },
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/cf03fd53583dc05120d3314d0a82bdf5946799b1f72f2a7f08963f3fd24ca692`,
+        fileName: 'dwi.raw.gz',
+        role: 'data',
+        label: 'dwi',
+      },
+    ],
+  },
+  {
+    id: 'CTAAbdomenPanoramix',
+    name: 'CTA abdomen (Panoramix)',
+    size: '~45 MB',
+    description:
+      'CTA abdomen (Panoramix) — research/teaching use per Slicer SampleData.',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/146af87511520c500a3706b7b2bfb545f40d5d04dd180be3a7a2c6940e447433`,
+        fileName: 'Panoramix-cropped.nrrd',
+        label: 'Panoramix-cropped',
+      },
+    ],
+  },
+  {
+    id: 'CBCTDentalSurgery',
+    name: 'CBCTDentalSurgery',
+    size: 'Multi-file',
+    description: 'Pre- and post-dental surgery CBCT volumes.',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/7bfa16945629c319a439f414cfb7edddd2a97ba97753e12eede3b56a0eb09968`,
+        fileName: 'PreDentalSurgery.gipl.gz',
+        label: 'PreDentalSurgery',
+      },
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/4cdc3dc35519bb57daeef4e5df89c00849750e778809e94971d3876f95cc7bbd`,
+        fileName: 'PostDentalSurgery.gipl.gz',
+        label: 'PostDentalSurgery',
+      },
+    ],
+  },
+  {
+    id: 'MRUSProstate',
+    name: 'MR-US Prostate',
+    size: 'Multi-file',
+    description: 'MR and resampled ultrasound prostate (Case10).',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/4843cdc9ea5d7bcce61650d1492ce01035727c892019339dca726380496896aa`,
+        fileName: 'Case10-MR.nrrd',
+        label: 'MRProstate',
+      },
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/34decf58b1e6794069acbe947b460252262fe95b6858c5e320aeab03bc82ebb2`,
+        fileName: 'case10_US_resampled.nrrd',
+        label: 'USProstate',
+      },
+    ],
+  },
+  {
+    id: 'CTMRBrain',
+    name: 'CT-MR Brain',
+    size: 'Multi-file',
+    description: 'CT brain with MR T1 and T2 (three volumes).',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/6a5b6caccb76576a863beb095e3bfb910c50ca78f4c9bf043aa42f976cfa53d1`,
+        fileName: 'CT-brain.nrrd',
+        label: 'CTBrain',
+      },
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/2da3f655ed20356ee8cdf32aa0f8f9420385de4b6e407d28e67f9974d7ce1593`,
+        fileName: 'MR-brain-T1.nrrd',
+        label: 'MRBrainT1',
+      },
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/fa1fe5910a69182f2b03c0150d8151ac6c75df986449fb5a6c5ae67141e0f5e7`,
+        fileName: 'MR-brain-T2.nrrd',
+        label: 'MRBrainT2',
+      },
+    ],
+  },
+  {
+    id: 'CBCTMRHead',
+    name: 'CBCT-MR Head',
+    size: 'Multi-file',
+    description: 'CBCT and MR head (DZ-CBCT / DZ-MR).',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/4ce7aa75278b5a7b757ed0c8d7a6b3caccfc3e2973b020532456dbc8f3def7db`,
+        fileName: 'DZ-CBCT.nrrd',
+        label: 'DZ-CBCT',
+      },
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/b5e9f8afac58d6eb0e0d63d059616c25a98e0beb80f3108410b15260a6817842`,
+        fileName: 'DZ-MR.nrrd',
+        label: 'DZ-MR',
+      },
+    ],
+  },
+  {
+    id: 'CTLiver',
+    name: 'CTLiver',
+    size: '~35 MB',
+    description: 'CT liver (Medical Decathlon Task03_Liver).',
+    files: [
+      {
+        url: `${SLICER_TESTING_DATA_URL}SHA256/e16eae0ae6fefa858c5c11e58f0f1bb81834d81b7102e021571056324ef6f37e`,
+        fileName: 'CTLiver.nrrd',
+        label: 'CTLiver',
+      },
+    ],
+  },
+  {
+    id: 'CTPCardioSeq',
+    name: 'CTP Cardio Sequence',
+    size: '~180 MB',
+    description:
+      'CTP cardiac sequence (.seq.nrrd). Best opened in 3D Slicer (SequenceFile).',
+    files: [
+      {
+        url: `${SLICER_DATA_STORE_URL}SHA256/7fbb6ad0aed9c00820d66e143c2f037568025ed63db0a8db05ae7f26affeb1c2`,
+        fileName: 'CTP-cardio.seq.nrrd',
+        label: 'CTPCardioSeq',
+      },
+    ],
+  },
+  {
+    id: 'CTCardioSeq',
+    name: 'CT Cardio Sequence',
+    size: '~180 MB',
+    description:
+      'CT cardiac sequence (.seq.nrrd). Best opened in 3D Slicer (SequenceFile).',
+    files: [
+      {
+        url: `${SLICER_DATA_STORE_URL}SHA256/d1a1119969acead6c39c7c3ec69223fa2957edc561bc5bf384a203e2284dbc93`,
+        fileName: 'CT-cardio.seq.nrrd',
+        label: 'CTCardioSeq',
+      },
+    ],
+  },
+];
+
+/**
+ * Curated IDC studies via DICOMweb (StudyInstanceUID / optional SeriesInstanceUID).
+ * @see https://learn.canceridc.dev/portal/visualization
+ * @see https://learn.canceridc.dev/data/downloading-data/dicomweb-access
+ */
+const IDC_SAMPLE_STUDIES = [
+  {
+    id: 'idc-portal-demo-series-1',
+    name: 'IDC portal demo (series 1)',
+    size: 'DICOMweb',
+    description:
+      'Example series from IDC visualization docs. Opens one series via DICOMweb.',
+    studyInstanceUID:
+      '1.3.6.1.4.1.14519.5.2.1.6279.6001.224985459390356936417021464571',
+    seriesInstanceUID: '1.2.276.0.7230010.3.1.3.0.57823.1553343864.578877',
+    dicomwebRoot: IDC_DICOMWEB_ROOT,
+  },
+  {
+    id: 'idc-portal-demo-series-2',
+    name: 'IDC portal demo (series 2)',
+    size: 'DICOMweb',
+    description:
+      'Second example series from the same IDC demo study (DICOMweb).',
+    studyInstanceUID:
+      '1.3.6.1.4.1.14519.5.2.1.6279.6001.224985459390356936417021464571',
+    seriesInstanceUID:
+      '1.3.6.1.4.1.14519.5.2.1.6279.6001.273525289046256012743471155680',
+    dicomwebRoot: IDC_DICOMWEB_ROOT,
+  },
+  {
+    id: 'idc-portal-demo-study',
+    name: 'IDC portal demo (whole study)',
+    size: 'DICOMweb',
+    description:
+      'Same demo study without a series UID; VolView loads the first series.',
+    studyInstanceUID:
+      '1.3.6.1.4.1.14519.5.2.1.6279.6001.224985459390356936417021464571',
+    dicomwebRoot: IDC_DICOMWEB_ROOT,
+  },
+  {
+    id: 'idc-prostatex-mr',
+    name: 'PROSTATEx MR (IDC / VolView fixture UID)',
+    size: 'DICOMweb',
+    description:
+      'Study UID used in VolView session fixtures; verify availability in IDC.',
+    studyInstanceUID:
+      '1.3.6.1.4.1.14519.5.2.1.7311.5101.206828891270520544417996275680.5tse2d1254.538438420111018.1D000000SN0D000000S0D000000S0D000000S0D970296SN0D241922',
+    dicomwebRoot: IDC_DICOMWEB_ROOT,
+  },
+];
+
 const OPENIGT_LINK_ACTOR_TOOLTIP =
   'Image Guided Therapy link\nA system that handles navigation and other dataTypes';
 
@@ -146,50 +558,66 @@ const IHE_ACTORS_LABEL_TITLE = ` title="${escapeHtmlAttr(
   formatIheActorsTooltip()
 )}"`;
 
+const CAST_EXAMPLE_USER_NAME_KEY = 'castExample.userName';
+
+/** Preset keys tried in order when matching page deployment (local vs cloud). */
+const HUB_PRESET_ORDER = ['local', 'cloud'];
+
+function getStoredCastUserName() {
+  try {
+    return localStorage.getItem(CAST_EXAMPLE_USER_NAME_KEY)?.trim() || '';
+  } catch (err) {
+    return '';
+  }
+}
+
+function setStoredCastUserName(userName) {
+  const trimmed = String(userName || '').trim();
+  try {
+    if (trimmed) {
+      localStorage.setItem(CAST_EXAMPLE_USER_NAME_KEY, trimmed);
+    } else {
+      localStorage.removeItem(CAST_EXAMPLE_USER_NAME_KEY);
+    }
+  } catch (err) {
+    // ignore quota / private mode
+  }
+}
+
 const HUB_DEFINITIONS = {
-  volviewLocal: {
-    hubEndpoint: 'http://127.0.0.1:4014/api/hub',
-    authorizeEndpoint: 'http://127.0.0.1:4014/oauth/authorize',
-    authEndpoint: 'http://127.0.0.1:4014/oauth/token',
-    product_name: 'VTKJS-WKLST',
-    product_version: '1.0',
-    client_id: 'client_id_volview_server',
-    client_secret: 'client_secret_volview_server',
-  },
-  volviewCloud: {
-    hubEndpoint:
-      'https://volview-server-with-hub-g2d9hcc5esahgxe8.westeurope-01.azurewebsites.net/api/hub',
-    authorizeEndpoint:
-      'https://volview-server-with-hub-g2d9hcc5esahgxe8.westeurope-01.azurewebsites.net/oauth/authorize',
-    authEndpoint:
-      'https://volview-server-with-hub-g2d9hcc5esahgxe8.westeurope-01.azurewebsites.net/oauth/token',
-    product_name: 'VTKJS-WKLST',
-    product_version: '1.0',
-    client_id: 'client_id_volview_server',
-    client_secret: 'client_secret_volview_server',
-  },
   local: {
-    hubEndpoint: 'http://127.0.0.1:2017/api/hub',
-    authorizeEndpoint: 'http://127.0.0.1:2017/oauth/authorize',
-    authEndpoint: 'http://127.0.0.1:2017/oauth/token',
-    product_name: 'SLICER-HUB',
-    product_version: '1.0',
+    label: '3D Slicer local',
+    hubEndpoint: 'http://127.0.0.1:2018/api/hub',
+    authorizeEndpoint: 'http://127.0.0.1:2018/oauth/authorize',
+    authEndpoint: 'http://127.0.0.1:2018/oauth/token',
     client_id: 'client_id_3d_Slicer',
     client_secret: 'client_secret_3d_Slicer',
   },
   cloud: {
+    label: '3D Slicer cloud',
     hubEndpoint:
-      'https://cast-hub-g6abetanhjesb6cx.westeurope-01.azurewebsites.net/api/hub',
+      'https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/api/hub',
     authorizeEndpoint:
-      'https://cast-hub-g6abetanhjesb6cx.westeurope-01.azurewebsites.net/oauth/authorize',
+      'https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/oauth/authorize',
     authEndpoint:
-      'https://cast-hub-g6abetanhjesb6cx.westeurope-01.azurewebsites.net/oauth/token',
-    product_name: 'SLICERHUB',
-    product_version: '1.0',
+      'https://slicerhub-azejffgnb7dve8es.canadaeast-01.azurewebsites.net/oauth/token',
     client_id: 'client_id_3d_Slicer',
     client_secret: 'client_secret_3d_Slicer',
   },
 };
+
+/**
+ * VolView viewer URLs (deployed outside the Cast hub; not derived from hub_endpoint).
+ * Local: Vite dev. Cloud: VolView + hub stack on Azure (see VolView .env / cast hubs).
+ */
+const VOLVIEW_VIEWER_URL_LOCAL = 'http://localhost:5173/';
+const VOLVIEW_VIEWER_URL_CLOUD =
+  'https://volview-server-with-hub-g2d9hcc5esahgxe8.westeurope-01.azurewebsites.net/volview-client/';
+
+/** OHIF viewer URLs (separate deployments). */
+const OHIF_VIEWER_URL_LOCAL = 'http://localhost:3000/viewer/';
+const OHIF_VIEWER_URL_CLOUD =
+  'https://ohif-cast.d1ps2fewnyt2md.amplifyapp.com/viewer/';
 
 function headerInstructionsHtml() {
   return `<p>This example demonstrate using the IO module cast client for IHE roles worklist client and evidence creator (EC).</p>
@@ -208,7 +636,30 @@ function headerInstructionsHtml() {
 </ol>`;
 }
 
-function openInstructionsWindow() {
+function isFhircastV3Standard(standard) {
+  return standard === CAST_STANDARD_FHIRCAST_V3;
+}
+
+function applyCastStandardToHeader(el, standard) {
+  const titleMain = titleMainForCastStandard(standard);
+  if (el.headerTitleMain) {
+    el.headerTitleMain.textContent = titleMain;
+  }
+  document.title = `${titleMain} — ${EXAMPLE_PAGE_TITLE_SUB}`;
+}
+
+function applyCastStandardToPage(el, standard) {
+  applyCastStandardToHeader(el, standard);
+  const fhircast = isFhircastV3Standard(standard);
+  if (el.castMainContent) {
+    el.castMainContent.hidden = fhircast;
+  }
+  if (el.castFhircastComingSoon) {
+    el.castFhircastComingSoon.hidden = !fhircast;
+  }
+}
+
+function openInstructionsWindow(castStandard = CAST_STANDARD_DEFAULT) {
   const popupWidth = 900;
   const popupHeight = 700;
   const left = Math.max(0, Math.floor((window.screen.width - popupWidth) / 2));
@@ -228,7 +679,9 @@ function openInstructionsWindow() {
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>IO module worklist example</title>
+<title>${titleMainForCastStandard(
+    castStandard
+  )} — ${EXAMPLE_PAGE_TITLE_SUB}</title>
 <style>
   body {
     margin: 0;
@@ -242,7 +695,16 @@ function openInstructionsWindow() {
   h1 {
     margin: 0 0 16px;
     font-size: 1.4rem;
+    font-weight: 700;
     color: #fff;
+    line-height: 1.25;
+  }
+  .popupTitleSub {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #b8b8b8;
   }
   strong { color: #fff; }
   ol { margin: 0 0 0 1.2em; padding: 0; }
@@ -252,7 +714,9 @@ function openInstructionsWindow() {
 </style>
 </head>
 <body>
-<h1>IO module worklist example</h1>
+<h1>${titleMainForCastStandard(
+    castStandard
+  )}<span class="popupTitleSub">${EXAMPLE_PAGE_TITLE_SUB}</span></h1>
 ${headerInstructionsHtml()}
 </body>
 </html>`;
@@ -262,19 +726,549 @@ ${headerInstructionsHtml()}
   popup.focus();
 }
 
+function cloneContextArray(context) {
+  return Array.isArray(context) ? context.map((item) => ({ ...item })) : [];
+}
+
+function parseActorField(raw) {
+  const value = raw.trim();
+  if (!value) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(value);
+  } catch (err) {
+    return value;
+  }
+}
+
+function redactSceneviewPayloadForLog(value, depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 16) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSceneviewPayloadForLog(item, depth + 1));
+  }
+  const out = {};
+  Object.keys(value).forEach((key) => {
+    const child = value[key];
+    if (
+      key === 'thumbnail' &&
+      child &&
+      typeof child === 'object' &&
+      typeof child.data === 'string'
+    ) {
+      const bytes = child.data.length;
+      out[key] = {
+        contentType: child.contentType || 'image/png',
+        data: `[${bytes} bytes omitted from message log]`,
+        width: child.width,
+        height: child.height,
+      };
+      return;
+    }
+    out[key] = redactSceneviewPayloadForLog(child, depth + 1);
+  });
+  return out;
+}
+
+function sanitizeCastMessageForDisplay(message) {
+  if (!message || typeof message !== 'object') {
+    return message;
+  }
+  const event =
+    message.event && typeof message.event === 'object' ? message.event : {};
+  const hubEvent = String(
+    event['hub.event'] || message['hub.event'] || ''
+  ).toLowerCase();
+  if (!hubEvent.includes('sceneview')) {
+    return message;
+  }
+  return redactSceneviewPayloadForLog(message);
+}
+
+function addMessage(el, state, kind, label, payload) {
+  const line = document.createElement('div');
+  line.className = `${style.msg} ${MESSAGE_KIND_CLASS[kind]}`;
+  const ts = new Date().toLocaleTimeString();
+  const displayPayload =
+    payload && typeof payload === 'object'
+      ? sanitizeCastMessageForDisplay(payload)
+      : payload;
+  line.textContent = `${label} - ${ts}\n${
+    typeof displayPayload === 'string'
+      ? displayPayload
+      : JSON.stringify(displayPayload, null, 2)
+  }`;
+  el.messages.insertBefore(line, el.messages.firstChild);
+  state.messageCount += 1;
+  el.messageCount.textContent = `(${state.messageCount})`;
+}
+
+function formatWorklistContextForDisplay(state) {
+  const ctx = cloneContextArray(state.lastImagingStudyOpenContext);
+  if (!ctx.length) {
+    return '[]';
+  }
+  return JSON.stringify(ctx, null, 2);
+}
+
+function hasWorklistContext(state) {
+  return (
+    Array.isArray(state.lastImagingStudyOpenContext) &&
+    state.lastImagingStudyOpenContext.length > 0
+  );
+}
+
+function syncOpenWorklistSampleId(state) {
+  if (!hasWorklistContext(state)) {
+    state.openWorklistSampleId = null;
+    return;
+  }
+  state.openWorklistSampleId =
+    extractVolviewSampleId(state.lastImagingStudyOpenContext) || null;
+}
+
+function updateWorklistContextControls(el, state) {
+  syncOpenWorklistSampleId(state);
+  const hasContext = hasWorklistContext(state);
+  const openId = state.openWorklistSampleId;
+  if (!el.worklistPanel) {
+    return;
+  }
+  el.worklistPanel
+    .querySelectorAll(`.${style.worklistOpenBtn}`)
+    .forEach((btn) => {
+      const sampleId = btn.dataset.sampleId;
+      const isOpenRow = hasContext && sampleId === openId;
+      btn.textContent = isOpenRow ? 'Close' : 'Open';
+      btn.classList.toggle(style.worklistOpenBtnClose, isOpenRow);
+      btn.disabled = hasContext && !isOpenRow;
+      btn.title =
+        hasContext && !isOpenRow
+          ? 'Close the current study before opening another'
+          : '';
+    });
+}
+
+function updateWorklistContextDisplay(el, state) {
+  if (el.worklistContextDisplay) {
+    el.worklistContextDisplay.value = formatWorklistContextForDisplay(state);
+  }
+  updateWorklistContextControls(el, state);
+}
+
+function updateFhircastContextState(el, state, eventType, context) {
+  if (eventType.includes('close')) {
+    state.lastImagingStudyOpenContext = [];
+    updateWorklistContextDisplay(el, state);
+    return;
+  }
+  if (eventType === 'imagingstudy-open') {
+    state.lastImagingStudyOpenContext = cloneContextArray(context);
+    updateWorklistContextDisplay(el, state);
+  }
+}
+
+function buildWorklistImagingStudyPublishPayload(el, hubEvent, context) {
+  const payload = {
+    event: {
+      'hub.topic': el.topic.value.trim(),
+      'hub.event': hubEvent,
+      context,
+    },
+  };
+  const actorValue = parseActorField(DEFAULT_ACTOR_KEYWORD);
+  if (actorValue !== undefined) {
+    payload.actor = actorValue;
+  }
+  payload['target.actor'] = 'ID';
+  payload['target.product.name'] = '*';
+  return payload;
+}
+
+async function publishImagingStudyOpen(el, state, context) {
+  if (!state.client) {
+    addMessage(el, state, 'err', 'Open study', 'Subscribe first');
+    return false;
+  }
+  const payload = buildWorklistImagingStudyPublishPayload(
+    el,
+    'ImagingStudy-open',
+    context
+  );
+  try {
+    const res = await state.client.publish(payload);
+    if (res && res.ok) {
+      updateFhircastContextState(el, state, 'imagingstudy-open', context);
+      addMessage(el, state, 'sent', 'Open study', payload);
+      return true;
+    }
+    addMessage(
+      el,
+      state,
+      'err',
+      'Open study',
+      res ? `HTTP ${res.status}` : 'No response'
+    );
+    return false;
+  } catch (err) {
+    addMessage(
+      el,
+      state,
+      'err',
+      'Open study',
+      err instanceof Error ? err.message : String(err)
+    );
+    return false;
+  }
+}
+
+async function publishImagingStudyClose(el, state) {
+  if (!state.client) {
+    addMessage(el, state, 'err', 'Close study', 'Subscribe first');
+    return false;
+  }
+  if (!hasWorklistContext(state)) {
+    addMessage(
+      el,
+      state,
+      'err',
+      'Close study',
+      'No open study in worklist context'
+    );
+    return false;
+  }
+  const context = cloneContextArray(state.lastImagingStudyOpenContext);
+  const payload = buildWorklistImagingStudyPublishPayload(
+    el,
+    'ImagingStudy-close',
+    context
+  );
+  try {
+    const res = await state.client.publish(payload);
+    if (res && res.ok) {
+      updateFhircastContextState(el, state, 'imagingstudy-close', context);
+      addMessage(el, state, 'sent', 'Close study', payload);
+      return true;
+    }
+    addMessage(
+      el,
+      state,
+      'err',
+      'Close study',
+      res ? `HTTP ${res.status}` : 'No response'
+    );
+    return false;
+  } catch (err) {
+    addMessage(
+      el,
+      state,
+      'err',
+      'Close study',
+      err instanceof Error ? err.message : String(err)
+    );
+    return false;
+  }
+}
+
+async function handleWorklistClose(el, state) {
+  await publishImagingStudyClose(el, state);
+}
+
+function findWorklistSample(sampleId) {
+  return (
+    VOLVIEW_SAMPLE_STUDIES.find((entry) => entry.id === sampleId) ||
+    SLICER_SAMPLE_STUDIES.find((entry) => entry.id === sampleId) ||
+    IDC_SAMPLE_STUDIES.find((entry) => entry.id === sampleId)
+  );
+}
+
+function isDicomwebWorklistSample(sample) {
+  return Boolean(sample?.studyInstanceUID?.trim());
+}
+
+function worklistSampleFiles(sample) {
+  if (Array.isArray(sample.files) && sample.files.length > 0) {
+    return sample.files;
+  }
+  return [{ url: sample.url, fileName: sample.filename }];
+}
+
+async function handleWorklistSampleOpen(el, state, sampleId) {
+  if (hasWorklistContext(state)) {
+    addMessage(
+      el,
+      state,
+      'err',
+      'Open study',
+      'Worklist already has an open study; use Close first'
+    );
+    return;
+  }
+  const sample = findWorklistSample(sampleId);
+  if (!sample) {
+    addMessage(el, state, 'err', 'Open study', `Unknown sample: ${sampleId}`);
+    return;
+  }
+  const patientReference = 'Patient/503824b8-fe8c-4227-b061-7181ba6c3926';
+  const context = isDicomwebWorklistSample(sample)
+    ? buildDicomwebImagingStudyOpenContext({
+        id: sample.id,
+        studyInstanceUID: sample.studyInstanceUID,
+        seriesInstanceUID: sample.seriesInstanceUID,
+        dicomwebRoot: sample.dicomwebRoot || IDC_DICOMWEB_ROOT,
+        patientReference,
+      })
+    : buildFilesImagingStudyOpenContext({
+        id: sample.id,
+        files: worklistSampleFiles(sample),
+        patientReference,
+      });
+  await publishImagingStudyOpen(el, state, context);
+}
+
+function handleWorklistRowBtnClick(el, state, sampleId) {
+  if (hasWorklistContext(state) && sampleId === state.openWorklistSampleId) {
+    handleWorklistClose(el, state).catch((err) => {
+      console.error('[vtkCastClient] close study failed', err);
+    });
+    return;
+  }
+  handleWorklistSampleOpen(el, state, sampleId).catch((err) => {
+    console.error('[vtkCastClient] open study failed', err);
+  });
+}
+
+function worklistSampleSizeLabel(sample) {
+  if (sample && sample.size) {
+    return String(sample.size);
+  }
+  if (sample && sample.studyInstanceUID) {
+    return 'DICOMweb';
+  }
+  if (Array.isArray(sample?.files) && sample.files.length > 1) {
+    return 'Multi-file';
+  }
+  return '—';
+}
+
+/** Sort key in bytes; non-numeric sizes sort after downloadable MB values. */
+function worklistSampleSizeSortBytes(sample) {
+  const label = worklistSampleSizeLabel(sample);
+  const mbMatch = label.match(/~?(\d+(?:\.\d+)?)\s*MB/i);
+  if (mbMatch) {
+    return Math.round(parseFloat(mbMatch[1]) * 1024 * 1024);
+  }
+  if (label === 'Multi-file') {
+    return Number.MAX_SAFE_INTEGER - 2;
+  }
+  if (label === 'DICOMweb') {
+    return Number.MAX_SAFE_INTEGER - 1;
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function sortWorklistStudiesBySize(studies) {
+  return [...studies].sort(
+    (a, b) => worklistSampleSizeSortBytes(a) - worklistSampleSizeSortBytes(b)
+  );
+}
+
+function renderWorklistStudyList(panelEl, studies, ariaLabel, el, state) {
+  panelEl.classList.add(style.worklistPanelList);
+  panelEl.setAttribute('aria-label', ariaLabel);
+
+  const list = document.createElement('div');
+  list.className = style.worklistEntries;
+
+  const headerRow = document.createElement('div');
+  headerRow.className = `${style.worklistEntry} ${style.worklistEntryHeaderRow}`;
+  headerRow.setAttribute('aria-hidden', 'true');
+
+  const header = document.createElement('div');
+  header.className = style.worklistEntryMain;
+  const headerClassByColumn = [
+    style.worklistEntryTitle,
+    style.worklistEntryDesc,
+    style.worklistEntrySize,
+  ];
+  ['Study', 'Description', 'Size'].forEach((label, idx) => {
+    const cell = document.createElement('div');
+    cell.className = headerClassByColumn[idx] || style.worklistEntryDesc;
+    cell.textContent = label;
+    header.append(cell);
+  });
+
+  const headerBtnSpacer = document.createElement('span');
+  headerBtnSpacer.className = style.worklistOpenBtnSpacer;
+  headerBtnSpacer.textContent = 'Open';
+
+  headerRow.append(header, headerBtnSpacer);
+  list.append(headerRow);
+
+  sortWorklistStudiesBySize(studies).forEach((sample) => {
+    const row = document.createElement('div');
+    row.className = style.worklistEntry;
+
+    const main = document.createElement('div');
+    main.className = style.worklistEntryMain;
+
+    const title = document.createElement('div');
+    title.className = style.worklistEntryTitle;
+    title.textContent = sample.name;
+
+    const desc = document.createElement('div');
+    desc.className = style.worklistEntryDesc;
+    desc.textContent = sample.description;
+
+    const size = document.createElement('div');
+    size.className = style.worklistEntrySize;
+    size.textContent = worklistSampleSizeLabel(sample);
+
+    main.append(title, desc, size);
+
+    const openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.className = style.worklistOpenBtn;
+    openBtn.textContent = 'Open';
+    openBtn.dataset.sampleId = sample.id;
+    openBtn.disabled = false;
+    openBtn.title = '';
+    openBtn.addEventListener('click', () => {
+      handleWorklistRowBtnClick(el, state, sample.id);
+    });
+
+    row.append(main, openBtn);
+    list.append(row);
+  });
+
+  panelEl.append(list);
+}
+
+function renderWorklistPanel(panelEl, speciality, el, state) {
+  panelEl.replaceChildren();
+  panelEl.classList.remove(style.worklistPanelList, style.worklistPanelEmpty);
+
+  if (speciality === WORKLIST_SPECIALITY_VOLVIEW) {
+    renderWorklistStudyList(
+      panelEl,
+      VOLVIEW_SAMPLE_STUDIES,
+      'VolView sample studies',
+      el,
+      state
+    );
+    return;
+  }
+
+  if (speciality === WORKLIST_SPECIALITY_SLICER) {
+    renderWorklistStudyList(
+      panelEl,
+      SLICER_SAMPLE_STUDIES,
+      '3D Slicer sample studies',
+      el,
+      state
+    );
+    return;
+  }
+
+  if (speciality === WORKLIST_SPECIALITY_IDC) {
+    renderWorklistStudyList(
+      panelEl,
+      IDC_SAMPLE_STUDIES,
+      'IDC DICOMweb studies',
+      el,
+      state
+    );
+    return;
+  }
+
+  panelEl.classList.add(style.worklistPanelEmpty);
+  panelEl.setAttribute(
+    'aria-label',
+    'Organization (not available for this speciality)'
+  );
+  const msg = document.createElement('p');
+  msg.className = style.worklistPlaceholderText;
+  msg.textContent = 'Not available for this speciality.';
+  panelEl.append(msg);
+}
+
 function buildPageHtml() {
   return `<div class="${style.container}">
   <div class="${style.castHeader}"><div class="${
+    style.headerStandardWrap
+  }"><label for="castStandardSelect">Standard:</label><select id="castStandardSelect" class="${
+    style.headerStandardSelect
+  }"><option value="${CAST_STANDARD_FHIRCAST_V3}">FHIRcast v3.0</option><option value="${CAST_STANDARD_CAST}" selected>Cast</option></select></div><div class="${
     style.headerTitleWrap
-  }"><span class="${
+  }"><div class="${style.headerTitleStack}"><span id="headerTitleMain" class="${
     style.headerTitle
-  }">IO module worklist example</span><button type="button" id="instructionsBtn" class="${
-    style.instructionsBtn
-  }" aria-label="Read me" title="Read me">Read me</button></div></div>
+  }">${titleMainForCastStandard(CAST_STANDARD_DEFAULT)}</span><span class="${
+    style.headerTitleSub
+  }">${EXAMPLE_PAGE_TITLE_SUB}</span></div></div><div id="connectionStatus" class="${
+    style.status
+  } ${style.statusHeader} ${style.disconnected}"><div class="${
+    style.statusBody
+  }"><div class="${
+    style.statusPrimaryLine
+  }"><strong>Status:</strong> <span id="statusText">Not connected</span></div><div id="statusMeta" class="${
+    style.statusMeta
+  }"></div></div></div></div>
+  <div id="castFhircastComingSoon" class="${
+    style.fhircastComingSoon
+  }" hidden><p>${FHIRCAST_V3_COMING_SOON_MESSAGE}</p></div>
+  <div id="castMainContent">
   <div class="${style.layout}">
   <div class="${style.controlGrid}">
+  <div class="${style.section} ${style.panelCard} ${style.gridFullWidth} ${
+    style.worklistSection
+  }">
+    <div class="${style.worklistSectionHeader}">
+      <div class="${style.worklistSectionHeaderLead}">
+        <h2>Organization</h2>
+        <div class="${style.worklistSpecialityControls}">
+          <select
+            id="worklistSpecialitySelect"
+            class="${style.worklistSpecialitySelect}"
+            aria-label="Speciality"
+          >
+            <option value="volviewSample" selected>VolView sample</option>
+            <option value="slicerSamples">3D Slicer samples</option>
+            <option value="idcSelection">Imaging Data Commons</option>
+          </select>
+        </div>
+      </div>
+      <div class="${style.worklistViewerButtons}">
+        <button type="button" id="openVolViewBtn" class="${
+          style.headerViewerBtn
+        }" disabled>Open VolView</button>
+        <button type="button" id="openOhifBtn" class="${
+          style.headerViewerBtn
+        }" disabled>Open OHIF</button>
+        <button type="button" id="startSlicerBtn" class="${
+          style.headerViewerBtn
+        }" disabled>Start 3D Slicer</button>
+        <button type="button" id="openHubBtn" class="${
+          style.headerViewerBtn
+        }" disabled>Open Hub</button>
+      </div>
+    </div>
+    <div id="worklistPanel" class="${style.worklistPanel}"></div>
+  </div>
+  <details id="castHubSection" class="${style.castHubDetails} ${
+    style.gridFullWidth
+  }">
+    <summary class="${
+      style.castHubSummary
+    }">Test bench (authenticate, subscribe, publish, request, conference)</summary>
+    <div class="${style.castHubBody}">
   <div class="${style.connectionControls} ${style.section} ${style.panelCard}">
-    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>Authenticate</h2>
+    <div class="${
+      style.authenticateSectionHeader
+    }"><h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>Authenticate</h2><button type="button" id="instructionsBtn" class="${
+    style.instructionsBtn
+  }" aria-label="Read me" title="Read me">Read me</button></div>
     <div class="${style.grid} ${style.connectionControlsInnerGrid}">
       <div><label for="authSelect">Auth</label><div class="${
         style.hubAuthRow
@@ -282,7 +1276,7 @@ function buildPageHtml() {
       <div class="${style.gridFullWidth}"></div>
       <div><label for="hubSelect">Hub</label><div class="${
         style.hubAuthRow
-      }"><select id="hubSelect"><option value="volviewLocal">VolView server local</option><option value="volviewCloud" selected>VolView server cloud</option><option value="local">3D Slicer local</option><option value="cloud">3D Slicer cloud</option></select><button type="button" id="tokenBtn">Authorize</button></div><div class="${
+      }"><select id="hubSelect"><option value="local">3D Slicer local</option><option value="cloud">3D Slicer cloud</option></select><button type="button" id="tokenBtn">Authorize</button></div><div class="${
     style.hubAdminPortalRow
   }"><button type="button" id="hubAdminPortalBtn" class="${
     style.hubAdminPortalBtn
@@ -294,20 +1288,14 @@ function buildPageHtml() {
     style.castHiddenEndpoint
   }"><div><label for="authorizeEndpoint">authorize endpoint</label><input id="authorizeEndpoint" /></div><div><label for="tokenEndpoint">token endpoint</label><input id="tokenEndpoint" /></div></span>
   <div class="${style.section} ${style.panelCard}">
-    <div class="${
-      style.subscribeSectionHeader
-    }"><h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>Subscribe</h2><div id="connectionStatus" class="${
-    style.status
-  } ${style.statusHeader} ${
-    style.disconnected
-  }"><strong>Status:</strong> <span id="statusText">Not connected</span></div></div>
+    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>Subscribe</h2>
     <div class="${style.grid}">
       <div class="${
         style.castHiddenEndpoint
       }"><label for="hubEndpoint">hub_endpoint</label><input id="hubEndpoint" /></div>
       <div class="${style.subscribeSubscriberProductRow}">
         <div><label for="subscriberName">Subscriber</label><input id="subscriberName" /></div>
-        <div><label for="productName">Product Name</label><input id="productName" value="VTKJS-WKLST" /></div>
+        <div><label for="productName">Product Name</label><input id="productName" value="${EXAMPLE_PRODUCT_NAME}" /></div>
         <div><label for="productVersion">Version</label><input id="productVersion" value="1.0" /></div>
       </div>
       <div class="${style.subscribeEventsTopicActors}">
@@ -399,6 +1387,8 @@ function buildPageHtml() {
     style.requestActions
   }"><button id="getBtn" disabled>Request</button><div id="retrievedImagesList" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
   </div>
+    </div>
+  </details>
   <div class="${style.section} ${style.panelCard} ${style.gridFullWidth}">
     <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Worklist Context</h2>
     <div id="worklistContextRow">
@@ -415,6 +1405,8 @@ function buildPageHtml() {
   }"><button id="clearBtn">Clear Messages</button></div><div id="messages" class="${
     style.messages
   }"></div></div>
+  </div>
+  </div>
   </div>
   </div>`;
 }
@@ -534,18 +1526,6 @@ function parseSubscribeActorsList(raw) {
   }
 }
 
-function parseActorField(raw) {
-  const value = raw.trim();
-  if (!value) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(value);
-  } catch (err) {
-    return value;
-  }
-}
-
 function getHubEventLower(event) {
   const rawEvent =
     event && typeof event['hub.event'] === 'string' ? event['hub.event'] : '';
@@ -575,46 +1555,1318 @@ function extractActorKeywords(actor) {
   return keyword ? [keyword] : [];
 }
 
-function cloneContextArray(context) {
-  return Array.isArray(context) ? context.map((item) => ({ ...item })) : [];
-}
-
-function formatWorklistContextForDisplay(state) {
-  const ctx = cloneContextArray(state.lastImagingStudyOpenContext);
-  if (!ctx.length) {
-    return '[]';
+function statusHubNameMeta(el) {
+  const hubKey = String(el.hubSelect?.value || '').trim();
+  const hubDef = hubKey ? HUB_DEFINITIONS[hubKey] : null;
+  if (hubDef?.label) {
+    return String(hubDef.label);
   }
-  return JSON.stringify(ctx, null, 2);
+  const selected = el.hubSelect?.selectedOptions?.[0];
+  return selected ? String(selected.textContent || '').trim() : '';
 }
 
-function updateWorklistContextDisplay(el, state) {
-  if (el.worklistContextDisplay) {
-    el.worklistContextDisplay.value = formatWorklistContextForDisplay(state);
+function statusSubscriberTopicMeta(el, state) {
+  const parts = [];
+  const hubText = statusHubNameMeta(el);
+  if (hubText) {
+    parts.push(hubText);
   }
+  const session = state?.client?.getSessionConfig?.();
+  const subscriber = String(
+    el.subscriberName?.value?.trim() || session?.subscriberName || ''
+  ).trim();
+  const topic = String(el.topic?.value?.trim() || session?.topic || '').trim();
+  if (subscriber && topic) {
+    parts.push(`${subscriber} · ${topic}`);
+  } else if (subscriber || topic) {
+    parts.push(subscriber || topic);
+  }
+  return parts.join(' · ');
 }
 
-function updateFhircastContextState(el, state, eventType, context) {
-  if (eventType.includes('close')) {
-    state.lastImagingStudyOpenContext = [];
-    updateWorklistContextDisplay(el, state);
+function updateStatusMeta(el, state) {
+  if (!el.statusMeta) {
     return;
   }
-  if (eventType === 'imagingstudy-open') {
-    state.lastImagingStudyOpenContext = cloneContextArray(context);
-    updateWorklistContextDisplay(el, state);
+  const text = statusSubscriberTopicMeta(el, state);
+  el.statusMeta.textContent = text;
+  el.statusMeta.hidden = !text;
+}
+
+function setConnection(el, state, status, text) {
+  const statusClass = CONNECTION_STATUS_CLASS[status] || style.disconnected;
+  el.connectionStatus.className = `${style.status} ${style.statusHeader} ${statusClass}`;
+  el.statusText.replaceChildren();
+  el.statusText.appendChild(document.createTextNode(text));
+  updateStatusMeta(el, state);
+}
+
+function imageDisplayProductFromContextRequest(message) {
+  const product = String(message?.['subscriber.product.name'] || '').trim();
+  if (product) {
+    return product;
+  }
+  return '';
+}
+
+function contextRequestProductAndSubscriber(message) {
+  const subscriber = String(
+    message?.['subscriber.name'] || message?.subscriber || ''
+  ).trim();
+  if (!subscriber) {
+    return null;
+  }
+  const product = imageDisplayProductFromContextRequest(message) || subscriber;
+  return { product, subscriber };
+}
+
+function imageDisplaySubscriberTooltip(subscribers) {
+  if (!subscribers || subscribers.size === 0) {
+    return '';
+  }
+  return [...subscribers].sort().join(', ');
+}
+
+const SCENEVIEW_LAYOUT_CANVAS_W = 920;
+const SCENEVIEW_LAYOUT_CANVAS_H = 520;
+const SCENEVIEW_LAYOUT_PAD = 24;
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function getWorklistScreenWindow() {
+  return {
+    screenX: window.screenX,
+    screenY: window.screenY,
+    outerWidth: window.outerWidth,
+    outerHeight: window.outerHeight,
+    innerWidth: window.innerWidth,
+    innerHeight: window.innerHeight,
+  };
+}
+
+/** Set in boot(); used for layout-popup worklist thumbnail capture only. */
+let castExampleRootElement = null;
+
+/** Object URL for worklist thumb in layout popup; revoked on next open. */
+let sceneviewLayoutWorklistThumbUrl = null;
+
+function revokeSceneviewLayoutWorklistThumbUrl() {
+  if (sceneviewLayoutWorklistThumbUrl) {
+    URL.revokeObjectURL(sceneviewLayoutWorklistThumbUrl);
+    sceneviewLayoutWorklistThumbUrl = null;
   }
 }
 
-function addMessage(el, state, kind, label, payload) {
-  const line = document.createElement('div');
-  line.className = `${style.msg} ${MESSAGE_KIND_CLASS[kind]}`;
-  const ts = new Date().toLocaleTimeString();
-  line.textContent = `${label} - ${ts}\n${
-    typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2)
-  }`;
-  el.messages.insertBefore(line, el.messages.firstChild);
-  state.messageCount += 1;
-  el.messageCount.textContent = `(${state.messageCount})`;
+function pngThumbnailFromCanvas(canvas, maxWidth = 320) {
+  if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
+    return null;
+  }
+  const scale = Math.min(1, maxWidth / canvas.width);
+  const outW = Math.max(1, Math.round(canvas.width * scale));
+  const outH = Math.max(1, Math.round(canvas.height * scale));
+  const tmp = document.createElement('canvas');
+  tmp.width = outW;
+  tmp.height = outH;
+  const ctx = tmp.getContext('2d');
+  if (!ctx) {
+    return null;
+  }
+  ctx.drawImage(canvas, 0, 0, outW, outH);
+  try {
+    const dataUrl = tmp.toDataURL('image/png');
+    const marker = 'base64,';
+    const idx = dataUrl.indexOf(marker);
+    if (idx < 0) {
+      return null;
+    }
+    return {
+      contentType: 'image/png',
+      data: dataUrl.slice(idx + marker.length),
+      width: outW,
+      height: outH,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function imageToObjectUrl(contentType, base64Data) {
+  try {
+    const binary = atob(base64Data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: contentType });
+    return URL.createObjectURL(blob);
+  } catch (err) {
+    return '';
+  }
+}
+
+function isCastImageBinaryNode(node) {
+  return (
+    node &&
+    typeof node === 'object' &&
+    typeof node.contentType === 'string' &&
+    typeof node.data === 'string' &&
+    /^image\/(png|jpeg)$/i.test(node.contentType.trim()) &&
+    node.data.replace(/\s/g, '').length > 0
+  );
+}
+
+function castImageDataUrl(thumbnail) {
+  if (!isCastImageBinaryNode(thumbnail)) {
+    return '';
+  }
+  const contentType = thumbnail.contentType.trim().toLowerCase();
+  const data = thumbnail.data.replace(/\s/g, '');
+  return `data:${contentType};base64,${data}`;
+}
+
+function captureWorklistThumbnailPlaceholder(root, subscriberName, maxWidth) {
+  const srcW = Math.max(1, root.offsetWidth || root.scrollWidth || 400);
+  const srcH = Math.max(1, root.offsetHeight || root.scrollHeight || 280);
+  const scale = Math.min(1, maxWidth / srcW);
+  const outW = Math.max(1, Math.round(srcW * scale));
+  const outH = Math.max(1, Math.round(srcH * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    return null;
+  }
+  ctx.fillStyle = '#0a0a12';
+  ctx.fillRect(0, 0, outW, outH);
+  ctx.strokeStyle = '#ffc107';
+  ctx.lineWidth = Math.max(1, Math.round(2 * scale));
+  ctx.strokeRect(
+    ctx.lineWidth,
+    ctx.lineWidth,
+    outW - ctx.lineWidth * 2,
+    outH - ctx.lineWidth * 2
+  );
+  const label = String(subscriberName || 'Worklist').trim() || 'Worklist';
+  ctx.fillStyle = '#fff';
+  ctx.font = `bold ${Math.max(
+    11,
+    Math.round(13 * scale)
+  )}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, outW / 2, outH / 2);
+  return pngThumbnailFromCanvas(canvas, maxWidth);
+}
+
+/** html2canvas clone prep: CSS sanitization + collapse Test bench for layout PNG only. */
+function sanitizeHtml2CanvasCloneDocument(clonedDoc) {
+  if (!clonedDoc || typeof clonedDoc.querySelectorAll !== 'function') {
+    return;
+  }
+  const rewrite = (cssText) =>
+    String(cssText || '')
+      .replace(/oklch\([^)]*\)/gi, '#888888')
+      .replace(/color-mix\([^)]*\)/gi, '#242c40');
+  clonedDoc.querySelectorAll('style').forEach((node) => {
+    if (node.textContent) {
+      node.textContent = rewrite(node.textContent);
+    }
+  });
+  clonedDoc.querySelectorAll('[style]').forEach((node) => {
+    const inline = node.getAttribute('style');
+    if (inline) {
+      node.setAttribute('style', rewrite(inline));
+    }
+  });
+  const castHubSection = clonedDoc.getElementById('castHubSection');
+  if (castHubSection) {
+    castHubSection.removeAttribute('open');
+    if ('open' in castHubSection) {
+      castHubSection.open = false;
+    }
+    castHubSection.querySelectorAll(`.${style.castHubBody}`).forEach((body) => {
+      body.setAttribute('style', 'display:none !important');
+    });
+  }
+}
+
+async function captureWorklistThumbnailPng(
+  maxWidth = 480,
+  subscriberName = 'Worklist'
+) {
+  const root =
+    castExampleRootElement ||
+    document.querySelector(`.${style.cast}`) ||
+    document.body;
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+  try {
+    const rect = root.getBoundingClientRect();
+    const srcW = Math.max(1, Math.round(rect.width) || root.offsetWidth);
+    const scale = Math.min(2, Math.max(0.35, maxWidth / srcW));
+    const canvas = await html2canvas(root, {
+      backgroundColor: '#000000',
+      scale,
+      logging: false,
+      useCORS: true,
+      onclone: sanitizeHtml2CanvasCloneDocument,
+      ignoreElements: (element) => {
+        if (!(element instanceof HTMLElement)) {
+          return false;
+        }
+        return (
+          element.id === 'messages' ||
+          element.closest('#messages') !== null ||
+          element.classList.contains(style.messages)
+        );
+      },
+    });
+    const thumb = pngThumbnailFromCanvas(canvas, maxWidth);
+    if (thumb && thumb.data.length > 100) {
+      return thumb;
+    }
+  } catch (err) {
+    console.warn('[vtkCastClient] worklist thumbnail capture failed', err);
+  }
+  return captureWorklistThumbnailPlaceholder(root, subscriberName, maxWidth);
+}
+
+function buildSceneviewRequestArgs(el, targetProductName) {
+  const requestArgs = {
+    'subscriber.name': el.getSubscriber.value.trim(),
+    event: {
+      'hub.event': requestEventFor('SCENEVIEW'),
+      'hub.topic': el.topic.value.trim(),
+      context: { dataType: 'SCENEVIEW' },
+    },
+    'subscriber.actor': DEFAULT_GET_ACTOR_KEYWORD,
+    'target.actor': 'ID',
+  };
+  const product = String(targetProductName || '').trim();
+  if (product && product !== '*') {
+    requestArgs['target.product.name'] = product;
+  }
+  return requestArgs;
+}
+
+function parseSceneviewCollatedResponses(resultData) {
+  const envelope =
+    resultData && typeof resultData === 'object' ? resultData : {};
+  const responses = Array.isArray(envelope.responses) ? envelope.responses : [];
+  return responses
+    .map((item, idx) => ({
+      subscriber:
+        (item &&
+          (item.subscriber ||
+            item.subscriberName ||
+            item['subscriber.name'])) ||
+        `responder-${idx + 1}`,
+      productName: (item && item.productName) || '',
+      data: item && item.data,
+    }))
+    .filter((entry) => entry.data && typeof entry.data === 'object');
+}
+
+function screenRectFromPayload(obj) {
+  if (!obj || typeof obj !== 'object') {
+    return null;
+  }
+  const left = Number(obj.left);
+  const top = Number(obj.top);
+  const width = Number(obj.width);
+  const height = Number(obj.height);
+  if (
+    ![left, top, width, height].every(Number.isFinite) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return null;
+  }
+  return { left, top, width, height };
+}
+
+function windowRectFromPayload(win) {
+  if (!win || typeof win !== 'object') {
+    return null;
+  }
+  const left = Number(win.screenX);
+  const top = Number(win.screenY);
+  const width = Number(win.outerWidth);
+  const height = Number(win.outerHeight);
+  if (
+    ![left, top, width, height].every(Number.isFinite) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return null;
+  }
+  return { left, top, width, height };
+}
+
+function screenRectSummaryLine(prefix, rectObj) {
+  const rect = screenRectFromPayload(rectObj);
+  if (!rect) {
+    return null;
+  }
+  return `${prefix} ${Math.round(rect.width)}×${Math.round(
+    rect.height
+  )} @ (${Math.round(rect.left)}, ${Math.round(rect.top)})`;
+}
+
+function shortenSceneviewUid(uid) {
+  const text = String(uid || '').trim();
+  if (!text) {
+    return '';
+  }
+  if (text.length <= 24) {
+    return text;
+  }
+  return `…${text.slice(-20)}`;
+}
+
+function displayCaptionLines(display) {
+  if (!display || typeof display !== 'object') {
+    return [];
+  }
+  const lines = [];
+  if (display.layoutName) {
+    lines.push(`Layout ${display.layoutName}`);
+  }
+  if (display.maximized) {
+    lines.push('Maximized');
+  }
+  if (display.activeViewId) {
+    lines.push(`Active view ${display.activeViewId}`);
+  }
+  const gridLine = screenRectSummaryLine('Grid', display.layoutScreenRect);
+  if (gridLine) {
+    lines.push(gridLine);
+  }
+  const layoutSize = display.layoutClientSize;
+  if (layoutSize && typeof layoutSize === 'object') {
+    const w = Number(layoutSize.width);
+    const h = Number(layoutSize.height);
+    if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+      lines.push(`Grid client ${Math.round(w)}×${Math.round(h)}`);
+    }
+  }
+  return lines;
+}
+
+function viewportCaptionLines(vp, index) {
+  if (!vp || typeof vp !== 'object') {
+    return [];
+  }
+  const lines = [];
+  const name = String(vp.name || vp.viewId || `viewport-${index + 1}`).trim();
+  const type = vp.type ? String(vp.type) : '';
+  const slotIdx = Number(vp.slotIndex);
+  const slot =
+    Number.isFinite(slotIdx) && slotIdx >= 0 ? ` · slot ${slotIdx + 1}` : '';
+  lines.push(type ? `${name} (${type}${slot})` : name);
+  if (vp.viewId && vp.viewId !== name) {
+    lines.push(`  id ${vp.viewId}`);
+  }
+  const screenLine = screenRectSummaryLine('Screen', vp.screenRect);
+  if (screenLine) {
+    lines.push(`  ${screenLine}`);
+  }
+  const layoutLine = screenRectSummaryLine('Layout', vp.layoutRect);
+  if (layoutLine) {
+    lines.push(`  ${layoutLine}`);
+  }
+  if (vp.studyInstanceUID) {
+    lines.push(`  Study ${shortenSceneviewUid(vp.studyInstanceUID)}`);
+  }
+  if (vp.seriesInstanceUID) {
+    lines.push(`  Series ${shortenSceneviewUid(vp.seriesInstanceUID)}`);
+  }
+  if (vp.dataID) {
+    lines.push(`  Data ${vp.dataID}`);
+  }
+  if (vp.orientation) {
+    lines.push(`  Orientation ${vp.orientation}`);
+  }
+  if (vp.viewDirection) {
+    lines.push(`  View ${vp.viewDirection}`);
+  }
+  if (vp.thumbnail && vp.thumbnail.width > 0 && vp.thumbnail.height > 0) {
+    lines.push(`  Thumb ${vp.thumbnail.width}×${vp.thumbnail.height}`);
+  }
+  return lines;
+}
+
+function sceneviewCaptionLinesToHtml(lines) {
+  return lines
+    .map((line) => `<div class="svDetailLine">${escapeHtml(line)}</div>`)
+    .join('');
+}
+
+function viewportDetailsSummary(vp, index) {
+  const name = String(vp.name || vp.viewId || `viewport-${index + 1}`).trim();
+  const type = vp.type ? String(vp.type) : '';
+  const slotIdx = Number(vp.slotIndex);
+  const slot =
+    Number.isFinite(slotIdx) && slotIdx >= 0 ? ` · slot ${slotIdx + 1}` : '';
+  const study = vp.studyInstanceUID
+    ? ` · ${shortenSceneviewUid(vp.studyInstanceUID)}`
+    : '';
+  const head = type ? `${name} (${type}${slot})` : name;
+  return `${head}${study}`;
+}
+
+function displayDetailsSummary(display) {
+  const layoutName =
+    display && display.layoutName ? String(display.layoutName) : '';
+  return layoutName ? `Display · ${layoutName}` : 'Display';
+}
+
+function buildSubscriberDetailsTreeHtml(captionContext) {
+  const ctx =
+    captionContext && typeof captionContext === 'object' ? captionContext : {};
+  const subscriber = String(ctx.subscriberName || '').trim() || 'Subscriber';
+  const display = ctx.display;
+  const viewports = Array.isArray(ctx.viewports) ? ctx.viewports : [];
+  const displayLines = displayCaptionLines(display);
+  const nested = [];
+
+  if (displayLines.length) {
+    nested.push(
+      `<details class="svDetailsNode"><summary>${escapeHtml(
+        displayDetailsSummary(display)
+      )}</summary><div class="svDetailsBody">${sceneviewCaptionLinesToHtml(
+        displayLines
+      )}</div></details>`
+    );
+  }
+
+  viewports.forEach((vp, idx) => {
+    const vpLines = viewportCaptionLines(vp, idx);
+    if (!vpLines.length) {
+      return;
+    }
+    nested.push(
+      `<details class="svDetailsNode"><summary>${escapeHtml(
+        viewportDetailsSummary(vp, idx)
+      )}</summary><div class="svDetailsBody">${sceneviewCaptionLinesToHtml(
+        vpLines
+      )}</div></details>`
+    );
+  });
+
+  if (!nested.length) {
+    const fallback =
+      subscriber.toLowerCase() === 'worklist'
+        ? 'Cast worklist window (no image-display layout).'
+        : 'No display or viewport metadata.';
+    nested.push(`<div class="svDetailLine">${escapeHtml(fallback)}</div>`);
+  }
+
+  return `<details class="svSubscriberRoot"><summary class="svSubscriberSummary">${escapeHtml(
+    subscriber
+  )}</summary><div class="svSubscriberBody">${nested.join('')}</div></details>`;
+}
+
+function windowContentRectFromPayload(win) {
+  const outer = windowRectFromPayload(win);
+  if (!outer || !win || typeof win !== 'object') {
+    return null;
+  }
+  const innerW = Number(win.innerWidth) || outer.width;
+  const innerH = Number(win.innerHeight) || outer.height;
+  const chromeW = Math.max(0, outer.width - innerW);
+  const chromeH = Math.max(0, outer.height - innerH);
+  return {
+    left: outer.left + chromeW / 2,
+    top: outer.top + chromeH,
+    width: innerW,
+    height: innerH,
+  };
+}
+
+/** Image-display diagram uses client area (below browser chrome), not outer frame. */
+function sceneviewWindowRectForDiagram(win) {
+  return windowContentRectFromPayload(win) || windowRectFromPayload(win);
+}
+
+function computeSceneviewDiagramBounds(worklistWindow, sceneviewEntries) {
+  const rects = [];
+  const worklistRect = windowRectFromPayload(worklistWindow);
+  if (worklistRect) {
+    rects.push(worklistRect);
+  }
+  sceneviewEntries.forEach((entry) => {
+    const data = entry.data;
+    const winRect = sceneviewWindowRectForDiagram(data && data.window);
+    if (winRect) {
+      rects.push(winRect);
+    }
+  });
+  if (!rects.length) {
+    return null;
+  }
+  let minLeft = Infinity;
+  let minTop = Infinity;
+  let maxRight = -Infinity;
+  let maxBottom = -Infinity;
+  rects.forEach((rect) => {
+    minLeft = Math.min(minLeft, rect.left);
+    minTop = Math.min(minTop, rect.top);
+    maxRight = Math.max(maxRight, rect.left + rect.width);
+    maxBottom = Math.max(maxBottom, rect.top + rect.height);
+  });
+  return {
+    minLeft,
+    minTop,
+    width: Math.max(1, maxRight - minLeft),
+    height: Math.max(1, maxBottom - minTop),
+  };
+}
+
+function mapRectToDiagram(rect, bounds, scale, pad) {
+  return {
+    left: pad + (rect.left - bounds.minLeft) * scale,
+    top: pad + (rect.top - bounds.minTop) * scale,
+    width: Math.max(4, rect.width * scale),
+    height: Math.max(4, rect.height * scale),
+  };
+}
+
+function unionScreenRects(rects) {
+  if (!rects.length) {
+    return null;
+  }
+  let minLeft = Infinity;
+  let minTop = Infinity;
+  let maxRight = -Infinity;
+  let maxBottom = -Infinity;
+  rects.forEach((r) => {
+    minLeft = Math.min(minLeft, r.left);
+    minTop = Math.min(minTop, r.top);
+    maxRight = Math.max(maxRight, r.left + r.width);
+    maxBottom = Math.max(maxBottom, r.top + r.height);
+  });
+  return {
+    left: minLeft,
+    top: minTop,
+    width: Math.max(1, maxRight - minLeft),
+    height: Math.max(1, maxBottom - minTop),
+  };
+}
+
+function layoutScreenRectFromEntry(display, viewports, win) {
+  const fromDisplay = screenRectFromPayload(
+    display && display.layoutScreenRect
+  );
+  if (fromDisplay) {
+    return fromDisplay;
+  }
+  const vpRects = (Array.isArray(viewports) ? viewports : [])
+    .map((vp) => screenRectFromPayload(vp?.screenRect))
+    .filter(Boolean);
+  const union = unionScreenRects(vpRects);
+  if (union) {
+    return union;
+  }
+  return windowContentRectFromPayload(win);
+}
+
+function layoutClientSizeFromEntry(display, layoutScreenRect) {
+  const size = display && display.layoutClientSize;
+  if (size && typeof size === 'object') {
+    const width = Number(size.width);
+    const height = Number(size.height);
+    if (
+      Number.isFinite(width) &&
+      Number.isFinite(height) &&
+      width > 0 &&
+      height > 0
+    ) {
+      return { width, height };
+    }
+  }
+  if (layoutScreenRect) {
+    return { width: layoutScreenRect.width, height: layoutScreenRect.height };
+  }
+  return null;
+}
+
+function viewportLayoutRectFromPayload(vp, layoutScreenRect) {
+  const layoutRect = screenRectFromPayload(vp && vp.layoutRect);
+  if (layoutRect) {
+    return layoutRect;
+  }
+  const screenRect = screenRectFromPayload(vp && vp.screenRect);
+  if (!screenRect || !layoutScreenRect) {
+    return null;
+  }
+  return {
+    left: screenRect.left - layoutScreenRect.left,
+    top: screenRect.top - layoutScreenRect.top,
+    width: screenRect.width,
+    height: screenRect.height,
+  };
+}
+
+/** VolView flex-equal slots from display.layout (matches 3D Primary, Four Up, etc.). */
+function layoutSlotRectsFromDisplayLayout(display, layoutW, layoutH) {
+  const layout = display && display.layout;
+  if (!layout || typeof layout !== 'object' || !Array.isArray(layout.items)) {
+    return null;
+  }
+  const slots = [];
+  const pixelW = Math.max(1, layoutW);
+  const pixelH = Math.max(1, layoutH);
+
+  function visitLayoutNode(node, box) {
+    const items = node.items || [];
+    const count = Math.max(1, items.length);
+    const direction = node.direction === 'column' ? 'column' : 'row';
+    items.forEach((item, index) => {
+      let childBox;
+      if (direction === 'row') {
+        const w = box.width / count;
+        childBox = {
+          left: box.left + index * w,
+          top: box.top,
+          width: w,
+          height: box.height,
+        };
+      } else {
+        const h = box.height / count;
+        childBox = {
+          left: box.left,
+          top: box.top + index * h,
+          width: box.width,
+          height: h,
+        };
+      }
+      if (item && item.type === 'slot') {
+        slots.push({
+          slotIndex: Number(item.slotIndex),
+          left: childBox.left,
+          top: childBox.top,
+          width: childBox.width,
+          height: childBox.height,
+        });
+      } else if (item && item.type === 'layout') {
+        visitLayoutNode(item, childBox);
+      }
+    });
+  }
+
+  visitLayoutNode(layout, { left: 0, top: 0, width: pixelW, height: pixelH });
+  return slots.length ? slots : null;
+}
+
+function viewportLayoutRectForDiagram(
+  display,
+  vp,
+  layoutSize,
+  layoutScreenRect
+) {
+  const fromPayload = screenRectFromPayload(vp && vp.layoutRect);
+  if (fromPayload) {
+    return fromPayload;
+  }
+  const slotRects = layoutSlotRectsFromDisplayLayout(
+    display,
+    layoutSize.width,
+    layoutSize.height
+  );
+  if (slotRects && vp && Number.isFinite(Number(vp.slotIndex))) {
+    const match = slotRects.find(
+      (slot) => slot.slotIndex === Number(vp.slotIndex)
+    );
+    if (match) {
+      return {
+        left: match.left,
+        top: match.top,
+        width: match.width,
+        height: match.height,
+      };
+    }
+  }
+  return viewportLayoutRectFromPayload(vp, layoutScreenRect);
+}
+
+function mapLayoutRectToPercent(layoutRect, layoutW, layoutH) {
+  const w = Math.max(1, layoutW);
+  const h = Math.max(1, layoutH);
+  return {
+    left: Math.max(0, (layoutRect.left / w) * 100),
+    top: Math.max(0, (layoutRect.top / h) * 100),
+    width: Math.max(1, (layoutRect.width / w) * 100),
+    height: Math.max(1, (layoutRect.height / h) * 100),
+  };
+}
+
+/** Scale viewport layout rects down when SCENEVIEW coords overflow layoutClientSize. */
+function fitViewportLayoutRectsToLayoutSize(layoutSize, layoutRects) {
+  if (!layoutSize || !layoutRects.length) {
+    return layoutRects;
+  }
+  const layoutW = Math.max(1, layoutSize.width);
+  const layoutH = Math.max(1, layoutSize.height);
+  let maxRight = 0;
+  let maxBottom = 0;
+  layoutRects.forEach((rect) => {
+    maxRight = Math.max(maxRight, rect.left + rect.width);
+    maxBottom = Math.max(maxBottom, rect.top + rect.height);
+  });
+  const scale = Math.min(1, layoutW / maxRight, layoutH / maxBottom);
+  if (scale >= 0.999) {
+    return layoutRects;
+  }
+  return layoutRects.map((rect) => ({
+    left: rect.left * scale,
+    top: rect.top * scale,
+    width: rect.width * scale,
+    height: rect.height * scale,
+  }));
+}
+
+function sceneviewBoxStyle(mapped, extra) {
+  const parts = [
+    `left:${mapped.left}px`,
+    `top:${mapped.top}px`,
+    `width:${mapped.width}px`,
+    `height:${mapped.height}px`,
+  ];
+  if (extra) {
+    parts.push(extra);
+  }
+  return parts.join(';');
+}
+
+function thumbnailImgHtml(thumbnail) {
+  if (
+    !thumbnail ||
+    typeof thumbnail !== 'object' ||
+    typeof thumbnail.contentType !== 'string' ||
+    typeof thumbnail.data !== 'string' ||
+    !/^image\/(png|jpeg)$/i.test(thumbnail.contentType.trim())
+  ) {
+    return '';
+  }
+  const contentType = thumbnail.contentType.trim().toLowerCase();
+  return `<img class="svThumb" src="data:${contentType};base64,${thumbnail.data}" alt="" />`;
+}
+
+function sceneviewDisplayShellHtml(
+  mapped,
+  className,
+  title,
+  centerLabel,
+  innerHtml,
+  zIndex
+) {
+  const labelTop =
+    className.includes('svDisplayId') || className.includes('svWorklist');
+  const labelHtml = centerLabel
+    ? `<div class="${
+        labelTop ? 'svDisplayLabel svDisplayLabelTop' : 'svDisplayLabel'
+      }"><span>${escapeHtml(centerLabel)}</span></div>`
+    : '';
+  return `<div class="${className} svDisplay" style="${sceneviewBoxStyle(
+    mapped,
+    `z-index:${zIndex}`
+  )}" title="${escapeHtml(title)}">${innerHtml || ''}${labelHtml}</div>`;
+}
+
+function sceneviewWorklistDisplayInnerHtml(thumbnail) {
+  const worklistThumbSrc = thumbnail ? castImageDataUrl(thumbnail) : '';
+  const thumbHtml = worklistThumbSrc
+    ? `<img class="svThumb" src="${worklistThumbSrc}" alt="" />`
+    : '';
+  return thumbHtml ? `<div class="svThumbWrap">${thumbHtml}</div>` : '';
+}
+
+function sceneviewViewportBoxPercentHtml(pct, title, thumbnail, zIndex) {
+  const thumbHtml = thumbnailImgHtml(thumbnail);
+  const thumbLayer = thumbHtml
+    ? `<div class="svThumbWrap">${thumbHtml}</div>`
+    : '';
+  const boxStyle = [
+    `left:${pct.left}%`,
+    `top:${pct.top}%`,
+    `width:${pct.width}%`,
+    `height:${pct.height}%`,
+    `z-index:${zIndex}`,
+  ].join(';');
+  return `<div class="svViewport" style="${boxStyle}" title="${escapeHtml(
+    title
+  )}">${thumbLayer}</div>`;
+}
+
+function sceneviewIdDisplayInnerHtml(win, display, viewports) {
+  const layoutScreenRect = layoutScreenRectFromEntry(display, viewports, win);
+  const layoutSize = layoutClientSizeFromEntry(display, layoutScreenRect);
+  if (!layoutSize) {
+    return '';
+  }
+  const layoutStyle =
+    'position:absolute;left:0;top:0;width:100%;height:100%;box-sizing:border-box';
+  const viewportList = Array.isArray(viewports) ? viewports : [];
+
+  if (display && display.maximized && viewportList.length) {
+    const activeVp =
+      viewportList.find((vp) => vp && vp.viewId === display.activeViewId) ||
+      viewportList[0];
+    const pct = { left: 0, top: 0, width: 100, height: 100 };
+    const vpName =
+      (activeVp && (activeVp.name || activeVp.viewId)) || 'viewport';
+    const vpTitle = activeVp.studyInstanceUID
+      ? `${vpName} — ${activeVp.studyInstanceUID}`
+      : vpName;
+    return `<div class="svDisplayContent" style="${layoutStyle}">${sceneviewViewportBoxPercentHtml(
+      pct,
+      vpTitle,
+      activeVp.thumbnail,
+      3
+    )}</div>`;
+  }
+
+  const viewportItems = [];
+  const useLayoutTree = Boolean(
+    layoutSlotRectsFromDisplayLayout(
+      display,
+      layoutSize.width,
+      layoutSize.height
+    )
+  );
+  viewportList.forEach((vp, vpIdx) => {
+    const vpLayoutRect = viewportLayoutRectForDiagram(
+      display,
+      vp,
+      layoutSize,
+      layoutScreenRect
+    );
+    if (!vpLayoutRect) {
+      return;
+    }
+    viewportItems.push({ vp, vpIdx, layoutRect: vpLayoutRect });
+  });
+  const layoutRects = useLayoutTree
+    ? viewportItems.map((item) => item.layoutRect)
+    : fitViewportLayoutRectsToLayoutSize(
+        layoutSize,
+        viewportItems.map((item) => item.layoutRect)
+      );
+  const viewportChunks = [];
+  viewportItems.forEach((item, idx) => {
+    const pct = mapLayoutRectToPercent(
+      layoutRects[idx],
+      layoutSize.width,
+      layoutSize.height
+    );
+    const vpName =
+      (item.vp && (item.vp.name || item.vp.viewId)) ||
+      `viewport-${item.vpIdx + 1}`;
+    const vpTitle = item.vp.studyInstanceUID
+      ? `${vpName} — ${item.vp.studyInstanceUID}`
+      : vpName;
+    viewportChunks.push(
+      sceneviewViewportBoxPercentHtml(pct, vpTitle, item.vp.thumbnail, 3)
+    );
+  });
+  return `<div class="svDisplayContent" style="${layoutStyle}">${viewportChunks.join(
+    ''
+  )}</div>`;
+}
+
+function pushSceneviewDisplay(
+  chunks,
+  mappedWin,
+  shellClassName,
+  title,
+  centerLabel,
+  innerHtml,
+  zIndex
+) {
+  chunks.push(
+    sceneviewDisplayShellHtml(
+      mappedWin,
+      shellClassName,
+      title,
+      centerLabel,
+      innerHtml,
+      zIndex
+    )
+  );
+}
+
+function buildSceneviewImageDisplaysSectionHtml(sceneviewEntries) {
+  const blocks = [];
+  sceneviewEntries.forEach((entry, entryIdx) => {
+    const data = entry.data;
+    const productLabel =
+      (data.product && String(data.product)) ||
+      entry.productName ||
+      entry.subscriber ||
+      `Image Display ${entryIdx + 1}`;
+    const subscriberLabel =
+      entry.subscriber ||
+      (data['subscriber.name'] && String(data['subscriber.name'])) ||
+      productLabel;
+    if (!windowRectFromPayload(data.window)) {
+      return;
+    }
+    const viewports = Array.isArray(data.viewports) ? data.viewports : [];
+    blocks.push(
+      buildSubscriberDetailsTreeHtml({
+        subscriberName: subscriberLabel,
+        display: data.display,
+        viewports,
+      })
+    );
+  });
+  if (!blocks.length) {
+    return '<p class="svEmpty">No image display metadata.</p>';
+  }
+  return blocks.join('');
+}
+
+function buildSceneviewLayoutDiagramHtml(
+  worklistWindow,
+  sceneviewEntries,
+  worklistMeta
+) {
+  const bounds = computeSceneviewDiagramBounds(
+    worklistWindow,
+    sceneviewEntries
+  );
+  if (!bounds) {
+    return '<p class="svEmpty">No screen geometry in sceneview response.</p>';
+  }
+  const scale = Math.min(
+    SCENEVIEW_LAYOUT_CANVAS_W / bounds.width,
+    SCENEVIEW_LAYOUT_CANVAS_H / bounds.height
+  );
+  const pad = SCENEVIEW_LAYOUT_PAD;
+  const canvasW = Math.ceil(bounds.width * scale + pad * 2);
+  const canvasH = Math.ceil(bounds.height * scale + pad * 2);
+  const chunks = [
+    `<div class="svCanvas" style="width:${canvasW}px;height:${canvasH}px">`,
+  ];
+
+  const worklistRect = windowRectFromPayload(worklistWindow);
+  if (worklistRect) {
+    const mapped = mapRectToDiagram(worklistRect, bounds, scale, pad);
+    const wlSubscriber =
+      (worklistMeta && worklistMeta.subscriberName) || 'Worklist';
+    const wlTitle = `Worklist (${wlSubscriber})`;
+    pushSceneviewDisplay(
+      chunks,
+      mapped,
+      'svWin svWorklist',
+      wlTitle,
+      wlSubscriber,
+      sceneviewWorklistDisplayInnerHtml(worklistMeta && worklistMeta.thumbnail),
+      2
+    );
+  }
+
+  sceneviewEntries.forEach((entry, entryIdx) => {
+    const data = entry.data;
+    const productLabel =
+      (data.product && String(data.product)) ||
+      entry.productName ||
+      entry.subscriber ||
+      `Image Display ${entryIdx + 1}`;
+    const subscriberLabel =
+      entry.subscriber ||
+      (data['subscriber.name'] && String(data['subscriber.name'])) ||
+      productLabel;
+    const winRect = sceneviewWindowRectForDiagram(data.window);
+    if (!winRect) {
+      return;
+    }
+    const mappedWin = mapRectToDiagram(winRect, bounds, scale, pad);
+    const viewports = Array.isArray(data.viewports) ? data.viewports : [];
+    pushSceneviewDisplay(
+      chunks,
+      mappedWin,
+      'svDisplayId',
+      subscriberLabel,
+      subscriberLabel,
+      sceneviewIdDisplayInnerHtml(data.window, data.display, viewports),
+      4
+    );
+  });
+
+  chunks.push('</div>');
+  return chunks.join('');
+}
+
+function buildSceneviewLayoutPageHtml(
+  worklistWindow,
+  sceneviewEntries,
+  worklistMeta
+) {
+  const diagram = buildSceneviewLayoutDiagramHtml(
+    worklistWindow,
+    sceneviewEntries,
+    worklistMeta
+  );
+  const imageDisplaysSection =
+    buildSceneviewImageDisplaysSectionHtml(sceneviewEntries);
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Scene layout — Cast worklist</title>
+<style>
+  body { margin: 0; padding: 20px 24px; background: #111; color: #eaeaea; font-family: system-ui, sans-serif; font-size: 14px; }
+  h1 { margin: 0 0 8px; font-size: 1.25rem; }
+  p { margin: 0 0 12px; color: #b8b8b8; }
+  .svWrap { overflow: auto; border: 1px solid #333; border-radius: 8px; background: #0a0a12; padding: 12px; margin-bottom: 16px; }
+  .svCanvas { position: relative; margin: 0 auto; background: repeating-linear-gradient(
+    0deg, #1a1a22 0, #1a1a22 20px, #15151c 20px, #15151c 40px
+  ); }
+  .svDisplay { position: absolute; box-sizing: border-box; overflow: hidden; }
+  .svWin, .svViewport { box-sizing: border-box; }
+  .svWorklist { border: 2px solid #ffc107; background: rgba(255, 193, 7, 0.12); }
+  .svDisplayId { border: 2px solid #6cb6ff; background: #0a0a12; }
+  .svDisplayContent { position: absolute; box-sizing: border-box; overflow: hidden; }
+  .svDisplayContent .svViewport { position: absolute; border: 1px solid #6cb6ff; background: #000; box-sizing: border-box; }
+  .svThumbWrap { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
+  .svWorklist .svThumb { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+  .svDisplayContent .svThumb { width: 100%; height: 100%; object-fit: cover; object-position: center;
+    display: block; background: #000; }
+  .svDisplayLabel { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+    padding: 6px; pointer-events: none; box-sizing: border-box; }
+  .svDisplayLabelTop { inset: auto 0 auto 0; top: 0; height: auto; align-items: flex-start; justify-content: center;
+    padding: 4px 6px; background: linear-gradient(to bottom, rgba(0, 0, 0, 0.72), transparent); }
+  .svDisplayLabel span { display: inline-block; max-width: calc(100% - 12px); padding: 4px 10px; font-size: 11px;
+    font-weight: 700; line-height: 1.25; color: #fff; text-align: center; word-break: break-word;
+    background: rgba(0, 0, 0, 0.65); border-radius: 4px; text-shadow: 0 1px 2px #000; }
+  .svBelowSection { margin-top: 4px; }
+  .svBelowSection h2 { margin: 0 0 10px; font-size: 1rem; font-weight: 600; color: #ddd; }
+  .svBelowPanel { border: 1px solid #333; border-radius: 8px; background: #0a0a12; padding: 12px 14px; }
+  .svSubscriberRoot { margin: 0 0 10px; }
+  .svSubscriberRoot:last-child { margin-bottom: 0; }
+  .svSubscriberSummary { cursor: pointer; font-weight: 700; color: #e8e8e8; }
+  .svSubscriberBody { margin: 4px 0 0 0.4em; padding: 0; }
+  .svDetailsNode { margin: 2px 0 4px 0; }
+  .svDetailsNode > summary { cursor: pointer; color: #b8d4ff; list-style-position: outside; }
+  .svDetailsBody { margin: 2px 0 4px 0.8em; padding: 0; }
+  .svDetailLine { margin: 1px 0; color: #a8a8a8; white-space: pre-wrap; }
+  .svEmpty { color: #888; }
+</style>
+</head>
+<body>
+<h1>Scene layout (SCENEVIEW)</h1>
+<p>Screen positions from this worklist window and image-display sceneview responses (not to scale across monitors).</p>
+<div class="svWrap">${diagram}</div>
+<section class="svBelowSection">
+<h2>Image Displays</h2>
+<div class="svBelowPanel">${imageDisplaysSection}</div>
+</section>
+</body>
+</html>`;
+}
+
+function openSceneviewLayoutPopup(
+  worklistWindow,
+  sceneviewEntries,
+  worklistMeta
+) {
+  const popupWidth = 1000;
+  const popupHeight = 720;
+  const left = Math.max(0, Math.floor((window.screen.width - popupWidth) / 2));
+  const top = Math.max(0, Math.floor((window.screen.height - popupHeight) / 2));
+  const features = [
+    'popup',
+    `width=${popupWidth}`,
+    `height=${popupHeight}`,
+    `left=${left}`,
+    `top=${top}`,
+  ].join(',');
+  const popup = window.open('', 'castSceneviewLayoutWindow', features);
+  if (!popup) {
+    return false;
+  }
+  revokeSceneviewLayoutWorklistThumbUrl();
+  const pageMeta = {
+    subscriberName: (worklistMeta && worklistMeta.subscriberName) || 'Worklist',
+    thumbnail: worklistMeta && worklistMeta.thumbnail,
+  };
+  popup.document.open();
+  popup.document.write(
+    buildSceneviewLayoutPageHtml(worklistWindow, sceneviewEntries, pageMeta)
+  );
+  popup.document.close();
+  popup.focus();
+  return true;
+}
+
+async function openSceneviewLayoutFromStatus(el, state, productName) {
+  if (!state.client?.request) {
+    window.alert('Cast client is not ready.');
+    return;
+  }
+  if (state.sceneviewLayoutBusy) {
+    return;
+  }
+  state.sceneviewLayoutBusy = true;
+  try {
+    const wlSubscriber = el.getSubscriber.value.trim() || 'Worklist';
+    const worklistWindow = getWorklistScreenWindow();
+    // Capture while the worklist UI is visible (layout popup only; not sent on Cast).
+    const worklistThumbnail = await captureWorklistThumbnailPng(
+      480,
+      wlSubscriber
+    );
+    const result = await state.client.request(
+      buildSceneviewRequestArgs(el, productName)
+    );
+    if (!result.ok) {
+      const detail =
+        typeof result.data === 'string'
+          ? result.data
+          : JSON.stringify(redactSceneviewPayloadForLog(result.data), null, 2);
+      window.alert(`SCENEVIEW request failed (${result.status}):\n${detail}`);
+      addMessage(el, state, 'err', 'SCENEVIEW layout', detail);
+      return;
+    }
+    const entries = parseSceneviewCollatedResponses(result.data);
+    if (!entries.length) {
+      window.alert('No sceneview response from image display.');
+      addMessage(el, state, 'err', 'SCENEVIEW layout', 'No responders');
+      return;
+    }
+    const opened = openSceneviewLayoutPopup(worklistWindow, entries, {
+      subscriberName: wlSubscriber,
+      thumbnail: worklistThumbnail,
+    });
+    if (opened) {
+      addMessage(el, state, 'received', 'SCENEVIEW layout', {
+        product: productName,
+        responders: entries.length,
+      });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    window.alert(`SCENEVIEW request error: ${msg}`);
+    addMessage(el, state, 'err', 'SCENEVIEW layout', msg);
+  } finally {
+    state.sceneviewLayoutBusy = false;
+  }
+}
+
+function setImageDisplayConnectionStatus(
+  el,
+  state,
+  status,
+  productName,
+  subscriberCount,
+  subscribers
+) {
+  const statusClass = CONNECTION_STATUS_CLASS[status] || style.disconnected;
+  el.connectionStatus.className = `${style.status} ${style.statusHeader} ${statusClass}`;
+  el.statusText.replaceChildren();
+  el.statusText.appendChild(document.createTextNode('Image Display: '));
+  const productSpan = document.createElement('span');
+  productSpan.className = `${style.statusProductName} ${style.statusProductNameClickable}`;
+  const tooltip = imageDisplaySubscriberTooltip(subscribers);
+  productSpan.title = tooltip
+    ? `${tooltip}\n\nClick to open scene layout (SCENEVIEW).`
+    : 'Click to open scene layout (SCENEVIEW).';
+  productSpan.textContent =
+    subscriberCount >= 2 ? `${productName} (${subscriberCount})` : productName;
+  productSpan.setAttribute('role', 'button');
+  productSpan.tabIndex = 0;
+  const activate = () => {
+    openSceneviewLayoutFromStatus(el, state, productName).catch((err) => {
+      console.error('[vtkCastClient] SCENEVIEW layout failed', err);
+    });
+  };
+  productSpan.addEventListener('click', activate);
+  productSpan.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      activate();
+    }
+  });
+  el.statusText.appendChild(productSpan);
+  updateStatusMeta(el, state);
+}
+
+function clearImageDisplayRequesters(state) {
+  state.imageDisplaySubscribersByProduct = new Map();
+}
+
+function refreshImageDisplayConnectionStatus(el, state) {
+  const byProduct = state.imageDisplaySubscribersByProduct;
+  if (!byProduct || byProduct.size === 0) {
+    setConnection(el, state, 'connected', 'Websocket connected');
+    return;
+  }
+  let bestProduct = '';
+  let bestCount = 0;
+  byProduct.forEach((subscribers, product) => {
+    const count = subscribers.size;
+    if (count > bestCount) {
+      bestCount = count;
+      bestProduct = product;
+    }
+  });
+  if (bestProduct) {
+    setImageDisplayConnectionStatus(
+      el,
+      state,
+      'connected',
+      bestProduct,
+      bestCount,
+      byProduct.get(bestProduct)
+    );
+  }
+}
+
+function updateStatusForIncomingContextRequest(el, state, message) {
+  const ids = contextRequestProductAndSubscriber(message);
+  if (!ids) {
+    return;
+  }
+  const { product, subscriber } = ids;
+  if (!state.imageDisplaySubscribersByProduct) {
+    state.imageDisplaySubscribersByProduct = new Map();
+  }
+  if (!state.imageDisplaySubscribersByProduct.has(product)) {
+    state.imageDisplaySubscribersByProduct.set(product, new Set());
+  }
+  state.imageDisplaySubscribersByProduct.get(product).add(subscriber);
+  refreshImageDisplayConnectionStatus(el, state);
+}
+
+function handleSubscriptionRemoved(el, state, message) {
+  const event = message?.event;
+  if (!event || getHubEventLower(event) !== 'subscription-removed') {
+    return false;
+  }
+  const ids = contextRequestProductAndSubscriber(message);
+  if (!ids) {
+    return false;
+  }
+  const { product, subscriber } = ids;
+  const subscribers = state.imageDisplaySubscribersByProduct?.get(product);
+  if (subscribers) {
+    subscribers.delete(subscriber);
+    if (subscribers.size === 0) {
+      state.imageDisplaySubscribersByProduct.delete(product);
+    }
+  }
+  refreshImageDisplayConnectionStatus(el, state);
+  return true;
 }
 
 function handleIncomingGetRequest(el, state, message) {
@@ -652,6 +2904,8 @@ function handleIncomingGetRequest(el, state, message) {
       }
     : EMPTY_FHIRCAST_CONTEXT;
 
+  updateStatusForIncomingContextRequest(el, state, message);
+
   state.client.sendCastRequestResponse(
     correlationId,
     context.dataType,
@@ -666,14 +2920,32 @@ function handleIncomingGetRequest(el, state, message) {
   return true;
 }
 
-function isCastImageBinaryNode(node) {
-  return (
-    node &&
-    typeof node === 'object' &&
-    typeof node.contentType === 'string' &&
-    typeof node.data === 'string' &&
-    /^image\/(png|jpeg)$/i.test(node.contentType.trim())
-  );
+function collectSceneviewViewportThumbnails(
+  sceneviewData,
+  productName,
+  subscriber
+) {
+  const entries = [];
+  const viewports =
+    sceneviewData &&
+    typeof sceneviewData === 'object' &&
+    Array.isArray(sceneviewData.viewports)
+      ? sceneviewData.viewports
+      : [];
+  viewports.forEach((vp, idx) => {
+    const thumb = vp && vp.thumbnail;
+    if (!isCastImageBinaryNode(thumb)) {
+      return;
+    }
+    const url = imageToObjectUrl(thumb.contentType, thumb.data);
+    if (!url) {
+      return;
+    }
+    const name = (vp && (vp.name || vp.viewId)) || `viewport-${idx + 1}`;
+    const label = productName ? `${name} (${productName})` : name;
+    entries.push({ url, subscriber, productName, label });
+  });
+  return entries;
 }
 
 /** Every binary PNG/JPEG blob found in ``payload`` (breadth-first walk). */
@@ -717,20 +2989,6 @@ function findAllImageResources(payload) {
   return results;
 }
 
-function imageToObjectUrl(contentType, base64Data) {
-  try {
-    const binary = atob(base64Data);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type: contentType });
-    return URL.createObjectURL(blob);
-  } catch (err) {
-    return '';
-  }
-}
-
 function getDefaultDicomSendFileName(viewer) {
   return viewer === 'volview'
     ? 'AI-result-volview.dcm'
@@ -759,34 +3017,85 @@ async function buildDicomSendContext(viewer) {
   ];
 }
 
-function setConnection(el, status, text) {
-  const statusClass = CONNECTION_STATUS_CLASS[status] || style.disconnected;
-  el.connectionStatus.className = `${style.status} ${style.statusHeader} ${statusClass}`;
-  el.statusText.textContent = text;
+function setOpenViewerButtonsEnabled(el, enabled) {
+  const disabled = !enabled;
+  el.openTopicViewerBtn.disabled = disabled;
+  el.openVolViewBtn.disabled = disabled;
+  el.startSlicerBtn.disabled = disabled;
 }
 
-function getHubLabel(hubKey) {
-  return HUB_DEFINITIONS[hubKey]?.label || 'Hub';
+function setHubAdminPortalButtonsEnabled(el, enabled) {
+  const disabled = !enabled;
+  el.hubAdminPortalBtn.disabled = disabled;
+  el.openHubBtn.disabled = disabled;
 }
 
-function applyWebsocketStatus(el, wsState) {
+function getCastViewerPopupFeatures() {
+  const popupWidth = 800;
+  const popupHeight = 600;
+  const left = Math.max(0, Math.floor((window.screen.width - popupWidth) / 2));
+  const top = Math.max(0, Math.floor((window.screen.height - popupHeight) / 2));
+  return [
+    'popup',
+    `width=${popupWidth}`,
+    `height=${popupHeight}`,
+    `left=${left}`,
+    `top=${top}`,
+    'noopener',
+    'noreferrer',
+  ].join(',');
+}
+
+function openHubAdminPortal(el) {
+  if (el.hubSelect.value === 'local') {
+    window.open(
+      'http://localhost:2018/api/hub/admin',
+      'castAdminPortalWindow',
+      getCastViewerPopupFeatures()
+    );
+    return;
+  }
+  const base = el.hubEndpoint.value.trim();
+  const hubBase = base.endsWith('/') ? base : `${base}/`;
+  const url = new URL('admin', hubBase).href;
+  window.open(url, 'castAdminPortalWindow', getCastViewerPopupFeatures());
+}
+
+function openCastViewer(el, state, viewerKind) {
+  const isLocal = el.hubSelect.value === 'local';
+  let viewerBaseUrl;
+  if (viewerKind === 'volview') {
+    viewerBaseUrl = isLocal
+      ? VOLVIEW_VIEWER_URL_LOCAL
+      : VOLVIEW_VIEWER_URL_CLOUD;
+  } else {
+    viewerBaseUrl = isLocal ? OHIF_VIEWER_URL_LOCAL : OHIF_VIEWER_URL_CLOUD;
+  }
+  const url = new URL(viewerBaseUrl);
+  const token = state.client?.getConnectionState?.().token?.trim();
+  if (token) {
+    url.searchParams.set('id-token', token);
+  }
+  window.open(url.toString(), 'castViewerWindow', getCastViewerPopupFeatures());
+}
+
+function applyWebsocketStatus(el, state, wsState) {
   switch (wsState) {
     case 'connecting':
-      setConnection(el, 'connecting', 'Websocket connecting');
+      setConnection(el, state, 'connecting', 'Websocket connecting');
       break;
     case 'connected':
-      setConnection(
-        el,
-        'connected',
-        `${getHubLabel(el.hubSelect.value)} connected`
-      );
+      clearImageDisplayRequesters(state);
+      setConnection(el, state, 'connected', 'Websocket connected');
       break;
     case 'error':
-      setConnection(el, 'error', 'Websocket error');
+      clearImageDisplayRequesters(state);
+      setConnection(el, state, 'error', 'Websocket error');
       break;
     case 'disconnected':
     default:
-      setConnection(el, 'disconnected', 'Websocket disconnected');
+      clearImageDisplayRequesters(state);
+      setConnection(el, state, 'disconnected', 'Websocket disconnected');
       break;
   }
 }
@@ -796,8 +3105,6 @@ function applyHubPreset(el, state, hubKey) {
   el.hubEndpoint.value = hubDef.hubEndpoint;
   el.authorizeEndpoint.value = hubDef.authorizeEndpoint || '';
   el.tokenEndpoint.value = hubDef.authEndpoint;
-  el.productName.value = hubDef.product_name;
-  el.productVersion.value = hubDef.product_version || '1.0';
   state.selectedClientId = hubDef.client_id;
   state.selectedClientSecret = hubDef.client_secret;
 }
@@ -816,15 +3123,17 @@ function buildHubConfig(el, state) {
 
 function buildSessionConfig(el) {
   const actorsList = parseSubscribeActorsList(el.subscribeActors.value);
+  const storedUserName = getStoredCastUserName();
   return {
     subscriberName: el.subscriberName.value.trim() || undefined,
-    productName: el.productName.value.trim() || 'VTKJS-WKLST',
+    productName: el.productName.value.trim() || EXAMPLE_PRODUCT_NAME,
     productVersion: el.productVersion.value.trim() || '1.0',
     actors: actorsList.length ? actorsList : undefined,
     topic: el.topic.value.trim(),
     events: parseEvents(el.events.value),
     lease: 7200,
     defaultTargetActor: DEFAULT_TARGET_ACTOR_KEYWORD,
+    userName: storedUserName || undefined,
   };
 }
 
@@ -840,51 +3149,69 @@ function ensureClient(el, state, recreate = false) {
       autoReconnect: true,
     });
     state.client.onMessage((message) => {
+      handleSubscriptionRemoved(el, state, message);
       handleIncomingGetRequest(el, state, message);
-      addMessage(el, state, 'received', 'Received', message);
+      addMessage(
+        el,
+        state,
+        'received',
+        'Received',
+        sanitizeCastMessageForDisplay(message)
+      );
     });
     state.client.onConnectionStateChange((wsState) => {
-      applyWebsocketStatus(el, wsState);
+      applyWebsocketStatus(el, state, wsState);
       if (wsState === 'connected') {
         el.subscribeBtn.disabled = true;
         el.unsubscribeBtn.disabled = false;
         el.startConferenceBtn.disabled = false;
-        el.openTopicViewerBtn.disabled = false;
+        setOpenViewerButtonsEnabled(el, true);
         el.publishBtn.disabled = false;
         el.getBtn.disabled = false;
       } else if (wsState === 'disconnected' || wsState === 'error') {
         el.subscribeBtn.disabled = false;
         el.unsubscribeBtn.disabled = true;
         el.startConferenceBtn.disabled = true;
-        el.openTopicViewerBtn.disabled = true;
+        setOpenViewerButtonsEnabled(el, false);
         el.publishBtn.disabled = true;
         el.getBtn.disabled = true;
       }
     });
   }
   state.client.setTopic(el.topic.value.trim());
+  const storedUserName = getStoredCastUserName();
+  if (storedUserName) {
+    state.client.setUserName(storedUserName);
+  }
   return state.client;
 }
 
 async function handleAuthenticate(el, state) {
-  setConnection(el, 'connecting', 'Authenticating');
+  setConnection(el, state, 'connecting', 'Authenticating');
   el.tokenBtn.disabled = true;
   el.subscribeBtn.disabled = true;
-  el.hubAdminPortalBtn.disabled = true;
+  setHubAdminPortalButtonsEnabled(el, false);
   try {
     const castClient = ensureClient(el, state, true);
+    const storedUserName = getStoredCastUserName();
+    if (storedUserName) {
+      castClient.setUserName(storedUserName);
+    }
     const result = await castClient.authenticate();
-    const userName = result?.user_name || '';
+    const userName = result?.user_name || storedUserName || '';
     const code = result?.code || '';
-    state.lastAuthUserName = userName;
+    if (userName) {
+      setStoredCastUserName(userName);
+      state.lastAuthUserName = userName;
+    }
     state.lastAuthCode = code;
     if (!code) {
-      setConnection(el, 'disconnected', 'Authenticate failed');
+      setConnection(el, state, 'disconnected', 'Authenticate failed');
       addMessage(el, state, 'err', 'Authenticate error', 'No code returned');
       return;
     }
     el.tokenBtn.disabled = false;
-    setConnection(el, 'token-ready', `${userName} code obtained`);
+    setConnection(el, state, 'token-ready', `${userName} code obtained`);
     addMessage(el, state, 'received', 'Authenticated', {
       user_name: userName,
       code,
@@ -892,7 +3219,7 @@ async function handleAuthenticate(el, state) {
   } catch (error) {
     state.lastAuthCode = '';
     el.tokenBtn.disabled = true;
-    setConnection(el, 'disconnected', 'Authenticate failed');
+    setConnection(el, state, 'disconnected', 'Authenticate failed');
     addMessage(
       el,
       state,
@@ -914,7 +3241,7 @@ async function handleGetToken(el, state) {
     );
     return;
   }
-  setConnection(el, 'connecting', 'Getting token');
+  setConnection(el, state, 'connecting', 'Getting token');
   const castClient = state.client;
   if (!castClient) {
     addMessage(
@@ -933,14 +3260,14 @@ async function handleGetToken(el, state) {
     const ok = await castClient.getToken(code);
     if (!ok) {
       el.subscribeBtn.disabled = true;
-      el.hubAdminPortalBtn.disabled = true;
-      setConnection(el, 'disconnected', 'Token failed');
+      setHubAdminPortalButtonsEnabled(el, false);
+      setConnection(el, state, 'disconnected', 'Token failed');
       addMessage(el, state, 'err', 'Token error', 'Failed to get token');
       return;
     }
     el.subscribeBtn.disabled = false;
-    el.hubAdminPortalBtn.disabled = false;
-    setConnection(el, 'token-ready', 'Access token ready');
+    setHubAdminPortalButtonsEnabled(el, true);
+    setConnection(el, state, 'token-ready', 'Access token ready');
     const session = castClient.getSessionConfig();
     if (session.subscriberName) {
       el.subscriberName.value = session.subscriberName;
@@ -952,8 +3279,8 @@ async function handleGetToken(el, state) {
     addMessage(el, state, 'received', 'Token', 'Token obtained');
   } catch (error) {
     el.subscribeBtn.disabled = true;
-    el.hubAdminPortalBtn.disabled = true;
-    setConnection(el, 'disconnected', 'Token error');
+    setHubAdminPortalButtonsEnabled(el, false);
+    setConnection(el, state, 'disconnected', 'Token error');
     addMessage(
       el,
       state,
@@ -971,9 +3298,40 @@ async function handleSubscribe(el, state) {
     addMessage(el, state, 'sent', 'Subscribe', {
       topic: el.topic.value.trim(),
     });
+    return true;
+  }
+  setConnection(
+    el,
+    state,
+    'disconnected',
+    `Subscribe failed (${String(result)})`
+  );
+  return false;
+}
+
+/** Hub is already selected; run authenticate → authorize → subscribe on load. */
+async function autoConnectOnLoad(el, state) {
+  if (isFhircastV3Standard(el.castStandardSelect.value)) {
     return;
   }
-  setConnection(el, 'disconnected', `Subscribe failed (${String(result)})`);
+  console.info('[vtkCastClient] auto-connect: authenticate');
+  await handleAuthenticate(el, state);
+  if (!state.lastAuthCode) {
+    console.warn('[vtkCastClient] auto-connect stopped: authenticate failed');
+    return;
+  }
+
+  console.info('[vtkCastClient] auto-connect: authorize');
+  await handleGetToken(el, state);
+  const token = state.client?.getConnectionState?.()?.token;
+  if (!token) {
+    console.warn('[vtkCastClient] auto-connect stopped: authorize failed');
+    return;
+  }
+
+  console.info('[vtkCastClient] auto-connect: subscribe');
+  const subscribed = await handleSubscribe(el, state);
+  console.info('[vtkCastClient] auto-connect done, subscribed=', subscribed);
 }
 
 async function handleUnsubscribe(el, state) {
@@ -983,11 +3341,11 @@ async function handleUnsubscribe(el, state) {
   await state.client.unsubscribe();
   el.unsubscribeBtn.disabled = true;
   el.startConferenceBtn.disabled = true;
-  el.openTopicViewerBtn.disabled = true;
+  setOpenViewerButtonsEnabled(el, false);
   el.publishBtn.disabled = true;
   el.getBtn.disabled = true;
   el.subscribeBtn.disabled = false;
-  setConnection(el, 'disconnected', 'Websocket disconnected');
+  setConnection(el, state, 'disconnected', 'Websocket disconnected');
 }
 
 async function handlePublish(el, state) {
@@ -1161,10 +3519,19 @@ async function handleCastRequest(el, state) {
     return;
   }
 
-  const responseText =
-    typeof result.data === 'string'
-      ? result.data
-      : JSON.stringify(result.data, null, 2);
+  const dataTypeToken = (el.getDataType.value || '').trim().toUpperCase();
+  let responseText;
+  if (typeof result.data === 'string') {
+    responseText = result.data;
+  } else if (dataTypeToken === 'SCENEVIEW') {
+    responseText = JSON.stringify(
+      redactSceneviewPayloadForLog(result.data),
+      null,
+      2
+    );
+  } else {
+    responseText = JSON.stringify(result.data, null, 2);
+  }
   el.getResponseData.value = responseText;
 
   if (!result.ok) {
@@ -1184,13 +3551,26 @@ async function handleCastRequest(el, state) {
   const responses = Array.isArray(envelope.responses) ? envelope.responses : [];
   const expected = Array.isArray(envelope.expected) ? envelope.expected : [];
   const missing = Array.isArray(envelope.missing) ? envelope.missing : [];
-
   if (el.getResponseSummary) {
     const parts = [
       `responses: ${responses.length}/${expected.length || responses.length}`,
     ];
     if (missing.length) parts.push(`missing: ${missing.join(', ')}`);
     if (envelope.timedOut) parts.push('timedOut');
+    if (dataTypeToken === 'SCENEVIEW') {
+      responses.forEach((item, idx) => {
+        const data = item && item.data;
+        const viewports =
+          data && typeof data === 'object' && Array.isArray(data.viewports)
+            ? data.viewports
+            : [];
+        const product =
+          data && typeof data === 'object' && data.product
+            ? String(data.product)
+            : (item && item.productName) || `responder-${idx + 1}`;
+        parts.push(`${product}: ${viewports.length} viewport(s)`);
+      });
+    }
     el.getResponseSummary.textContent = parts.join(' | ');
   }
 
@@ -1205,6 +3585,16 @@ async function handleCastRequest(el, state) {
       item && typeof item.id === 'string' && item.id.trim()
         ? item.id.trim().slice(0, 8)
         : '';
+    if (dataTypeToken === 'SCENEVIEW') {
+      collected.push(
+        ...collectSceneviewViewportThumbnails(
+          item && item.data,
+          productName,
+          subscriber
+        )
+      );
+      return;
+    }
     const images = findAllImageResources(item && item.data);
     images.forEach((imageResource, imgIdx) => {
       const url = imageToObjectUrl(
@@ -1285,6 +3675,7 @@ function boot() {
   const root = document.createElement('div');
   root.className = style.cast;
   root.innerHTML = buildPageHtml();
+  castExampleRootElement = root;
   const mountNode = document.getElementById('vtk-root') || document.body;
   mountNode.replaceChildren(root);
 
@@ -1318,6 +3709,10 @@ function boot() {
     unsubscribeBtn: byId('unsubscribeBtn'),
     startConferenceBtn: byId('startConferenceBtn'),
     openTopicViewerBtn: byId('openTopicViewerBtn'),
+    openVolViewBtn: byId('openVolViewBtn'),
+    openOhifBtn: byId('openOhifBtn'),
+    startSlicerBtn: byId('startSlicerBtn'),
+    openHubBtn: byId('openHubBtn'),
     viewerSelect: byId('viewerSelect'),
     publishBtn: byId('publishBtn'),
     publishActions: byId('publishActions'),
@@ -1336,10 +3731,17 @@ function boot() {
     clearBtn: byId('clearBtn'),
     messages: byId('messages'),
     statusText: byId('statusText'),
+    statusMeta: byId('statusMeta'),
     connectionStatus: byId('connectionStatus'),
     messageCount: byId('messageCount'),
     getResponseData: byId('getResponseData'),
     worklistContextDisplay: byId('worklistContextDisplay'),
+    worklistSpecialitySelect: byId('worklistSpecialitySelect'),
+    worklistPanel: byId('worklistPanel'),
+    castStandardSelect: byId('castStandardSelect'),
+    headerTitleMain: byId('headerTitleMain'),
+    castMainContent: byId('castMainContent'),
+    castFhircastComingSoon: byId('castFhircastComingSoon'),
   };
 
   const state = {
@@ -1349,13 +3751,38 @@ function boot() {
     selectedClientId: '',
     selectedClientSecret: '',
     lastImagingStudyOpenContext: [],
+    imageDisplaySubscribersByProduct: new Map(),
+    openWorklistSampleId: null,
+    sceneviewLayoutBusy: false,
     lastAuthCode: '',
-    lastAuthUserName: '',
+    lastAuthUserName: getStoredCastUserName(),
     defaultTopic:
       new URLSearchParams(window.location.search).get('topic') || '',
   };
 
   updateWorklistContextDisplay(el, state);
+
+  applyCastStandardToPage(el, el.castStandardSelect.value);
+  el.castStandardSelect.addEventListener('change', () => {
+    applyCastStandardToPage(el, el.castStandardSelect.value);
+  });
+
+  el.worklistSpecialitySelect.addEventListener('change', () => {
+    renderWorklistPanel(
+      el.worklistPanel,
+      el.worklistSpecialitySelect.value,
+      el,
+      state
+    );
+    updateWorklistContextControls(el, state);
+  });
+  renderWorklistPanel(
+    el.worklistPanel,
+    el.worklistSpecialitySelect.value,
+    el,
+    state
+  );
+  updateWorklistContextControls(el, state);
 
   fillActorPresetSelect(el.publishActorPreset);
   fillTargetActorPresetSelect(el.publishTargetActorPreset);
@@ -1382,8 +3809,10 @@ function boot() {
     const normalized = el.getDataType.value.trim().toUpperCase();
     const isImageType =
       normalized.startsWith('PNG') || normalized.startsWith('JPG');
+    const isSceneview = normalized === 'SCENEVIEW';
     el.getActorPreset.value = isImageType ? 'ID' : DEFAULT_GET_ACTOR_KEYWORD;
-    el.getTargetActorPreset.value = DEFAULT_TARGET_ACTOR_KEYWORD;
+    el.getTargetActorPreset.value =
+      isImageType || isSceneview ? 'ID' : DEFAULT_TARGET_ACTOR_KEYWORD;
     if (el.getDataTypeHint) {
       const eventName = el.getDataType.value
         ? requestEventFor(el.getDataType.value)
@@ -1395,14 +3824,38 @@ function boot() {
   });
   el.getDataType.dispatchEvent(new Event('change'));
 
-  el.hubSelect.value = 'volviewCloud';
-  applyHubPreset(el, state, 'volviewCloud');
+  const pageInCloud = isRunningInCloud();
+  const hubClassifications = HUB_PRESET_ORDER.map((key) => ({
+    key,
+    hubInCloud: isHubEndpointInCloud(HUB_DEFINITIONS[key].hubEndpoint),
+  }));
+  const hubKey =
+    selectFirstMatchingHubKey(HUB_DEFINITIONS, HUB_PRESET_ORDER, pageInCloud) ||
+    'local';
+  const storedUserName = getStoredCastUserName();
+  console.info(
+    '[vtkCastClient] inCloud=',
+    pageInCloud,
+    'hubs=',
+    hubClassifications,
+    'selected=',
+    hubKey,
+    'user=',
+    storedUserName || '(new)'
+  );
+  el.hubSelect.value = hubKey;
+  applyHubPreset(el, state, hubKey);
   el.topic.value = state.defaultTopic;
+  el.productName.value = EXAMPLE_PRODUCT_NAME;
   const initialSubscriberName = generateSubscriberName(
-    el.productName.value.trim() || 'VTKJS-WKLST'
+    EXAMPLE_SUBSCRIBER_PREFIX
   );
   el.subscriberName.value = initialSubscriberName;
   el.getSubscriber.value = initialSubscriberName;
+  const refreshStatusMeta = () => updateStatusMeta(el, state);
+  el.subscriberName.addEventListener('input', refreshStatusMeta);
+  el.topic.addEventListener('input', refreshStatusMeta);
+  refreshStatusMeta();
   el.dicomFileValue.value = getDefaultDicomSendFileName(el.viewerSelect.value);
   el.eventData.value = `[
   {
@@ -1476,46 +3929,36 @@ function boot() {
 
   el.hubSelect.addEventListener('change', () => {
     applyHubPreset(el, state, el.hubSelect.value);
+    el.productName.value = EXAMPLE_PRODUCT_NAME;
+    updateStatusMeta(el, state);
   });
 
+  const castHubSection = document.getElementById('castHubSection');
+  if (castHubSection) {
+    const castHubOpenKey = 'castExample.castHubOpen';
+    const savedOpen = localStorage.getItem(castHubOpenKey);
+    if (savedOpen !== null) {
+      castHubSection.open = savedOpen === 'true';
+    }
+    castHubSection.addEventListener('toggle', () => {
+      localStorage.setItem(castHubOpenKey, String(castHubSection.open));
+    });
+  }
+
   el.instructionsBtn.addEventListener('click', () => {
-    openInstructionsWindow();
+    openInstructionsWindow(el.castStandardSelect.value);
   });
 
   el.hubAdminPortalBtn.addEventListener('click', () => {
     try {
-      const popupWidth = 800;
-      const popupHeight = 600;
-      const left = Math.max(
-        0,
-        Math.floor((window.screen.width - popupWidth) / 2)
-      );
-      const top = Math.max(
-        0,
-        Math.floor((window.screen.height - popupHeight) / 2)
-      );
-      const features = [
-        'popup',
-        `width=${popupWidth}`,
-        `height=${popupHeight}`,
-        `left=${left}`,
-        `top=${top}`,
-        'noopener',
-        'noreferrer',
-      ].join(',');
-
-      if (el.hubSelect.value === 'local') {
-        window.open(
-          'http://localhost:2017/api/hub/admin',
-          'castAdminPortalWindow',
-          features
-        );
-        return;
-      }
-      const base = el.hubEndpoint.value.trim();
-      const hubBase = base.endsWith('/') ? base : `${base}/`;
-      const url = new URL('admin', hubBase).href;
-      window.open(url, 'castAdminPortalWindow', features);
+      openHubAdminPortal(el);
+    } catch (err) {
+      addMessage(el, state, 'err', 'Hub Admin', 'Invalid hub_endpoint URL');
+    }
+  });
+  el.openHubBtn.addEventListener('click', () => {
+    try {
+      openHubAdminPortal(el);
     } catch (err) {
       addMessage(el, state, 'err', 'Hub Admin', 'Invalid hub_endpoint URL');
     }
@@ -1558,47 +4001,15 @@ function boot() {
     }
   });
 
-  el.openTopicViewerBtn.addEventListener('click', () => {
-    const isLocal =
-      el.hubSelect.value === 'local' || el.hubSelect.value === 'volviewLocal';
-    const viewer = el.viewerSelect.value;
-    let viewerBaseUrl;
-    if (viewer === 'volview') {
-      viewerBaseUrl = isLocal
-        ? 'http://localhost:5173'
-        : 'https://volview-server-with-hub-g2d9hcc5esahgxe8.westeurope-01.azurewebsites.net/volview-client/';
-    } else {
-      viewerBaseUrl = isLocal
-        ? 'http://localhost:3000/viewer'
-        : 'https://ohif-cast.d1ps2fewnyt2md.amplifyapp.com/viewer/';
-    }
-    const url = new URL(viewerBaseUrl);
-    const token = state.client?.getConnectionState?.().token?.trim();
-    if (token) {
-      // Viewer reads hub JWT from `id-token` to recover FHIRcast topic (not legacy `cast-token`).
-      url.searchParams.set('id-token', token);
-    }
-    const popupWidth = 800;
-    const popupHeight = 600;
-    const left = Math.max(
-      0,
-      Math.floor((window.screen.width - popupWidth) / 2)
-    );
-    const top = Math.max(
-      0,
-      Math.floor((window.screen.height - popupHeight) / 2)
-    );
-    const features = [
-      'popup',
-      `width=${popupWidth}`,
-      `height=${popupHeight}`,
-      `left=${left}`,
-      `top=${top}`,
-      'noopener',
-      'noreferrer',
-    ].join(',');
-    window.open(url.toString(), 'castViewerWindow', features);
-  });
+  el.openVolViewBtn.addEventListener('click', () =>
+    openCastViewer(el, state, 'volview')
+  );
+  el.openOhifBtn.addEventListener('click', () =>
+    openCastViewer(el, state, 'ohif')
+  );
+  el.openTopicViewerBtn.addEventListener('click', () =>
+    openCastViewer(el, state, el.viewerSelect.value)
+  );
 
   el.chooseDicomFilesBtn.addEventListener('click', () => {
     el.dicomFilesInput.click();
@@ -1681,6 +4092,10 @@ function boot() {
     if (state.client) {
       state.client.delete();
     }
+  });
+
+  autoConnectOnLoad(el, state).catch((err) => {
+    console.error('[vtkCastClient] auto-connect failed', err);
   });
 }
 

@@ -37,7 +37,6 @@ export interface AuthorizeResult {
   expires_in?: number;
 }
 
-
 export interface CastClientConfig {
   hub?: Partial<HubConfig>;
   session?: Partial<SessionConfig>;
@@ -48,7 +47,6 @@ export interface CastClientConfig {
   autoReconnect?: boolean;
   preserveSessionTopicFromToken?: boolean;
 }
-
 
 export interface CastEvent {
   'hub.event'?: string;
@@ -71,7 +69,6 @@ export interface CastMessage {
   event?: CastEvent;
   [key: string]: unknown;
 }
-
 
 /**
  * One responder's contribution to a fan-out cast-request. ``id`` is the Cast
@@ -117,7 +114,11 @@ export interface CastRequestResult {
   data: CastRequestResponseEnvelope | unknown;
 }
 
-export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
+export type ConnectionState =
+  | 'connecting'
+  | 'connected'
+  | 'disconnected'
+  | 'error';
 
 export interface vtkCastClient extends vtkObject {
   onMessage(callback: (message: CastMessage) => void): void;
@@ -140,6 +141,7 @@ export interface vtkCastClient extends vtkObject {
     castMessage: CastMessage,
     hub?: HubConfig & HubRuntimeState
   ): Promise<Response | null>;
+  /** @deprecated Use ``publishStowBatch`` or ``publish`` (STOW). */
   publishMultipart(
     castMessage: CastMessage,
     fileBytes: ArrayBuffer,
@@ -150,7 +152,7 @@ export interface vtkCastClient extends vtkObject {
     fileBytesList: ArrayBuffer[],
     hub?: HubConfig & HubRuntimeState
   ): Promise<Response | null>;
-  /** @deprecated Use ``publishMultipart`` or ``publish`` (auto-multipart). */
+  /** @deprecated Use ``publishStowBatch`` or ``publish``. */
   publishNiftiMultipart(
     castMessage: CastMessage,
     fileBytes: ArrayBuffer,
@@ -186,6 +188,88 @@ export function extend(
 export function newInstance(initialValues?: CastClientConfig): vtkCastClient;
 
 export function generateSubscriberName(productName?: string): string;
+
+/** True when the page is served from a public/cloud host (not local dev). */
+export function isRunningInCloud(location?: Location): boolean;
+
+/** True when a Cast hub endpoint URL points at a cloud/public host. */
+export function isHubEndpointInCloud(hubEndpoint: string): boolean;
+
+/** First hub preset key whose deployment matches the page (local vs cloud). */
+export function selectFirstMatchingHubKey(
+  hubs: Record<string, { hubEndpoint?: string }>,
+  order: string[],
+  pageInCloud?: boolean
+): string | undefined;
+
+export const CAST_IMAGING_STUDY_OPEN_PROFILE: string;
+export const CAST_IDENTIFIER_DICOM_UID: string;
+export const CAST_IDENTIFIER_NIFTI_URL: string;
+export const CAST_IDENTIFIER_NIFTI_FILENAME: string;
+export const CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID: string;
+export const CAST_IDENTIFIER_WORKLIST_SAMPLE_ID: string;
+export const CAST_OPEN_MODE: string;
+export const CAST_OPEN_MODE_DICOMWEB: string;
+export const CAST_OPEN_MODE_FILES: string;
+export const CAST_DICOMWEB_ROOT: string;
+
+export interface CastImagingStudyFileEntry {
+  url: string;
+  fileName?: string;
+  mimeType?: string;
+  role?: string;
+  label?: string;
+}
+
+export function extractStudyContextItem(
+  context: unknown,
+  key: string
+): Record<string, unknown> | null;
+
+export function extractIdentifierValue(
+  context: unknown,
+  system: string
+): string;
+
+export function extractDicomStudyUid(context: unknown): string;
+
+export function extractDicomSeriesUid(context: unknown): string;
+
+export function extractDicomwebRoot(context: unknown): string;
+
+export function extractOpenMode(context: unknown): string;
+
+export function extractImagingStudyFiles(
+  context: unknown
+): CastImagingStudyFileEntry[];
+
+export function extractNiftiDownloadUrl(context: unknown): string;
+
+export function extractNiftiFilename(context: unknown): string;
+
+export function extractVolviewSampleId(context: unknown): string;
+
+export function buildFilesImagingStudyOpenContext(params: {
+  id: string;
+  files: CastImagingStudyFileEntry[];
+  patientReference?: string;
+  includeLegacyNiftiIdentifiers?: boolean;
+}): Array<{ key: string; resource: Record<string, unknown> }>;
+
+export function buildDicomwebImagingStudyOpenContext(params: {
+  id: string;
+  studyInstanceUID: string;
+  seriesInstanceUID?: string;
+  dicomwebRoot?: string;
+  patientReference?: string;
+}): Array<{ key: string; resource: Record<string, unknown> }>;
+
+export function buildNiftiUrlImagingStudyOpenContext(params: {
+  id: string;
+  url: string;
+  filename?: string;
+  patientReference?: string;
+}): Array<{ key: string; resource: Record<string, unknown> }>;
 
 /**
  * Cast hub client: OAuth, subscribe, WebSocket bind, publish, and typed
@@ -235,6 +319,32 @@ export declare const vtkCastClient: {
   newInstance: typeof newInstance;
   extend: typeof extend;
   generateSubscriberName: typeof generateSubscriberName;
+  isHubEndpointInCloud: typeof isHubEndpointInCloud;
+  isRunningInCloud: typeof isRunningInCloud;
+  selectFirstMatchingHubKey: typeof selectFirstMatchingHubKey;
+  buildDicomwebImagingStudyOpenContext: typeof buildDicomwebImagingStudyOpenContext;
+  buildFilesImagingStudyOpenContext: typeof buildFilesImagingStudyOpenContext;
+  buildNiftiUrlImagingStudyOpenContext: typeof buildNiftiUrlImagingStudyOpenContext;
+  CAST_DICOMWEB_ROOT: typeof CAST_DICOMWEB_ROOT;
+  CAST_IDENTIFIER_DICOM_UID: typeof CAST_IDENTIFIER_DICOM_UID;
+  CAST_IDENTIFIER_NIFTI_FILENAME: typeof CAST_IDENTIFIER_NIFTI_FILENAME;
+  CAST_IDENTIFIER_NIFTI_URL: typeof CAST_IDENTIFIER_NIFTI_URL;
+  CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID: typeof CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID;
+  CAST_IDENTIFIER_WORKLIST_SAMPLE_ID: typeof CAST_IDENTIFIER_WORKLIST_SAMPLE_ID;
+  CAST_IMAGING_STUDY_OPEN_PROFILE: typeof CAST_IMAGING_STUDY_OPEN_PROFILE;
+  CAST_OPEN_MODE: typeof CAST_OPEN_MODE;
+  CAST_OPEN_MODE_DICOMWEB: typeof CAST_OPEN_MODE_DICOMWEB;
+  CAST_OPEN_MODE_FILES: typeof CAST_OPEN_MODE_FILES;
+  extractDicomSeriesUid: typeof extractDicomSeriesUid;
+  extractDicomStudyUid: typeof extractDicomStudyUid;
+  extractDicomwebRoot: typeof extractDicomwebRoot;
+  extractIdentifierValue: typeof extractIdentifierValue;
+  extractImagingStudyFiles: typeof extractImagingStudyFiles;
+  extractNiftiDownloadUrl: typeof extractNiftiDownloadUrl;
+  extractNiftiFilename: typeof extractNiftiFilename;
+  extractOpenMode: typeof extractOpenMode;
+  extractStudyContextItem: typeof extractStudyContextItem;
+  extractVolviewSampleId: typeof extractVolviewSampleId;
 };
 
 export default vtkCastClient;

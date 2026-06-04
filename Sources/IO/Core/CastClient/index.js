@@ -8,14 +8,13 @@ import {
 } from './identity';
 import {
   binaryFileNameFromMessage,
-  extractFirstBinaryFileBytes,
+  coerceBinaryPublishToStowFiles,
+  contextFilesFromEvent,
   extractStowBatchFileBytes,
   firstPendingPayloadSlot,
   hasPendingPayload,
   listPendingPayloadSlots,
-  messageNeedsMultipartPublish,
   messageNeedsStowBatchPublish,
-  normalizeBinaryPublishMessageMetadataOnly,
   normalizeStowBatchMessageMetadataOnly,
   toArrayBufferStrict,
 } from './sendNormalize';
@@ -27,11 +26,69 @@ import {
   resolveTargetActorForWire,
   resolveTargetProductNameForWire,
 } from './wireEnvelope';
+import {
+  isHubEndpointInCloud,
+  isRunningInCloud,
+  selectFirstMatchingHubKey,
+} from './deployment';
+import {
+  buildDicomwebImagingStudyOpenContext,
+  buildFilesImagingStudyOpenContext,
+  buildNiftiUrlImagingStudyOpenContext,
+  CAST_DICOMWEB_ROOT,
+  CAST_IDENTIFIER_DICOM_UID,
+  CAST_IDENTIFIER_NIFTI_FILENAME,
+  CAST_IDENTIFIER_NIFTI_URL,
+  CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID,
+  CAST_IDENTIFIER_WORKLIST_SAMPLE_ID,
+  CAST_IMAGING_STUDY_OPEN_PROFILE,
+  CAST_OPEN_MODE,
+  CAST_OPEN_MODE_DICOMWEB,
+  CAST_OPEN_MODE_FILES,
+  extractDicomSeriesUid,
+  extractDicomStudyUid,
+  extractDicomwebRoot,
+  extractIdentifierValue,
+  extractImagingStudyFiles,
+  extractNiftiDownloadUrl,
+  extractNiftiFilename,
+  extractOpenMode,
+  extractStudyContextItem,
+  extractVolviewSampleId,
+} from './imagingStudyContext';
 
 // API and usage: Documentation/api/IO_Core_CastClient.md (npm run docs:generate-api);
 // live example: /examples/CastClient.html
 
-export { generateSubscriberName };
+export {
+  generateSubscriberName,
+  isHubEndpointInCloud,
+  isRunningInCloud,
+  selectFirstMatchingHubKey,
+  buildDicomwebImagingStudyOpenContext,
+  buildFilesImagingStudyOpenContext,
+  buildNiftiUrlImagingStudyOpenContext,
+  CAST_DICOMWEB_ROOT,
+  CAST_IDENTIFIER_DICOM_UID,
+  CAST_IDENTIFIER_NIFTI_FILENAME,
+  CAST_IDENTIFIER_NIFTI_URL,
+  CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID,
+  CAST_IDENTIFIER_WORKLIST_SAMPLE_ID,
+  CAST_IMAGING_STUDY_OPEN_PROFILE,
+  CAST_OPEN_MODE,
+  CAST_OPEN_MODE_DICOMWEB,
+  CAST_OPEN_MODE_FILES,
+  extractDicomSeriesUid,
+  extractDicomStudyUid,
+  extractDicomwebRoot,
+  extractIdentifierValue,
+  extractImagingStudyFiles,
+  extractNiftiDownloadUrl,
+  extractNiftiFilename,
+  extractOpenMode,
+  extractStudyContextItem,
+  extractVolviewSampleId,
+};
 
 const RECONNECT_INTERVAL_MS = 10000;
 const SUBSCRIBE_TIMEOUT_MS = 5000;
@@ -200,7 +257,7 @@ function vtkCastClient(publicAPI, model) {
     return false;
   }
 
-  function buildStowRelatedBody(boundary, jsonText, dicomBuffers) {
+  function buildStowRelatedBody(boundary, jsonText, fileParts) {
     const enc = new TextEncoder();
     const crlf = enc.encode('\r\n');
     const chunks = [];
@@ -210,9 +267,13 @@ function vtkCastClient(publicAPI, model) {
     pushText(
       `--${boundary}\r\nContent-Type: application/dicom+json\r\n\r\n${jsonText}\r\n`
     );
-    for (let i = 0; i < dicomBuffers.length; i++) {
-      pushText(`--${boundary}\r\nContent-Type: application/dicom\r\n\r\n`);
-      chunks.push(new Uint8Array(dicomBuffers[i]));
+    for (let i = 0; i < fileParts.length; i++) {
+      const part = fileParts[i];
+      const mime =
+        (part && part.mimeType && String(part.mimeType).trim()) ||
+        'application/octet-stream';
+      pushText(`--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`);
+      chunks.push(new Uint8Array(part.buffer));
       chunks.push(crlf);
     }
     pushText(`--${boundary}--\r\n`);
@@ -837,8 +898,12 @@ function vtkCastClient(publicAPI, model) {
     if (!slots.length) {
       return castMessage;
     }
-    let msg = castMessage;
-    for (let start = 0; start < slots.length; start += HTTP_PAYLOAD_MAX_CONCURRENT) {
+    const msg = castMessage;
+    for (
+      let start = 0;
+      start < slots.length;
+      start += HTTP_PAYLOAD_MAX_CONCURRENT
+    ) {
       const batch = slots.slice(start, start + HTTP_PAYLOAD_MAX_CONCURRENT);
       // eslint-disable-next-line no-await-in-loop
       const buffers = await Promise.all(
@@ -858,26 +923,9 @@ function vtkCastClient(publicAPI, model) {
     return Boolean(event && hasPendingPayload(event));
   };
 
-  function firstResourceMime(msg) {
-    const event = msg && msg.event;
-    const contextValue = event && event.context;
-    let items = [];
-    if (Array.isArray(contextValue)) {
-      items = contextValue;
-    } else if (contextValue != null) {
-      items = [contextValue];
-    }
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item && typeof item === 'object' && item.resource) {
-        return item.resource;
-      }
-    }
-    return null;
-  }
-
   // --------------------------------------------------------------------------
 
+  /** @deprecated Use ``publishStowBatch`` or ``publish`` (STOW). */
   publicAPI.publishMultipart = async (
     castMessage,
     fileBytes,
@@ -885,41 +933,28 @@ function vtkCastClient(publicAPI, model) {
   ) => {
     let msg = preparePublishMessage(castMessage, hub);
     const raw = await toArrayBufferStrict(fileBytes);
-    msg = await normalizeBinaryPublishMessageMetadataOnly(msg);
-    model.lastSentMessage = msg;
-
-    const hubEvent =
-      msg.event && typeof msg.event['hub.event'] === 'string'
-        ? msg.event['hub.event']
-        : '';
-    const defaultName =
-      hubEvent === 'dicom-send' ? 'dicom-send.dcm' : 'nifti-send.nii.gz';
-    const fileName = binaryFileNameFromMessage(msg, defaultName);
-    const resource = msg.event && firstResourceMime(msg);
-    const formData = new FormData();
-    formData.append('message', JSON.stringify(msg));
-    formData.append(
-      'file',
-      new Blob([raw], {
-        type: (resource && resource.mimeType) || 'application/octet-stream',
-      }),
-      fileName
-    );
-
-    try {
-      const response = await fetch(hub.hub_endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${hub.token}`,
-        },
-        body: formData,
-      });
-      return response;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.debug('CastClient:', message);
-      return null;
+    msg = coerceBinaryPublishToStowFiles(msg);
+    let fileBytesList = await extractStowBatchFileBytes(msg);
+    if (!fileBytesList.length) {
+      const hubEvent =
+        msg.event && typeof msg.event['hub.event'] === 'string'
+          ? msg.event['hub.event']
+          : '';
+      const defaultName =
+        hubEvent === 'dicom-send' ? 'dicom-send.dcm' : 'nifti-send.nii.gz';
+      msg.event.context = {
+        files: [
+          {
+            data: raw,
+            fileName: binaryFileNameFromMessage(msg, defaultName),
+            mimeType: 'application/octet-stream',
+            byteLength: raw.byteLength,
+          },
+        ],
+      };
+      fileBytesList = [raw];
     }
+    return publicAPI.publishStowBatch(msg, fileBytesList, hub);
   };
 
   // --------------------------------------------------------------------------
@@ -930,14 +965,21 @@ function vtkCastClient(publicAPI, model) {
     hub = model.hub
   ) => {
     let msg = preparePublishMessage(castMessage, hub);
+    msg = coerceBinaryPublishToStowFiles(msg);
     const rawList = await Promise.all(
       (fileBytesList || []).map((bytes) => toArrayBufferStrict(bytes))
     );
     msg = await normalizeStowBatchMessageMetadataOnly(msg);
     model.lastSentMessage = msg;
 
+    const files = contextFilesFromEvent(msg.event);
+    const fileParts = rawList.map((buffer, index) => ({
+      buffer,
+      mimeType:
+        (files[index] && files[index].mimeType) || 'application/octet-stream',
+    }));
     const boundary = `cast-stow-${generateMessageId(messageIdPrefix())}`;
-    const body = buildStowRelatedBody(boundary, JSON.stringify(msg), rawList);
+    const body = buildStowRelatedBody(boundary, JSON.stringify(msg), fileParts);
 
     try {
       const response = await fetch(hub.hub_endpoint, {
@@ -959,19 +1001,13 @@ function vtkCastClient(publicAPI, model) {
   // --------------------------------------------------------------------------
 
   publicAPI.publish = async (castMessage, hub = model.hub) => {
-    const msg = preparePublishMessage(castMessage, hub);
+    let msg = preparePublishMessage(castMessage, hub);
+    msg = coerceBinaryPublishToStowFiles(msg);
 
     if (messageNeedsStowBatchPublish(msg)) {
       const fileBytesList = await extractStowBatchFileBytes(msg);
       if (fileBytesList.length) {
         return publicAPI.publishStowBatch(msg, fileBytesList, hub);
-      }
-    }
-
-    if (messageNeedsMultipartPublish(msg)) {
-      const fileBytes = await extractFirstBinaryFileBytes(msg);
-      if (fileBytes) {
-        return publicAPI.publishMultipart(msg, fileBytes, hub);
       }
     }
 
@@ -996,8 +1032,9 @@ function vtkCastClient(publicAPI, model) {
 
   // --------------------------------------------------------------------------
 
+  /** @deprecated Use ``publishStowBatch`` or ``publish``. */
   publicAPI.publishNiftiMultipart = async (castMessage, fileBytes, hub) =>
-    publicAPI.publishMultipart(castMessage, fileBytes, hub);
+    publicAPI.publishStowBatch(castMessage, [fileBytes], hub);
 
   // --------------------------------------------------------------------------
 
@@ -1190,4 +1227,34 @@ export const newInstance = macro.newInstance(extend, 'vtkCastClient');
 
 // ----------------------------------------------------------------------------
 
-export default { newInstance, extend, generateSubscriberName };
+export default {
+  newInstance,
+  extend,
+  generateSubscriberName,
+  isHubEndpointInCloud,
+  isRunningInCloud,
+  selectFirstMatchingHubKey,
+  buildDicomwebImagingStudyOpenContext,
+  buildFilesImagingStudyOpenContext,
+  buildNiftiUrlImagingStudyOpenContext,
+  CAST_DICOMWEB_ROOT,
+  CAST_IDENTIFIER_DICOM_UID,
+  CAST_IDENTIFIER_NIFTI_FILENAME,
+  CAST_IDENTIFIER_NIFTI_URL,
+  CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID,
+  CAST_IDENTIFIER_WORKLIST_SAMPLE_ID,
+  CAST_IMAGING_STUDY_OPEN_PROFILE,
+  CAST_OPEN_MODE,
+  CAST_OPEN_MODE_DICOMWEB,
+  CAST_OPEN_MODE_FILES,
+  extractDicomSeriesUid,
+  extractDicomStudyUid,
+  extractDicomwebRoot,
+  extractIdentifierValue,
+  extractImagingStudyFiles,
+  extractNiftiDownloadUrl,
+  extractNiftiFilename,
+  extractOpenMode,
+  extractStudyContextItem,
+  extractVolviewSampleId,
+};
