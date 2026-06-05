@@ -1,0 +1,42 @@
+---
+description: ESLint and style conventions for the Cast client browser example
+globs: Sources/IO/Core/CastClient/example/**
+alwaysApply: false
+---
+
+# Cast client example (`Sources/IO/Core/CastClient/example`)
+
+When editing `index.js` or related example files:
+
+## Function order (`no-use-before-define`)
+
+This file uses plain `function` declarations and **eslint `no-use-before-define`** is enabled. Define helpers **above** any function that calls them.
+
+Typical order:
+
+1. Low-level utilities (`setConnection`, `imageToObjectUrl`, `isCastImageBinaryNode`)
+2. Features that depend on them (`collectSceneviewViewportThumbnails`, `findAllImageResources`)
+3. UI / Cast handlers that call those features
+
+Do not reference `setConnection`, `imageToObjectUrl`, or `isCastImageBinaryNode` from code that appears earlier in the file.
+
+## Prettier
+
+Run the project linter before finishing (from vtk-js root):
+
+```bash
+npm run lint -- --fix Sources/IO/Core/CastClient/example/index.js
+```
+
+Or rely on `npm run example CastClient`, which runs lint on the example.
+
+- Keep short ternaries on one line when Prettier expects it (e.g. `count >= 2 ? \`a (${count})\` : a`).
+- Use multi-line argument lists for long function signatures (e.g. `collectSceneviewViewportThumbnails`).
+
+## After edits
+
+Verify with:
+
+```bash
+npx eslint Sources/IO/Core/CastClient/example/index.js
+```

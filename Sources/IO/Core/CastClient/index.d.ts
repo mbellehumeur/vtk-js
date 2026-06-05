@@ -211,6 +211,9 @@ export const CAST_IDENTIFIER_WORKLIST_SAMPLE_ID: string;
 export const CAST_OPEN_MODE: string;
 export const CAST_OPEN_MODE_DICOMWEB: string;
 export const CAST_OPEN_MODE_FILES: string;
+export const CAST_OPEN_MODE_IDC: string;
+export const CAST_IDENTIFIER_IDC: string;
+export const CAST_IDENTIFIER_IDC_SOURCE_BUCKET: string;
 export const CAST_DICOMWEB_ROOT: string;
 
 export interface CastImagingStudyFileEntry {
@@ -237,6 +240,10 @@ export function extractDicomSeriesUid(context: unknown): string;
 
 export function extractDicomwebRoot(context: unknown): string;
 
+export function extractIdcSeriesUid(context: unknown): string;
+
+export function extractIdcSourceBucket(context: unknown): 'aws' | 'gcs';
+
 export function extractOpenMode(context: unknown): string;
 
 export function extractImagingStudyFiles(
@@ -261,6 +268,15 @@ export function buildDicomwebImagingStudyOpenContext(params: {
   studyInstanceUID: string;
   seriesInstanceUID?: string;
   dicomwebRoot?: string;
+  patientReference?: string;
+}): Array<{ key: string; resource: Record<string, unknown> }>;
+
+export function buildIdcImagingStudyOpenContext(params: {
+  id: string;
+  studyInstanceUID: string;
+  seriesInstanceUID?: string;
+  sourceBucket?: 'aws' | 'gcs';
+  files: CastImagingStudyFileEntry[];
   patientReference?: string;
 }): Array<{ key: string; resource: Record<string, unknown> }>;
 
@@ -324,9 +340,12 @@ export declare const vtkCastClient: {
   selectFirstMatchingHubKey: typeof selectFirstMatchingHubKey;
   buildDicomwebImagingStudyOpenContext: typeof buildDicomwebImagingStudyOpenContext;
   buildFilesImagingStudyOpenContext: typeof buildFilesImagingStudyOpenContext;
+  buildIdcImagingStudyOpenContext: typeof buildIdcImagingStudyOpenContext;
   buildNiftiUrlImagingStudyOpenContext: typeof buildNiftiUrlImagingStudyOpenContext;
   CAST_DICOMWEB_ROOT: typeof CAST_DICOMWEB_ROOT;
   CAST_IDENTIFIER_DICOM_UID: typeof CAST_IDENTIFIER_DICOM_UID;
+  CAST_IDENTIFIER_IDC: typeof CAST_IDENTIFIER_IDC;
+  CAST_IDENTIFIER_IDC_SOURCE_BUCKET: typeof CAST_IDENTIFIER_IDC_SOURCE_BUCKET;
   CAST_IDENTIFIER_NIFTI_FILENAME: typeof CAST_IDENTIFIER_NIFTI_FILENAME;
   CAST_IDENTIFIER_NIFTI_URL: typeof CAST_IDENTIFIER_NIFTI_URL;
   CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID: typeof CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID;
@@ -335,9 +354,12 @@ export declare const vtkCastClient: {
   CAST_OPEN_MODE: typeof CAST_OPEN_MODE;
   CAST_OPEN_MODE_DICOMWEB: typeof CAST_OPEN_MODE_DICOMWEB;
   CAST_OPEN_MODE_FILES: typeof CAST_OPEN_MODE_FILES;
+  CAST_OPEN_MODE_IDC: typeof CAST_OPEN_MODE_IDC;
   extractDicomSeriesUid: typeof extractDicomSeriesUid;
   extractDicomStudyUid: typeof extractDicomStudyUid;
   extractDicomwebRoot: typeof extractDicomwebRoot;
+  extractIdcSeriesUid: typeof extractIdcSeriesUid;
+  extractIdcSourceBucket: typeof extractIdcSourceBucket;
   extractIdentifierValue: typeof extractIdentifierValue;
   extractImagingStudyFiles: typeof extractImagingStudyFiles;
   extractNiftiDownloadUrl: typeof extractNiftiDownloadUrl;

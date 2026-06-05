@@ -50,8 +50,8 @@
 import '@kitware/vtk.js/favicon';
 
 import vtkCastClient, {
-  buildDicomwebImagingStudyOpenContext,
   buildFilesImagingStudyOpenContext,
+  buildIdcImagingStudyOpenContext,
   extractVolviewSampleId,
   generateSubscriberName,
   isHubEndpointInCloud,
@@ -60,16 +60,25 @@ import vtkCastClient, {
 } from 'vtk.js/Sources/IO/Core/CastClient';
 import html2canvas from 'html2canvas';
 import { isRequestEvent, requestEventFor } from '../eventNames';
+import idcPortalDemoSeries2 from './idc-data/idc-portal-demo-series-2.json';
 
 import style from './CastClient.module.css';
 
-const CONNECTION_STATUS_CLASS = {
-  connecting: style.connecting,
-  connected: style.connected,
-  disconnected: style.disconnected,
-  'token-ready': style.tokenReady,
-  error: style.error,
-};
+const CAST_RADIO_ICON_SVG = `<svg class="${style.castHeaderStatusSvg}" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>`;
+
+// Same gear icon as OHIF ViewerHeader (Icons.GearSettings).
+const CAST_SETTINGS_ICON_SVG = `<svg class="${style.castHeaderMenuBtnIcon}" width="20" height="20" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M20.2015688,10.2525279 C20.0232123,10.6274217 20.0120959,11.0603422 20.1709774,11.4438954 C20.3298588,11.8274487 20.6438515,12.1256974 21.0350638,12.2646554 L22.0250838,12.6168364 C22.6105106,12.8246232 23.00167,13.3785255 23.00167,13.9997339 C23.00167,14.6209423 22.6105106,15.1748446 22.0250838,15.3826314 L21.0350638,15.7348124 C20.6438515,15.8737704 20.3298588,16.1720191 20.1709774,16.5555724 C20.0120959,16.9391256 20.0232123,17.3720461 20.2015688,17.7469399 L20.6539257,18.6946982 C20.9219287,19.2558525 20.8071211,19.9250005 20.367394,20.3647276 C19.9276669,20.8044547 19.2585189,20.9192624 18.6973645,20.6512594 L17.748041,20.2004677 C17.3731472,20.0221111 16.9402267,20.0109948 16.5566735,20.1698763 C16.1731202,20.3287577 15.8748715,20.6427504 15.7359135,21.0339627 L15.3837325,22.0239827 C15.1756233,22.6088399 14.6220059,22.9994678 14.0012263,22.9994678 C13.3804467,22.9994678 12.8268293,22.6088399 12.6187202,22.0239827 L12.2665391,21.0339627 C12.127404,20.6426994 11.8290064,20.3287067 11.4453321,20.1698369 C11.0616578,20.0109671 10.6286351,20.0220972 10.253629,20.2004677 L9.30587073,20.6512594 C8.7446872,20.9203194 8.07479926,20.8059063 7.63473092,20.365838 C7.19466259,19.9257696 7.08024945,19.2558817 7.34930952,18.6946982 L7.80010123,17.7453747 C7.97845774,17.3704809 7.98957409,16.9375604 7.83069263,16.5540071 C7.67181118,16.1704539 7.35781846,15.8722052 6.96660615,15.7332471 L5.97658618,15.3810661 C5.39115942,15.1732793 5,14.619377 5,13.9981686 C5,13.3769603 5.39115942,12.8230579 5.97658618,12.6152712 L6.96660615,12.2630902 C7.35740035,12.124078 7.67105878,11.8260915 7.82990186,11.4429292 C7.98874494,11.0597669 7.97791757,10.6272622 7.80010123,10.2525279 L7.34930952,9.30320437 C7.08024945,8.74202085 7.19466259,8.0721329 7.63473092,7.63206456 C8.07479926,7.19199623 8.7446872,7.07758309 9.30587073,7.34664317 L10.2551942,7.79743487 C10.6298363,7.97533367 11.0622628,7.98639209 11.445508,7.82787471 C11.8287532,7.66935733 12.1270239,7.35606892 12.2665391,6.96550504 L12.6187202,5.97548507 C12.8268293,5.39062793 13.3804467,5 14.0012263,5 C14.6220059,5 15.1756233,5.39062793 15.3837325,5.97548507 L15.7359135,6.96550504 C15.8748715,7.35671735 16.1731202,7.67071008 16.5566735,7.82959153 C16.9402267,7.98847298 17.3731472,7.97735664 17.748041,7.79900012 L18.6973645,7.34664317 C19.2585189,7.07864018 19.9276669,7.19344783 20.367394,7.63317492 C20.8071211,8.07290202 20.9219287,8.74204999 20.6539257,9.30320437 L20.2015688,10.2525279 Z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14.000835" cy="13.9997339" r="3.52181017" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+const CAST_THEME_STORAGE_KEY = 'castExample.theme';
+const CAST_THEME_DARK = 'dark';
+const CAST_THEME_LIGHT = 'light';
+
+const CAST_HEADER_STATUS_COLOR_CLASSES = [
+  style.castHeaderStatusConnected,
+  style.castHeaderStatusConnecting,
+  style.castHeaderStatusError,
+  style.castHeaderStatusIdle,
+];
 
 const MESSAGE_KIND_CLASS = {
   received: style.msgReceived,
@@ -95,13 +104,26 @@ const EMPTY_FHIRCAST_CONTEXT = {
   context: [],
 };
 
-const WORKLIST_SPECIALITY_VOLVIEW = 'volviewSample';
-const WORKLIST_SPECIALITY_SLICER = 'slicerSamples';
-const WORKLIST_SPECIALITY_IDC = 'idcSelection';
+const WORKLIST_ORG_VOLVIEW = 'volview';
+const WORKLIST_ORG_SLICER = 'slicer';
+const WORKLIST_ORG_IDC = 'idc';
 
-/** IDC-maintained DICOMweb proxy (see learn.canceridc.dev). */
-const IDC_DICOMWEB_ROOT =
-  'https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb';
+const WORKLIST_ORGANIZATION_OPTIONS = [
+  { value: '', label: 'All organizations' },
+  { value: WORKLIST_ORG_VOLVIEW, label: 'VolView samples' },
+  { value: WORKLIST_ORG_SLICER, label: '3D Slicer samples' },
+  { value: WORKLIST_ORG_IDC, label: 'Imaging Data Commons' },
+];
+
+const WORKLIST_ORG_LABELS = {
+  [WORKLIST_ORG_VOLVIEW]: 'VolView samples',
+  [WORKLIST_ORG_SLICER]: '3D Slicer samples',
+  [WORKLIST_ORG_IDC]: 'Imaging Data Commons',
+};
+
+function withWorklistOrganization(studies, organization) {
+  return studies.map((study) => ({ ...study, organization }));
+}
 
 const SLICER_TESTING_DATA_URL =
   'https://github.com/Slicer/SlicerTestingData/releases/download/';
@@ -109,6 +131,9 @@ const SLICER_DATA_STORE_URL =
   'https://github.com/Slicer/SlicerDataStore/releases/download/';
 
 const EXAMPLE_PAGE_TITLE_SUB = 'vtk.js IO module example';
+
+const CAST_ABOUT_BODY_TEXT =
+  'Cast worklist client example built on vtk.js CastClient. Connect to a Cast hub, browse sample studies, and coordinate VolView, OHIF, and other Cast subscribers over FHIRcast events.';
 
 const CAST_STANDARD_CAST = 'cast';
 const CAST_STANDARD_FHIRCAST_V3 = 'fhircast-v3';
@@ -162,14 +187,6 @@ const VOLVIEW_SAMPLE_STUDIES = [
     size: '3 MB',
     description: 'MRI from the SPIE-AAPM-NCI PROSTATEx challenge.',
     url: 'https://data.kitware.com/api/v1/item/63527c7311dab8142820a338/download',
-  },
-  {
-    id: 'us-fetus',
-    name: '3D US Fetus',
-    filename: '3DUS-Fetus.mha',
-    size: '8 MB',
-    description: '3D ultrasound of a baby. Downloaded from tomovision.com.',
-    url: 'https://data.kitware.com/api/v1/item/635679c311dab8142820a4f4/download',
   },
 ];
 
@@ -444,54 +461,28 @@ const SLICER_SAMPLE_STUDIES = [
 ];
 
 /**
- * Curated IDC studies via DICOMweb (StudyInstanceUID / optional SeriesInstanceUID).
- * @see https://learn.canceridc.dev/portal/visualization
- * @see https://learn.canceridc.dev/data/downloading-data/dicomweb-access
+ * Curated IDC studies via direct bucket load (``open-mode`` = ``idc``).
+ * Bucket URLs pre-resolved with idc-index; regenerate via scripts/generate-idc-worklist-data.py.
+ * @see https://learn.canceridc.dev/data/downloading-data/direct-loading
  */
+function idcWorklistEntry(data, name, description) {
+  const fileCount = Array.isArray(data.files) ? data.files.length : 0;
+  return {
+    ...data,
+    name,
+    size: fileCount ? `${fileCount} DICOM` : 'IDC direct',
+    description,
+  };
+}
+
 const IDC_SAMPLE_STUDIES = [
-  {
-    id: 'idc-portal-demo-series-1',
-    name: 'IDC portal demo (series 1)',
-    size: 'DICOMweb',
-    description:
-      'Example series from IDC visualization docs. Opens one series via DICOMweb.',
-    studyInstanceUID:
-      '1.3.6.1.4.1.14519.5.2.1.6279.6001.224985459390356936417021464571',
-    seriesInstanceUID: '1.2.276.0.7230010.3.1.3.0.57823.1553343864.578877',
-    dicomwebRoot: IDC_DICOMWEB_ROOT,
-  },
-  {
-    id: 'idc-portal-demo-series-2',
-    name: 'IDC portal demo (series 2)',
-    size: 'DICOMweb',
-    description:
-      'Second example series from the same IDC demo study (DICOMweb).',
-    studyInstanceUID:
-      '1.3.6.1.4.1.14519.5.2.1.6279.6001.224985459390356936417021464571',
-    seriesInstanceUID:
-      '1.3.6.1.4.1.14519.5.2.1.6279.6001.273525289046256012743471155680',
-    dicomwebRoot: IDC_DICOMWEB_ROOT,
-  },
-  {
-    id: 'idc-portal-demo-study',
-    name: 'IDC portal demo (whole study)',
-    size: 'DICOMweb',
-    description:
-      'Same demo study without a series UID; VolView loads the first series.',
-    studyInstanceUID:
-      '1.3.6.1.4.1.14519.5.2.1.6279.6001.224985459390356936417021464571',
-    dicomwebRoot: IDC_DICOMWEB_ROOT,
-  },
-  {
-    id: 'idc-prostatex-mr',
-    name: 'PROSTATEx MR (IDC / VolView fixture UID)',
-    size: 'DICOMweb',
-    description:
-      'Study UID used in VolView session fixtures; verify availability in IDC.',
-    studyInstanceUID:
-      '1.3.6.1.4.1.14519.5.2.1.7311.5101.206828891270520544417996275680.5tse2d1254.538438420111018.1D000000SN0D000000S0D000000S0D000000S0D970296SN0D241922',
-    dicomwebRoot: IDC_DICOMWEB_ROOT,
-  },
+  idcWorklistEntry(idcPortalDemoSeries2, 'CT Chest', 'CT Chest with SEG'),
+];
+
+const WORKLIST_ALL_STUDIES = [
+  ...withWorklistOrganization(VOLVIEW_SAMPLE_STUDIES, WORKLIST_ORG_VOLVIEW),
+  ...withWorklistOrganization(SLICER_SAMPLE_STUDIES, WORKLIST_ORG_SLICER),
+  ...withWorklistOrganization(IDC_SAMPLE_STUDIES, WORKLIST_ORG_IDC),
 ];
 
 const OPENIGT_LINK_ACTOR_TOOLTIP =
@@ -559,6 +550,8 @@ const IHE_ACTORS_LABEL_TITLE = ` title="${escapeHtmlAttr(
 )}"`;
 
 const CAST_EXAMPLE_USER_NAME_KEY = 'castExample.userName';
+const CAST_EXAMPLE_HUB_STARTED_AT_KEY = 'castExample.userName.hubStartedAt';
+const CAST_EXAMPLE_HUB_ORIGIN_KEY = 'castExample.userName.hubOrigin';
 
 /** Preset keys tried in order when matching page deployment (local vs cloud). */
 const HUB_PRESET_ORDER = ['local', 'cloud'];
@@ -571,13 +564,45 @@ function getStoredCastUserName() {
   }
 }
 
-function setStoredCastUserName(userName) {
+function getStoredCastUserNameHubStartedAt() {
+  try {
+    return localStorage.getItem(CAST_EXAMPLE_HUB_STARTED_AT_KEY)?.trim() || '';
+  } catch (err) {
+    return '';
+  }
+}
+
+function getStoredCastUserNameHubOrigin() {
+  try {
+    return localStorage.getItem(CAST_EXAMPLE_HUB_ORIGIN_KEY)?.trim() || '';
+  } catch (err) {
+    return '';
+  }
+}
+
+function clearStoredCastUserName() {
+  try {
+    localStorage.removeItem(CAST_EXAMPLE_USER_NAME_KEY);
+    localStorage.removeItem(CAST_EXAMPLE_HUB_STARTED_AT_KEY);
+    localStorage.removeItem(CAST_EXAMPLE_HUB_ORIGIN_KEY);
+  } catch (err) {
+    // ignore quota / private mode
+  }
+}
+
+function setStoredCastUserName(userName, hubStartedAt, hubOrigin) {
   const trimmed = String(userName || '').trim();
   try {
     if (trimmed) {
       localStorage.setItem(CAST_EXAMPLE_USER_NAME_KEY, trimmed);
+      if (hubStartedAt) {
+        localStorage.setItem(CAST_EXAMPLE_HUB_STARTED_AT_KEY, hubStartedAt);
+      }
+      if (hubOrigin) {
+        localStorage.setItem(CAST_EXAMPLE_HUB_ORIGIN_KEY, hubOrigin);
+      }
     } else {
-      localStorage.removeItem(CAST_EXAMPLE_USER_NAME_KEY);
+      clearStoredCastUserName();
     }
   } catch (err) {
     // ignore quota / private mode
@@ -606,18 +631,136 @@ const HUB_DEFINITIONS = {
   },
 };
 
-/**
- * VolView viewer URLs (deployed outside the Cast hub; not derived from hub_endpoint).
- * Local: Vite dev. Cloud: VolView + hub stack on Azure (see VolView .env / cast hubs).
- */
+/** VolView: local Vite dev; cloud bundle on the same host as the hub API. */
 const VOLVIEW_VIEWER_URL_LOCAL = 'http://localhost:5173/';
-const VOLVIEW_VIEWER_URL_CLOUD =
-  'https://volview-server-with-hub-g2d9hcc5esahgxe8.westeurope-01.azurewebsites.net/volview-client/';
+const VOLVIEW_VIEWER_HUB_PATH = '/volview-client/';
 
-/** OHIF viewer URLs (separate deployments). */
+/** OHIF: viewer route on hub root SPA (`/viewer`); same in local dev. */
 const OHIF_VIEWER_URL_LOCAL = 'http://localhost:3000/viewer/';
-const OHIF_VIEWER_URL_CLOUD =
-  'https://ohif-cast.d1ps2fewnyt2md.amplifyapp.com/viewer/';
+const OHIF_VIEWER_HUB_PATH = '/viewer/';
+/** Query flag for OHIF Cast empty viewer (matches extensions/cast cast-navigate.ts). */
+const OHIF_CAST_VIEWER_QUERY = 'Cast';
+
+function hubOriginFromEndpoint(hubEndpoint) {
+  const trimmed = String(hubEndpoint || '').trim();
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    return null;
+  }
+}
+
+/** Same-origin SPA path as hub admin "Open VolView" (see cast_api Resources/admin.html). */
+function bundledViewerBaseUrl(el, hubPath) {
+  const origin =
+    hubOriginFromEndpoint(el.hubEndpoint?.value) ||
+    (typeof window !== 'undefined' ? window.location?.origin : null);
+  if (!origin) {
+    return null;
+  }
+  return new URL(hubPath, origin).href;
+}
+
+function resolveVolviewViewerBaseUrl(el) {
+  if (el.hubSelect.value === 'local') {
+    return VOLVIEW_VIEWER_URL_LOCAL;
+  }
+  return (
+    bundledViewerBaseUrl(el, VOLVIEW_VIEWER_HUB_PATH) ||
+    VOLVIEW_VIEWER_URL_LOCAL
+  );
+}
+
+function resolveOhifViewerBaseUrl(el) {
+  if (el.hubSelect.value === 'local') {
+    return OHIF_VIEWER_URL_LOCAL;
+  }
+  return (
+    bundledViewerBaseUrl(el, OHIF_VIEWER_HUB_PATH) || OHIF_VIEWER_URL_LOCAL
+  );
+}
+
+function resolveHubMetricsUrl(hubEndpoint) {
+  const trimmed = String(hubEndpoint || '').trim();
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    const base = trimmed.endsWith('/') ? trimmed : `${trimmed}/`;
+    return new URL('admin/metrics', base).href;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchHubStartedAt(hubEndpoint) {
+  const metricsUrl = resolveHubMetricsUrl(hubEndpoint);
+  if (!metricsUrl) {
+    return null;
+  }
+  try {
+    const response = await fetch(metricsUrl, { method: 'GET' });
+    if (!response.ok) {
+      return null;
+    }
+    const data = await response.json();
+    const started = data?.started_at;
+    return typeof started === 'string' && started.trim()
+      ? started.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Drop cached USER-n if the hub restarted (started_at changed) or hub host changed. */
+async function syncStoredUserNameWithHub(el, state) {
+  const hubEndpoint =
+    el.hubEndpoint?.value?.trim() ||
+    HUB_DEFINITIONS[el.hubSelect?.value || 'local']?.hubEndpoint ||
+    '';
+  const currentOrigin = hubOriginFromEndpoint(hubEndpoint) || '';
+  const currentStartedAt = await fetchHubStartedAt(hubEndpoint);
+  if (currentStartedAt) {
+    state.hubStartedAt = currentStartedAt;
+  }
+
+  const storedUser = getStoredCastUserName();
+  if (!storedUser) {
+    return;
+  }
+
+  const storedStartedAt = getStoredCastUserNameHubStartedAt();
+  const storedOrigin = getStoredCastUserNameHubOrigin();
+  const hubRestarted =
+    Boolean(currentStartedAt && storedStartedAt) &&
+    storedStartedAt !== currentStartedAt;
+  const hubChanged =
+    Boolean(storedOrigin && currentOrigin) && storedOrigin !== currentOrigin;
+  const missingHubBinding =
+    Boolean(currentStartedAt) && (!storedStartedAt || !storedOrigin);
+
+  if (hubRestarted || hubChanged || missingHubBinding) {
+    console.info(
+      '[vtkCastClient] discarding stored user name (hub restarted or changed)',
+      {
+        storedUser,
+        storedStartedAt,
+        currentStartedAt,
+        storedOrigin,
+        currentOrigin,
+      }
+    );
+    clearStoredCastUserName();
+    state.lastAuthUserName = '';
+    if (state.client) {
+      state.client.setUserName('');
+    }
+  }
+}
 
 function headerInstructionsHtml() {
   return `<p>This example demonstrate using the IO module cast client for IHE roles worklist client and evidence creator (EC).</p>
@@ -644,6 +787,9 @@ function applyCastStandardToHeader(el, standard) {
   const titleMain = titleMainForCastStandard(standard);
   if (el.headerTitleMain) {
     el.headerTitleMain.textContent = titleMain;
+  }
+  if (el.castAboutTitle) {
+    el.castAboutTitle.textContent = titleMain;
   }
   document.title = `${titleMain} — ${EXAMPLE_PAGE_TITLE_SUB}`;
 }
@@ -977,15 +1123,30 @@ async function handleWorklistClose(el, state) {
 }
 
 function findWorklistSample(sampleId) {
+  return WORKLIST_ALL_STUDIES.find((entry) => entry.id === sampleId);
+}
+
+function worklistOrganizationLabel(sample) {
   return (
-    VOLVIEW_SAMPLE_STUDIES.find((entry) => entry.id === sampleId) ||
-    SLICER_SAMPLE_STUDIES.find((entry) => entry.id === sampleId) ||
-    IDC_SAMPLE_STUDIES.find((entry) => entry.id === sampleId)
+    WORKLIST_ORG_LABELS[sample?.organization] || sample?.organization || '—'
   );
 }
 
-function isDicomwebWorklistSample(sample) {
-  return Boolean(sample?.studyInstanceUID?.trim());
+function filterWorklistStudiesByOrganization(organization) {
+  if (!organization) {
+    return WORKLIST_ALL_STUDIES;
+  }
+  return WORKLIST_ALL_STUDIES.filter(
+    (study) => study.organization === organization
+  );
+}
+
+function isIdcWorklistSample(sample) {
+  return Boolean(
+    sample?.studyInstanceUID?.trim() &&
+      Array.isArray(sample?.files) &&
+      sample.files.length > 0
+  );
 }
 
 function worklistSampleFiles(sample) {
@@ -1012,12 +1173,13 @@ async function handleWorklistSampleOpen(el, state, sampleId) {
     return;
   }
   const patientReference = 'Patient/503824b8-fe8c-4227-b061-7181ba6c3926';
-  const context = isDicomwebWorklistSample(sample)
-    ? buildDicomwebImagingStudyOpenContext({
+  const context = isIdcWorklistSample(sample)
+    ? buildIdcImagingStudyOpenContext({
         id: sample.id,
         studyInstanceUID: sample.studyInstanceUID,
         seriesInstanceUID: sample.seriesInstanceUID,
-        dicomwebRoot: sample.dicomwebRoot || IDC_DICOMWEB_ROOT,
+        sourceBucket: sample.sourceBucket || 'aws',
+        files: sample.files,
         patientReference,
       })
     : buildFilesImagingStudyOpenContext({
@@ -1089,11 +1251,12 @@ function renderWorklistStudyList(panelEl, studies, ariaLabel, el, state) {
   const header = document.createElement('div');
   header.className = style.worklistEntryMain;
   const headerClassByColumn = [
+    style.worklistEntryOrg,
     style.worklistEntryTitle,
     style.worklistEntryDesc,
     style.worklistEntrySize,
   ];
-  ['Study', 'Description', 'Size'].forEach((label, idx) => {
+  ['Organization', 'Study', 'Description', 'Size'].forEach((label, idx) => {
     const cell = document.createElement('div');
     cell.className = headerClassByColumn[idx] || style.worklistEntryDesc;
     cell.textContent = label;
@@ -1114,6 +1277,10 @@ function renderWorklistStudyList(panelEl, studies, ariaLabel, el, state) {
     const main = document.createElement('div');
     main.className = style.worklistEntryMain;
 
+    const org = document.createElement('div');
+    org.className = style.worklistEntryOrg;
+    org.textContent = worklistOrganizationLabel(sample);
+
     const title = document.createElement('div');
     title.className = style.worklistEntryTitle;
     title.textContent = sample.name;
@@ -1126,7 +1293,7 @@ function renderWorklistStudyList(panelEl, studies, ariaLabel, el, state) {
     size.className = style.worklistEntrySize;
     size.textContent = worklistSampleSizeLabel(sample);
 
-    main.append(title, desc, size);
+    main.append(org, title, desc, size);
 
     const openBtn = document.createElement('button');
     openBtn.type = 'button';
@@ -1146,75 +1313,84 @@ function renderWorklistStudyList(panelEl, studies, ariaLabel, el, state) {
   panelEl.append(list);
 }
 
-function renderWorklistPanel(panelEl, speciality, el, state) {
+function renderWorklistPanel(panelEl, organizationFilter, el, state) {
   panelEl.replaceChildren();
   panelEl.classList.remove(style.worklistPanelList, style.worklistPanelEmpty);
 
-  if (speciality === WORKLIST_SPECIALITY_VOLVIEW) {
-    renderWorklistStudyList(
-      panelEl,
-      VOLVIEW_SAMPLE_STUDIES,
-      'VolView sample studies',
-      el,
-      state
-    );
+  const studies = filterWorklistStudiesByOrganization(organizationFilter);
+  if (!studies.length) {
+    panelEl.classList.add(style.worklistPanelEmpty);
+    panelEl.setAttribute('aria-label', 'Worklist studies (empty)');
+    const msg = document.createElement('p');
+    msg.className = style.worklistPlaceholderText;
+    msg.textContent = 'No studies for this organization.';
+    panelEl.append(msg);
     return;
   }
 
-  if (speciality === WORKLIST_SPECIALITY_SLICER) {
-    renderWorklistStudyList(
-      panelEl,
-      SLICER_SAMPLE_STUDIES,
-      '3D Slicer sample studies',
-      el,
-      state
-    );
-    return;
-  }
-
-  if (speciality === WORKLIST_SPECIALITY_IDC) {
-    renderWorklistStudyList(
-      panelEl,
-      IDC_SAMPLE_STUDIES,
-      'IDC DICOMweb studies',
-      el,
-      state
-    );
-    return;
-  }
-
-  panelEl.classList.add(style.worklistPanelEmpty);
-  panelEl.setAttribute(
-    'aria-label',
-    'Organization (not available for this speciality)'
-  );
-  const msg = document.createElement('p');
-  msg.className = style.worklistPlaceholderText;
-  msg.textContent = 'Not available for this speciality.';
-  panelEl.append(msg);
+  const ariaLabel = organizationFilter
+    ? `Worklist studies (${
+        WORKLIST_ORG_LABELS[organizationFilter] || organizationFilter
+      })`
+    : 'Worklist studies (all organizations)';
+  renderWorklistStudyList(panelEl, studies, ariaLabel, el, state);
 }
 
 function buildPageHtml() {
   return `<div class="${style.container}">
   <div class="${style.castHeader}"><div class="${
     style.headerStandardWrap
-  }"><label for="castStandardSelect">Standard:</label><select id="castStandardSelect" class="${
+  }"><label for="castStandardSelect">Example:</label><select id="castStandardSelect" class="${
     style.headerStandardSelect
-  }"><option value="${CAST_STANDARD_FHIRCAST_V3}">FHIRcast v3.0</option><option value="${CAST_STANDARD_CAST}" selected>Cast</option></select></div><div class="${
+  }"><option value="${CAST_STANDARD_FHIRCAST_V3}">FHIRcast v3.0 standard</option><option value="${CAST_STANDARD_CAST}" selected>Cast Interface v1.0</option></select></div><div class="${
     style.headerTitleWrap
   }"><div class="${style.headerTitleStack}"><span id="headerTitleMain" class="${
     style.headerTitle
   }">${titleMainForCastStandard(CAST_STANDARD_DEFAULT)}</span><span class="${
     style.headerTitleSub
-  }">${EXAMPLE_PAGE_TITLE_SUB}</span></div></div><div id="connectionStatus" class="${
-    style.status
-  } ${style.statusHeader} ${style.disconnected}"><div class="${
-    style.statusBody
+  }">${EXAMPLE_PAGE_TITLE_SUB}</span></div></div><div class="${
+    style.castHeaderRight
+  }"><div class="${style.castHeaderViewerSlot}"><div class="${
+    style.castHeaderViewerButtons
+  }"><button type="button" id="openVolViewBtn" class="${
+    style.headerViewerBtn
+  }" disabled>Open VolView</button><button type="button" id="openOhifBtn" class="${
+    style.headerViewerBtn
+  }" disabled>Open OHIF</button></div></div><div class="${
+    style.castHeaderActions
   }"><div class="${
-    style.statusPrimaryLine
-  }"><strong>Status:</strong> <span id="statusText">Not connected</span></div><div id="statusMeta" class="${
-    style.statusMeta
-  }"></div></div></div></div>
+    style.castHeaderStatusWrap
+  }"><button type="button" id="castHeaderStatusBtn" class="${
+    style.castHeaderStatusBtn
+  }" aria-label="Cast hub" aria-haspopup="menu" aria-expanded="false" title="Cast hub"><div id="castHeaderStatus" class="${
+    style.castHeaderStatus
+  } ${style.castHeaderStatusIdle}" title="Not connected"><span class="${
+    style.castHeaderStatusIcon
+  }">${CAST_RADIO_ICON_SVG}<span id="castHeaderStatusSlash" class="${
+    style.castHeaderStatusSlash
+  }" aria-hidden="true"></span></span></div></button><div id="castHeaderStatusMenu" class="${
+    style.castHeaderMenu
+  }" role="menu" hidden><button type="button" id="castHeaderStatusOpenHub" class="${
+    style.castHeaderMenuItem
+  }" role="menuitem">Open the hub admin portal</button><button type="button" id="castHeaderStatusStartConference" class="${
+    style.castHeaderMenuItem
+  }" role="menuitem">Start a conference</button></div></div><div class="${
+    style.castHeaderMenuWrap
+  }"><button type="button" id="castHeaderMenuBtn" class="${
+    style.castHeaderMenuBtn
+  }" aria-label="Settings" aria-haspopup="menu" aria-expanded="false" title="Settings">${CAST_SETTINGS_ICON_SVG}</button><div id="castHeaderMenu" class="${
+    style.castHeaderMenu
+  }" role="menu" hidden><button type="button" id="castHeaderMenuThemeDark" class="${
+    style.castHeaderMenuItem
+  } ${
+    style.castHeaderMenuItemActive
+  }" role="menuitemradio" aria-checked="true" data-theme="${CAST_THEME_DARK}">Dark theme</button><button type="button" id="castHeaderMenuThemeLight" class="${
+    style.castHeaderMenuItem
+  }" role="menuitemradio" aria-checked="false" data-theme="${CAST_THEME_LIGHT}">Light theme</button><div class="${
+    style.castHeaderMenuSeparator
+  }" role="separator"></div><button type="button" id="castHeaderAboutBtn" class="${
+    style.castHeaderMenuItem
+  }" role="menuitem">About…</button></div></div></div></div></div>
   <div id="castFhircastComingSoon" class="${
     style.fhircastComingSoon
   }" hidden><p>${FHIRCAST_V3_COMING_SOON_MESSAGE}</p></div>
@@ -1227,31 +1403,30 @@ function buildPageHtml() {
     <div class="${style.worklistSectionHeader}">
       <div class="${style.worklistSectionHeaderLead}">
         <h2>Organization</h2>
-        <div class="${style.worklistSpecialityControls}">
+        <div class="${style.worklistOrganizationControls}">
           <select
-            id="worklistSpecialitySelect"
-            class="${style.worklistSpecialitySelect}"
-            aria-label="Speciality"
+            id="worklistOrganizationSelect"
+            class="${style.worklistOrganizationSelect}"
+            aria-label="Organization filter"
           >
-            <option value="volviewSample" selected>VolView sample</option>
-            <option value="slicerSamples">3D Slicer samples</option>
-            <option value="idcSelection">Imaging Data Commons</option>
+            ${WORKLIST_ORGANIZATION_OPTIONS.map(
+              (option, index) =>
+                `<option value="${option.value}"${
+                  index === 0 ? ' selected' : ''
+                }>${option.label}</option>`
+            ).join('')}
           </select>
         </div>
       </div>
-      <div class="${style.worklistViewerButtons}">
-        <button type="button" id="openVolViewBtn" class="${
+      <div class="${style.worklistSceneviewActions}">
+        <span
+          id="worklistImageDisplayLabel"
+          class="${style.worklistImageDisplayLabel}"
+          hidden
+        ></span>
+        <button type="button" id="openSceneviewsBtn" class="${
           style.headerViewerBtn
-        }" disabled>Open VolView</button>
-        <button type="button" id="openOhifBtn" class="${
-          style.headerViewerBtn
-        }" disabled>Open OHIF</button>
-        <button type="button" id="startSlicerBtn" class="${
-          style.headerViewerBtn
-        }" disabled>Start 3D Slicer</button>
-        <button type="button" id="openHubBtn" class="${
-          style.headerViewerBtn
-        }" disabled>Open Hub</button>
+        }" disabled>Open scene views</button>
       </div>
     </div>
     <div id="worklistPanel" class="${style.worklistPanel}"></div>
@@ -1407,6 +1582,22 @@ function buildPageHtml() {
   }"></div></div>
   </div>
   </div>
+  </div>
+  <div id="castAboutOverlay" class="${style.castAboutOverlay}" hidden>
+    <div class="${
+      style.castAboutDialog
+    }" role="dialog" aria-modal="true" aria-labelledby="castAboutTitle">
+      <h2 id="castAboutTitle" class="${
+        style.castAboutTitle
+      }">${titleMainForCastStandard(CAST_STANDARD_DEFAULT)}</h2>
+      <p class="${style.castAboutSubtitle}">${EXAMPLE_PAGE_TITLE_SUB}</p>
+      <p class="${style.castAboutBody}">${CAST_ABOUT_BODY_TEXT}</p>
+      <div class="${style.castAboutActions}">
+        <button type="button" id="castAboutCloseBtn" class="${
+          style.headerViewerBtn
+        }">Close</button>
+      </div>
+    </div>
   </div>
   </div>`;
 }
@@ -1565,66 +1756,385 @@ function statusHubNameMeta(el) {
   return selected ? String(selected.textContent || '').trim() : '';
 }
 
-function statusSubscriberTopicMeta(el, state) {
-  const parts = [];
-  const hubText = statusHubNameMeta(el);
-  if (hubText) {
-    parts.push(hubText);
+function castHeaderStatusIconStyle(status) {
+  if (status === 'connected') {
+    return {
+      colorClass: style.castHeaderStatusConnected,
+      showSlash: false,
+      pulse: false,
+    };
   }
-  const session = state?.client?.getSessionConfig?.();
-  const subscriber = String(
-    el.subscriberName?.value?.trim() || session?.subscriberName || ''
-  ).trim();
-  const topic = String(el.topic?.value?.trim() || session?.topic || '').trim();
-  if (subscriber && topic) {
-    parts.push(`${subscriber} · ${topic}`);
-  } else if (subscriber || topic) {
-    parts.push(subscriber || topic);
+  if (status === 'connecting' || status === 'token-ready') {
+    return {
+      colorClass: style.castHeaderStatusConnecting,
+      showSlash: false,
+      pulse: true,
+    };
   }
-  return parts.join(' · ');
+  if (status === 'error' || status === 'disconnected') {
+    return {
+      colorClass: style.castHeaderStatusError,
+      showSlash: true,
+      pulse: false,
+    };
+  }
+  return {
+    colorClass: style.castHeaderStatusIdle,
+    showSlash: true,
+    pulse: false,
+  };
 }
 
-function updateStatusMeta(el, state) {
-  if (!el.statusMeta) {
+function castHeaderStatusTooltipLines(el, state, status, detailText) {
+  const lines = [];
+  const session = state?.client?.getSessionConfig?.();
+  const topic = String(el.topic?.value?.trim() || session?.topic || '').trim();
+  if (topic) {
+    lines.push(`Topic: ${topic}`);
+  }
+  const hubLabel = statusHubNameMeta(el);
+  if (hubLabel) {
+    lines.push(hubLabel);
+  }
+  if (status === 'connected') {
+    const subscriber = String(
+      el.subscriberName?.value?.trim() || session?.subscriberName || ''
+    ).trim();
+    if (subscriber) {
+      lines.push(subscriber);
+    }
+  } else if (detailText) {
+    lines.push(detailText);
+  }
+  return lines.join('\n');
+}
+
+function updateCastHeaderStatus(el, state) {
+  if (!el.castHeaderStatus) {
     return;
   }
-  const text = statusSubscriberTopicMeta(el, state);
-  el.statusMeta.textContent = text;
-  el.statusMeta.hidden = !text;
+  const status = state.castHeaderStatus || 'disconnected';
+  const detailText = state.castHeaderDetailText || '';
+  const { colorClass, showSlash, pulse } = castHeaderStatusIconStyle(status);
+
+  el.castHeaderStatus.classList.remove(...CAST_HEADER_STATUS_COLOR_CLASSES);
+  el.castHeaderStatus.classList.add(colorClass);
+  el.castHeaderStatus.classList.toggle(style.castHeaderStatusPulse, pulse);
+  el.castHeaderStatus.title = castHeaderStatusTooltipLines(
+    el,
+    state,
+    status,
+    detailText
+  );
+
+  if (el.castHeaderStatusSlash) {
+    el.castHeaderStatusSlash.hidden = !showSlash;
+  }
 }
 
 function setConnection(el, state, status, text) {
-  const statusClass = CONNECTION_STATUS_CLASS[status] || style.disconnected;
-  el.connectionStatus.className = `${style.status} ${style.statusHeader} ${statusClass}`;
-  el.statusText.replaceChildren();
-  el.statusText.appendChild(document.createTextNode(text));
-  updateStatusMeta(el, state);
+  state.castHeaderStatus = status;
+  state.castHeaderDetailText = text;
+  updateCastHeaderStatus(el, state);
 }
 
-function imageDisplayProductFromContextRequest(message) {
-  const product = String(message?.['subscriber.product.name'] || '').trim();
-  if (product) {
-    return product;
+function readStoredCastTheme() {
+  try {
+    const stored = localStorage.getItem(CAST_THEME_STORAGE_KEY);
+    return stored === CAST_THEME_LIGHT ? CAST_THEME_LIGHT : CAST_THEME_DARK;
+  } catch {
+    return CAST_THEME_DARK;
   }
-  return '';
 }
 
-function contextRequestProductAndSubscriber(message) {
+function writeStoredCastTheme(theme) {
+  try {
+    localStorage.setItem(CAST_THEME_STORAGE_KEY, theme);
+  } catch {
+    // ignore
+  }
+}
+
+function applyCastTheme(el, root, theme) {
+  const light = theme === CAST_THEME_LIGHT;
+  root.classList.toggle(style.castThemeLight, light);
+  document.documentElement.classList.toggle(style.castExampleThemeLight, light);
+  document.body.classList.toggle(style.castExampleThemeLight, light);
+  const pageBg = light ? '#f4f4f5' : '#000';
+  document.documentElement.style.setProperty(
+    'background-color',
+    pageBg,
+    'important'
+  );
+  document.body.style.setProperty('background-color', pageBg, 'important');
+
+  if (el.castHeaderMenuThemeDark) {
+    el.castHeaderMenuThemeDark.setAttribute(
+      'aria-checked',
+      light ? 'false' : 'true'
+    );
+    el.castHeaderMenuThemeDark.classList.toggle(
+      style.castHeaderMenuItemActive,
+      !light
+    );
+  }
+  if (el.castHeaderMenuThemeLight) {
+    el.castHeaderMenuThemeLight.setAttribute(
+      'aria-checked',
+      light ? 'true' : 'false'
+    );
+    el.castHeaderMenuThemeLight.classList.toggle(
+      style.castHeaderMenuItemActive,
+      light
+    );
+  }
+}
+
+function closeCastHeaderMenu(el) {
+  if (!el.castHeaderMenu || !el.castHeaderMenuBtn) {
+    return;
+  }
+  el.castHeaderMenu.hidden = true;
+  el.castHeaderMenuBtn.setAttribute('aria-expanded', 'false');
+}
+
+function closeCastHeaderStatusMenu(el) {
+  if (!el.castHeaderStatusMenu || !el.castHeaderStatusBtn) {
+    return;
+  }
+  el.castHeaderStatusMenu.hidden = true;
+  el.castHeaderStatusBtn.setAttribute('aria-expanded', 'false');
+}
+
+function openCastHeaderMenu(el) {
+  if (!el.castHeaderMenu || !el.castHeaderMenuBtn) {
+    return;
+  }
+  closeCastHeaderStatusMenu(el);
+  el.castHeaderMenu.hidden = false;
+  el.castHeaderMenuBtn.setAttribute('aria-expanded', 'true');
+}
+
+function openCastHeaderStatusMenu(el) {
+  if (!el.castHeaderStatusMenu || !el.castHeaderStatusBtn) {
+    return;
+  }
+  closeCastHeaderMenu(el);
+  el.castHeaderStatusMenu.hidden = false;
+  el.castHeaderStatusBtn.setAttribute('aria-expanded', 'true');
+}
+
+function openCastAboutDialog(el) {
+  if (!el.castAboutOverlay) {
+    return;
+  }
+  if (el.castAboutTitle && el.castStandardSelect) {
+    el.castAboutTitle.textContent = titleMainForCastStandard(
+      el.castStandardSelect.value
+    );
+  }
+  el.castAboutOverlay.hidden = false;
+  el.castAboutCloseBtn?.focus();
+}
+
+function closeCastAboutDialog(el) {
+  if (!el.castAboutOverlay) {
+    return;
+  }
+  el.castAboutOverlay.hidden = true;
+}
+
+function wireCastHeaderMenu(el, root) {
+  if (!el.castHeaderMenuBtn || !el.castHeaderMenu) {
+    return;
+  }
+
+  applyCastTheme(el, root, readStoredCastTheme());
+
+  el.castHeaderMenuBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (el.castHeaderMenu.hidden) {
+      openCastHeaderMenu(el);
+    } else {
+      closeCastHeaderMenu(el);
+    }
+  });
+
+  const setTheme = (theme) => {
+    writeStoredCastTheme(theme);
+    applyCastTheme(el, root, theme);
+    closeCastHeaderMenu(el);
+  };
+
+  el.castHeaderMenuThemeDark?.addEventListener('click', () => {
+    setTheme(CAST_THEME_DARK);
+  });
+  el.castHeaderMenuThemeLight?.addEventListener('click', () => {
+    setTheme(CAST_THEME_LIGHT);
+  });
+  el.castHeaderAboutBtn?.addEventListener('click', () => {
+    closeCastHeaderMenu(el);
+    openCastAboutDialog(el);
+  });
+
+  el.castAboutCloseBtn?.addEventListener('click', () => {
+    closeCastAboutDialog(el);
+    el.castHeaderMenuBtn?.focus();
+  });
+  el.castAboutOverlay?.addEventListener('click', (event) => {
+    if (event.target === el.castAboutOverlay) {
+      closeCastAboutDialog(el);
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    if (el.castHeaderMenu.hidden) {
+      return;
+    }
+    const target = event.target;
+    if (
+      target instanceof Node &&
+      !el.castHeaderMenu.contains(target) &&
+      !el.castHeaderMenuBtn.contains(target)
+    ) {
+      closeCastHeaderMenu(el);
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      if (el.castAboutOverlay && !el.castAboutOverlay.hidden) {
+        closeCastAboutDialog(el);
+        return;
+      }
+      closeCastHeaderMenu(el);
+      closeCastHeaderStatusMenu(el);
+    }
+  });
+}
+
+function getCastViewerPopupFeatures(viewerKind) {
+  const popupWidth = 800;
+  const popupHeight = 600;
+  const top = Math.max(0, Math.floor((window.screen.height - popupHeight) / 2));
+  let left = Math.max(0, Math.floor((window.screen.width - popupWidth) / 2));
+
+  if (viewerKind === 'volview' || viewerKind === 'ohif') {
+    const gap = 16;
+    const pairWidth = popupWidth * 2 + gap;
+    const pairStart = Math.max(
+      0,
+      Math.floor((window.screen.width - pairWidth) / 2)
+    );
+    left = viewerKind === 'ohif' ? pairStart + popupWidth + gap : pairStart;
+  }
+
+  return [
+    'popup',
+    `width=${popupWidth}`,
+    `height=${popupHeight}`,
+    `left=${left}`,
+    `top=${top}`,
+    'noopener',
+    'noreferrer',
+  ].join(',');
+}
+
+function castViewerWindowName(viewerKind) {
+  if (viewerKind === 'volview') {
+    return 'castViewerVolViewWindow';
+  }
+  if (viewerKind === 'ohif') {
+    return 'castViewerOhifWindow';
+  }
+  return 'castViewerWindow';
+}
+
+function openHubAdminPortal(el) {
+  if (el.hubSelect.value === 'local') {
+    window.open(
+      'http://localhost:2018/api/hub/admin',
+      'castAdminPortalWindow',
+      getCastViewerPopupFeatures()
+    );
+    return;
+  }
+  const base = el.hubEndpoint.value.trim();
+  const hubBase = base.endsWith('/') ? base : `${base}/`;
+  const url = new URL('admin', hubBase).href;
+  window.open(url, 'castAdminPortalWindow', getCastViewerPopupFeatures());
+}
+
+function openCastConferenceClient(el) {
+  const hubUrl = new URL(el.hubEndpoint.value.trim());
+  const url = new URL('/api/hub/conference-client', hubUrl.origin);
+  const subscriberName = el.subscriberName?.value?.trim();
+  const topic = el.topic?.value?.trim();
+  if (subscriberName) {
+    url.searchParams.set('subscriberName', subscriberName);
+  }
+  if (topic) {
+    url.searchParams.set('topic', topic);
+  }
+  window.open(
+    url.toString(),
+    'castConferenceClientWindow',
+    getCastViewerPopupFeatures()
+  );
+}
+
+function wireCastHeaderStatusMenu(el, state) {
+  if (!el.castHeaderStatusBtn || !el.castHeaderStatusMenu) {
+    return;
+  }
+
+  el.castHeaderStatusBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (el.castHeaderStatusMenu.hidden) {
+      openCastHeaderStatusMenu(el);
+    } else {
+      closeCastHeaderStatusMenu(el);
+    }
+  });
+
+  el.castHeaderStatusOpenHub?.addEventListener('click', () => {
+    closeCastHeaderStatusMenu(el);
+    try {
+      openHubAdminPortal(el);
+    } catch (err) {
+      addMessage(el, state, 'err', 'Hub Admin', 'Invalid hub_endpoint URL');
+    }
+  });
+
+  el.castHeaderStatusStartConference?.addEventListener('click', () => {
+    closeCastHeaderStatusMenu(el);
+    try {
+      openCastConferenceClient(el);
+    } catch (err) {
+      addMessage(el, state, 'err', 'Conference', 'Invalid hub_endpoint URL');
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    if (el.castHeaderStatusMenu.hidden) {
+      return;
+    }
+    const target = event.target;
+    if (
+      target instanceof Node &&
+      !el.castHeaderStatusMenu.contains(target) &&
+      !el.castHeaderStatusBtn.contains(target)
+    ) {
+      closeCastHeaderStatusMenu(el);
+    }
+  });
+}
+
+function contextRequestSubscriber(message) {
   const subscriber = String(
     message?.['subscriber.name'] || message?.subscriber || ''
   ).trim();
-  if (!subscriber) {
-    return null;
-  }
-  const product = imageDisplayProductFromContextRequest(message) || subscriber;
-  return { product, subscriber };
-}
-
-function imageDisplaySubscriberTooltip(subscribers) {
-  if (!subscribers || subscribers.size === 0) {
-    return '';
-  }
-  return [...subscribers].sort().join(', ');
+  return subscriber || null;
 }
 
 const SCENEVIEW_LAYOUT_CANVAS_W = 920;
@@ -2626,7 +3136,11 @@ function buildSceneviewLayoutPageHtml(
 <title>Scene layout — Cast worklist</title>
 <style>
   body { margin: 0; padding: 20px 24px; background: #111; color: #eaeaea; font-family: system-ui, sans-serif; font-size: 14px; }
-  h1 { margin: 0 0 8px; font-size: 1.25rem; }
+  .svPageHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+  h1 { margin: 0; font-size: 1.25rem; }
+  .svSaveToAiBtn { flex-shrink: 0; padding: 8px 14px; border: 1px solid #4a7c59; border-radius: 6px;
+    background: #1e3a29; color: #d4f0dc; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .svSaveToAiBtn:hover { background: #265238; border-color: #5a9a6a; }
   p { margin: 0 0 12px; color: #b8b8b8; }
   .svWrap { overflow: auto; border: 1px solid #333; border-radius: 8px; background: #0a0a12; padding: 12px; margin-bottom: 16px; }
   .svCanvas { position: relative; margin: 0 auto; background: repeating-linear-gradient(
@@ -2664,7 +3178,10 @@ function buildSceneviewLayoutPageHtml(
 </style>
 </head>
 <body>
+<header class="svPageHeader">
 <h1>Scene layout (SCENEVIEW)</h1>
+<button type="button" class="svSaveToAiBtn">Save to AI training</button>
+</header>
 <p>Screen positions from this worklist window and image-display sceneview responses (not to scale across monitors).</p>
 <div class="svWrap">${diagram}</div>
 <section class="svBelowSection">
@@ -2709,9 +3226,15 @@ function openSceneviewLayoutPopup(
   return true;
 }
 
-async function openSceneviewLayoutFromStatus(el, state, productName) {
+async function openSceneviewLayoutFromStatus(el, state) {
   if (!state.client?.request) {
-    window.alert('Cast client is not ready.');
+    addMessage(
+      el,
+      state,
+      'err',
+      'SCENEVIEW layout',
+      'Cast client is not ready'
+    );
     return;
   }
   if (state.sceneviewLayoutBusy) {
@@ -2726,21 +3249,17 @@ async function openSceneviewLayoutFromStatus(el, state, productName) {
       480,
       wlSubscriber
     );
-    const result = await state.client.request(
-      buildSceneviewRequestArgs(el, productName)
-    );
+    const result = await state.client.request(buildSceneviewRequestArgs(el));
     if (!result.ok) {
       const detail =
         typeof result.data === 'string'
           ? result.data
           : JSON.stringify(redactSceneviewPayloadForLog(result.data), null, 2);
-      window.alert(`SCENEVIEW request failed (${result.status}):\n${detail}`);
       addMessage(el, state, 'err', 'SCENEVIEW layout', detail);
       return;
     }
     const entries = parseSceneviewCollatedResponses(result.data);
     if (!entries.length) {
-      window.alert('No sceneview response from image display.');
       addMessage(el, state, 'err', 'SCENEVIEW layout', 'No responders');
       return;
     }
@@ -2750,101 +3269,99 @@ async function openSceneviewLayoutFromStatus(el, state, productName) {
     });
     if (opened) {
       addMessage(el, state, 'received', 'SCENEVIEW layout', {
-        product: productName,
+        subscribers: [...state.imageDisplaySubscribers].sort(),
         responders: entries.length,
       });
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    window.alert(`SCENEVIEW request error: ${msg}`);
     addMessage(el, state, 'err', 'SCENEVIEW layout', msg);
   } finally {
     state.sceneviewLayoutBusy = false;
   }
 }
 
-function setImageDisplayConnectionStatus(
-  el,
-  state,
-  status,
-  productName,
-  subscriberCount,
-  subscribers
-) {
-  const statusClass = CONNECTION_STATUS_CLASS[status] || style.disconnected;
-  el.connectionStatus.className = `${style.status} ${style.statusHeader} ${statusClass}`;
-  el.statusText.replaceChildren();
-  el.statusText.appendChild(document.createTextNode('Image Display: '));
-  const productSpan = document.createElement('span');
-  productSpan.className = `${style.statusProductName} ${style.statusProductNameClickable}`;
-  const tooltip = imageDisplaySubscriberTooltip(subscribers);
-  productSpan.title = tooltip
-    ? `${tooltip}\n\nClick to open scene layout (SCENEVIEW).`
-    : 'Click to open scene layout (SCENEVIEW).';
-  productSpan.textContent =
-    subscriberCount >= 2 ? `${productName} (${subscriberCount})` : productName;
-  productSpan.setAttribute('role', 'button');
-  productSpan.tabIndex = 0;
-  const activate = () => {
-    openSceneviewLayoutFromStatus(el, state, productName).catch((err) => {
-      console.error('[vtkCastClient] SCENEVIEW layout failed', err);
-    });
-  };
-  productSpan.addEventListener('click', activate);
-  productSpan.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      activate();
+function updateWorklistImageDisplayLabel(el, subscribers) {
+  if (!el.worklistImageDisplayLabel) {
+    return;
+  }
+  if (!subscribers || subscribers.size === 0) {
+    if (el.worklistImageDisplayLabel.hidden) {
+      return;
     }
+    el.worklistImageDisplayLabel.textContent = '';
+    el.worklistImageDisplayLabel.hidden = true;
+    el.worklistImageDisplayLabel.title = '';
+    return;
+  }
+  const sorted = [...subscribers].sort();
+  const title = sorted.join(', ');
+  const text = `Image Displays: ${title}`;
+  if (
+    el.worklistImageDisplayLabel.textContent === text &&
+    el.worklistImageDisplayLabel.title === title &&
+    !el.worklistImageDisplayLabel.hidden
+  ) {
+    return;
+  }
+  el.worklistImageDisplayLabel.title = title;
+  el.worklistImageDisplayLabel.textContent = text;
+  el.worklistImageDisplayLabel.hidden = false;
+}
+
+function openSceneviewLayoutForConnectedDisplays(el, state) {
+  if (!state.imageDisplaySubscribers?.size) {
+    addMessage(
+      el,
+      state,
+      'err',
+      'SCENEVIEW layout',
+      'No image display connected yet'
+    );
+    return;
+  }
+  openSceneviewLayoutFromStatus(el, state).catch((err) => {
+    console.error('[vtkCastClient] SCENEVIEW layout failed', err);
   });
-  el.statusText.appendChild(productSpan);
-  updateStatusMeta(el, state);
+}
+
+function updateOpenSceneviewsButton(el, state) {
+  if (!el.openSceneviewsBtn) {
+    return;
+  }
+  const wsConnected = state.wsState === 'connected';
+  const hasDisplay = Boolean(state.imageDisplaySubscribers?.size);
+  const enabled = wsConnected && hasDisplay;
+  el.openSceneviewsBtn.disabled = !enabled;
+  const names = hasDisplay
+    ? [...state.imageDisplaySubscribers].sort().join(', ')
+    : '';
+  el.openSceneviewsBtn.title = enabled
+    ? `Open scene layout (SCENEVIEW) for ${names}`
+    : 'Connect an image-display viewer first';
 }
 
 function clearImageDisplayRequesters(state) {
-  state.imageDisplaySubscribersByProduct = new Map();
+  state.imageDisplaySubscribers = new Set();
 }
 
 function refreshImageDisplayConnectionStatus(el, state) {
-  const byProduct = state.imageDisplaySubscribersByProduct;
-  if (!byProduct || byProduct.size === 0) {
-    setConnection(el, state, 'connected', 'Websocket connected');
-    return;
-  }
-  let bestProduct = '';
-  let bestCount = 0;
-  byProduct.forEach((subscribers, product) => {
-    const count = subscribers.size;
-    if (count > bestCount) {
-      bestCount = count;
-      bestProduct = product;
-    }
-  });
-  if (bestProduct) {
-    setImageDisplayConnectionStatus(
-      el,
-      state,
-      'connected',
-      bestProduct,
-      bestCount,
-      byProduct.get(bestProduct)
-    );
-  }
+  updateWorklistImageDisplayLabel(el, state.imageDisplaySubscribers);
+  updateOpenSceneviewsButton(el, state);
 }
 
 function updateStatusForIncomingContextRequest(el, state, message) {
-  const ids = contextRequestProductAndSubscriber(message);
-  if (!ids) {
+  const subscriber = contextRequestSubscriber(message);
+  if (!subscriber) {
     return;
   }
-  const { product, subscriber } = ids;
-  if (!state.imageDisplaySubscribersByProduct) {
-    state.imageDisplaySubscribersByProduct = new Map();
+  if (!state.imageDisplaySubscribers) {
+    state.imageDisplaySubscribers = new Set();
   }
-  if (!state.imageDisplaySubscribersByProduct.has(product)) {
-    state.imageDisplaySubscribersByProduct.set(product, new Set());
+  if (state.imageDisplaySubscribers.has(subscriber)) {
+    return;
   }
-  state.imageDisplaySubscribersByProduct.get(product).add(subscriber);
+  state.imageDisplaySubscribers.add(subscriber);
   refreshImageDisplayConnectionStatus(el, state);
 }
 
@@ -2853,18 +3370,11 @@ function handleSubscriptionRemoved(el, state, message) {
   if (!event || getHubEventLower(event) !== 'subscription-removed') {
     return false;
   }
-  const ids = contextRequestProductAndSubscriber(message);
-  if (!ids) {
+  const subscriber = contextRequestSubscriber(message);
+  if (!subscriber) {
     return false;
   }
-  const { product, subscriber } = ids;
-  const subscribers = state.imageDisplaySubscribersByProduct?.get(product);
-  if (subscribers) {
-    subscribers.delete(subscriber);
-    if (subscribers.size === 0) {
-      state.imageDisplaySubscribersByProduct.delete(product);
-    }
-  }
+  state.imageDisplaySubscribers?.delete(subscriber);
   refreshImageDisplayConnectionStatus(el, state);
   return true;
 }
@@ -3021,81 +3531,59 @@ function setOpenViewerButtonsEnabled(el, enabled) {
   const disabled = !enabled;
   el.openTopicViewerBtn.disabled = disabled;
   el.openVolViewBtn.disabled = disabled;
-  el.startSlicerBtn.disabled = disabled;
+  el.openOhifBtn.disabled = disabled;
 }
 
 function setHubAdminPortalButtonsEnabled(el, enabled) {
   const disabled = !enabled;
   el.hubAdminPortalBtn.disabled = disabled;
-  el.openHubBtn.disabled = disabled;
-}
-
-function getCastViewerPopupFeatures() {
-  const popupWidth = 800;
-  const popupHeight = 600;
-  const left = Math.max(0, Math.floor((window.screen.width - popupWidth) / 2));
-  const top = Math.max(0, Math.floor((window.screen.height - popupHeight) / 2));
-  return [
-    'popup',
-    `width=${popupWidth}`,
-    `height=${popupHeight}`,
-    `left=${left}`,
-    `top=${top}`,
-    'noopener',
-    'noreferrer',
-  ].join(',');
-}
-
-function openHubAdminPortal(el) {
-  if (el.hubSelect.value === 'local') {
-    window.open(
-      'http://localhost:2018/api/hub/admin',
-      'castAdminPortalWindow',
-      getCastViewerPopupFeatures()
-    );
-    return;
-  }
-  const base = el.hubEndpoint.value.trim();
-  const hubBase = base.endsWith('/') ? base : `${base}/`;
-  const url = new URL('admin', hubBase).href;
-  window.open(url, 'castAdminPortalWindow', getCastViewerPopupFeatures());
 }
 
 function openCastViewer(el, state, viewerKind) {
-  const isLocal = el.hubSelect.value === 'local';
-  let viewerBaseUrl;
-  if (viewerKind === 'volview') {
-    viewerBaseUrl = isLocal
-      ? VOLVIEW_VIEWER_URL_LOCAL
-      : VOLVIEW_VIEWER_URL_CLOUD;
-  } else {
-    viewerBaseUrl = isLocal ? OHIF_VIEWER_URL_LOCAL : OHIF_VIEWER_URL_CLOUD;
-  }
+  const viewerBaseUrl =
+    viewerKind === 'volview'
+      ? resolveVolviewViewerBaseUrl(el)
+      : resolveOhifViewerBaseUrl(el);
   const url = new URL(viewerBaseUrl);
+  if (viewerKind === 'ohif') {
+    url.searchParams.set(OHIF_CAST_VIEWER_QUERY, '');
+  }
+  const topic = el.topic?.value?.trim();
+  if (topic) {
+    url.searchParams.set('topic', topic);
+  }
   const token = state.client?.getConnectionState?.().token?.trim();
   if (token) {
     url.searchParams.set('id-token', token);
   }
-  window.open(url.toString(), 'castViewerWindow', getCastViewerPopupFeatures());
+  window.open(
+    url.toString(),
+    castViewerWindowName(viewerKind),
+    getCastViewerPopupFeatures(viewerKind)
+  );
 }
 
 function applyWebsocketStatus(el, state, wsState) {
+  state.wsState = wsState;
   switch (wsState) {
     case 'connecting':
       setConnection(el, state, 'connecting', 'Websocket connecting');
       break;
     case 'connected':
-      clearImageDisplayRequesters(state);
       setConnection(el, state, 'connected', 'Websocket connected');
       break;
     case 'error':
       clearImageDisplayRequesters(state);
       setConnection(el, state, 'error', 'Websocket error');
+      updateWorklistImageDisplayLabel(el, null);
+      updateOpenSceneviewsButton(el, state);
       break;
     case 'disconnected':
     default:
       clearImageDisplayRequesters(state);
       setConnection(el, state, 'disconnected', 'Websocket disconnected');
+      updateWorklistImageDisplayLabel(el, null);
+      updateOpenSceneviewsButton(el, state);
       break;
   }
 }
@@ -3201,7 +3689,17 @@ async function handleAuthenticate(el, state) {
     const userName = result?.user_name || storedUserName || '';
     const code = result?.code || '';
     if (userName) {
-      setStoredCastUserName(userName);
+      const hubEndpoint = el.hubEndpoint.value.trim();
+      const hubStartedAt =
+        state.hubStartedAt || (await fetchHubStartedAt(hubEndpoint));
+      if (hubStartedAt) {
+        state.hubStartedAt = hubStartedAt;
+      }
+      setStoredCastUserName(
+        userName,
+        hubStartedAt,
+        hubOriginFromEndpoint(hubEndpoint)
+      );
       state.lastAuthUserName = userName;
     }
     state.lastAuthCode = code;
@@ -3662,7 +4160,7 @@ async function handleCastRequest(el, state) {
   }
 }
 
-function boot() {
+async function boot() {
   document.documentElement.classList.add(style.castExampleHtml);
   document.body.classList.add(style.castExampleBody);
   /* Inline + important so black wins when embedded (e.g. viewer shell overrides body). */
@@ -3711,8 +4209,7 @@ function boot() {
     openTopicViewerBtn: byId('openTopicViewerBtn'),
     openVolViewBtn: byId('openVolViewBtn'),
     openOhifBtn: byId('openOhifBtn'),
-    startSlicerBtn: byId('startSlicerBtn'),
-    openHubBtn: byId('openHubBtn'),
+    openSceneviewsBtn: byId('openSceneviewsBtn'),
     viewerSelect: byId('viewerSelect'),
     publishBtn: byId('publishBtn'),
     publishActions: byId('publishActions'),
@@ -3730,13 +4227,25 @@ function boot() {
     instructionsBtn: byId('instructionsBtn'),
     clearBtn: byId('clearBtn'),
     messages: byId('messages'),
-    statusText: byId('statusText'),
-    statusMeta: byId('statusMeta'),
-    connectionStatus: byId('connectionStatus'),
+    castHeaderStatus: byId('castHeaderStatus'),
+    castHeaderStatusSlash: byId('castHeaderStatusSlash'),
+    castHeaderStatusBtn: byId('castHeaderStatusBtn'),
+    castHeaderStatusMenu: byId('castHeaderStatusMenu'),
+    castHeaderStatusOpenHub: byId('castHeaderStatusOpenHub'),
+    castHeaderStatusStartConference: byId('castHeaderStatusStartConference'),
+    castHeaderMenuBtn: byId('castHeaderMenuBtn'),
+    castHeaderMenu: byId('castHeaderMenu'),
+    castHeaderMenuThemeDark: byId('castHeaderMenuThemeDark'),
+    castHeaderMenuThemeLight: byId('castHeaderMenuThemeLight'),
+    castHeaderAboutBtn: byId('castHeaderAboutBtn'),
+    castAboutOverlay: byId('castAboutOverlay'),
+    castAboutTitle: byId('castAboutTitle'),
+    castAboutCloseBtn: byId('castAboutCloseBtn'),
     messageCount: byId('messageCount'),
     getResponseData: byId('getResponseData'),
     worklistContextDisplay: byId('worklistContextDisplay'),
-    worklistSpecialitySelect: byId('worklistSpecialitySelect'),
+    worklistOrganizationSelect: byId('worklistOrganizationSelect'),
+    worklistImageDisplayLabel: byId('worklistImageDisplayLabel'),
     worklistPanel: byId('worklistPanel'),
     castStandardSelect: byId('castStandardSelect'),
     headerTitleMain: byId('headerTitleMain'),
@@ -3751,7 +4260,10 @@ function boot() {
     selectedClientId: '',
     selectedClientSecret: '',
     lastImagingStudyOpenContext: [],
-    imageDisplaySubscribersByProduct: new Map(),
+    imageDisplaySubscribers: new Set(),
+    castHeaderStatus: 'disconnected',
+    castHeaderDetailText: 'Not connected',
+    wsState: 'disconnected',
     openWorklistSampleId: null,
     sceneviewLayoutBusy: false,
     lastAuthCode: '',
@@ -3762,15 +4274,18 @@ function boot() {
 
   updateWorklistContextDisplay(el, state);
 
+  wireCastHeaderMenu(el, root);
+  wireCastHeaderStatusMenu(el, state);
+
   applyCastStandardToPage(el, el.castStandardSelect.value);
   el.castStandardSelect.addEventListener('change', () => {
     applyCastStandardToPage(el, el.castStandardSelect.value);
   });
 
-  el.worklistSpecialitySelect.addEventListener('change', () => {
+  el.worklistOrganizationSelect.addEventListener('change', () => {
     renderWorklistPanel(
       el.worklistPanel,
-      el.worklistSpecialitySelect.value,
+      el.worklistOrganizationSelect.value,
       el,
       state
     );
@@ -3778,7 +4293,7 @@ function boot() {
   });
   renderWorklistPanel(
     el.worklistPanel,
-    el.worklistSpecialitySelect.value,
+    el.worklistOrganizationSelect.value,
     el,
     state
   );
@@ -3832,6 +4347,9 @@ function boot() {
   const hubKey =
     selectFirstMatchingHubKey(HUB_DEFINITIONS, HUB_PRESET_ORDER, pageInCloud) ||
     'local';
+  el.hubSelect.value = hubKey;
+  applyHubPreset(el, state, hubKey);
+  await syncStoredUserNameWithHub(el, state);
   const storedUserName = getStoredCastUserName();
   console.info(
     '[vtkCastClient] inCloud=',
@@ -3843,8 +4361,6 @@ function boot() {
     'user=',
     storedUserName || '(new)'
   );
-  el.hubSelect.value = hubKey;
-  applyHubPreset(el, state, hubKey);
   el.topic.value = state.defaultTopic;
   el.productName.value = EXAMPLE_PRODUCT_NAME;
   const initialSubscriberName = generateSubscriberName(
@@ -3852,10 +4368,10 @@ function boot() {
   );
   el.subscriberName.value = initialSubscriberName;
   el.getSubscriber.value = initialSubscriberName;
-  const refreshStatusMeta = () => updateStatusMeta(el, state);
-  el.subscriberName.addEventListener('input', refreshStatusMeta);
-  el.topic.addEventListener('input', refreshStatusMeta);
-  refreshStatusMeta();
+  const refreshCastHeaderStatus = () => updateCastHeaderStatus(el, state);
+  el.subscriberName.addEventListener('input', refreshCastHeaderStatus);
+  el.topic.addEventListener('input', refreshCastHeaderStatus);
+  setConnection(el, state, 'disconnected', 'Not connected');
   el.dicomFileValue.value = getDefaultDicomSendFileName(el.viewerSelect.value);
   el.eventData.value = `[
   {
@@ -3930,7 +4446,10 @@ function boot() {
   el.hubSelect.addEventListener('change', () => {
     applyHubPreset(el, state, el.hubSelect.value);
     el.productName.value = EXAMPLE_PRODUCT_NAME;
-    updateStatusMeta(el, state);
+    updateCastHeaderStatus(el, state);
+    syncStoredUserNameWithHub(el, state).catch((err) => {
+      console.warn('[vtkCastClient] hub user-name sync failed', err);
+    });
   });
 
   const castHubSection = document.getElementById('castHubSection');
@@ -3956,46 +4475,10 @@ function boot() {
       addMessage(el, state, 'err', 'Hub Admin', 'Invalid hub_endpoint URL');
     }
   });
-  el.openHubBtn.addEventListener('click', () => {
-    try {
-      openHubAdminPortal(el);
-    } catch (err) {
-      addMessage(el, state, 'err', 'Hub Admin', 'Invalid hub_endpoint URL');
-    }
-  });
 
   el.startConferenceBtn.addEventListener('click', () => {
     try {
-      const hubUrl = new URL(el.hubEndpoint.value.trim());
-      const url = new URL('/api/hub/conference-client', hubUrl.origin);
-      const subscriberName = el.subscriberName.value.trim();
-      const topic = el.topic.value.trim();
-      if (subscriberName) {
-        url.searchParams.set('subscriberName', subscriberName);
-      }
-      if (topic) {
-        url.searchParams.set('topic', topic);
-      }
-      const popupWidth = 800;
-      const popupHeight = 600;
-      const left = Math.max(
-        0,
-        Math.floor((window.screen.width - popupWidth) / 2)
-      );
-      const top = Math.max(
-        0,
-        Math.floor((window.screen.height - popupHeight) / 2)
-      );
-      const features = [
-        'popup',
-        `width=${popupWidth}`,
-        `height=${popupHeight}`,
-        `left=${left}`,
-        `top=${top}`,
-        'noopener',
-        'noreferrer',
-      ].join(',');
-      window.open(url.toString(), 'castConferenceClientWindow', features);
+      openCastConferenceClient(el);
     } catch (err) {
       addMessage(el, state, 'err', 'Conference', 'Invalid hub_endpoint URL');
     }
@@ -4010,6 +4493,9 @@ function boot() {
   el.openTopicViewerBtn.addEventListener('click', () =>
     openCastViewer(el, state, el.viewerSelect.value)
   );
+  el.openSceneviewsBtn.addEventListener('click', () => {
+    openSceneviewLayoutForConnectedDisplays(el, state);
+  });
 
   el.chooseDicomFilesBtn.addEventListener('click', () => {
     el.dicomFilesInput.click();
@@ -4094,9 +4580,9 @@ function boot() {
     }
   });
 
-  autoConnectOnLoad(el, state).catch((err) => {
-    console.error('[vtkCastClient] auto-connect failed', err);
-  });
+  await autoConnectOnLoad(el, state);
 }
 
-boot();
+boot().catch((err) => {
+  console.error('[vtkCastClient] boot failed', err);
+});

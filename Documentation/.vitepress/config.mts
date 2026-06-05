@@ -23,7 +23,7 @@ export default defineConfig({
   },
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
-    logo: '/logo-wide.svg',
+    logo: withBase('/logo-wide.svg'),
     siteTitle: '',
     nav: [
       { text: 'Docs', link: '/docs/' },

@@ -1,5 +1,5 @@
 {
-  "name": "vtk.js",
+  "name": "@kitware/vtk.js",
   "version": "0.0.0-semantically-release",
   "description": "Visualization Toolkit for the Web",
   "keywords": [
@@ -87,6 +87,7 @@
     "hson-loader": "2.0.0",
     "html-loader": "3.1.0",
     "html-webpack-plugin": "5.5.0",
+    "html2canvas": "^1.4.1",
     "husky": "8.0.1",
     "ignore-loader": "0.1.2",
     "karma": "6.3.20",
@@ -150,6 +151,8 @@
     "typecheck": "tsc --noEmit",
     "docs:dev": "vitepress dev Documentation",
     "docs:build": "vitepress build Documentation",
+    "docs:build:cast-hub": "cross-env VITEPRESS_BASE=/worklist-client/ vitepress build Documentation",
+    "buildCast": "npm run build && npm run docs:generate-examples && npm run docs:build:cast-hub && npm run docs:build-examples",
     "docs:serve": "vitepress serve Documentation",
     "docs:build-examples": "npm run build:pre && node ./Documentation/scripts/build-examples.mjs",
     "docs:generate-api": "npm run build:pre && node ./Documentation/scripts/generate-api-docs.mjs",

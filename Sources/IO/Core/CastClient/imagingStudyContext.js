@@ -12,6 +12,10 @@ export const CAST_IDENTIFIER_WORKLIST_SAMPLE_ID = 'urn:cast:worklist-sample-id';
 export const CAST_OPEN_MODE = 'urn:cast:open-mode';
 export const CAST_OPEN_MODE_DICOMWEB = 'dicomweb';
 export const CAST_OPEN_MODE_FILES = 'files';
+export const CAST_OPEN_MODE_IDC = 'idc';
+
+export const CAST_IDENTIFIER_IDC = 'idc';
+export const CAST_IDENTIFIER_IDC_SOURCE_BUCKET = 'idc-source-bucket';
 
 export const CAST_DICOMWEB_ROOT = 'urn:cast:dicomweb-root';
 
@@ -190,6 +194,8 @@ function fileEntryNameRaw(fileEntry) {
  * @param {unknown} fileEntry
  * @returns {{ url: string, fileName: string, mimeType: string, role: string, label: string } | null}
  */
+const ALLOWED_FILE_URL_PROTOCOLS = new Set(['http:', 'https:', 's3:', 'gs:']);
+
 function normalizeFileEntry(fileEntry) {
   if (!fileEntry || typeof fileEntry !== 'object') {
     return null;
@@ -200,7 +206,7 @@ function normalizeFileEntry(fileEntry) {
   }
   try {
     const url = new URL(urlRaw);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    if (!ALLOWED_FILE_URL_PROTOCOLS.has(url.protocol)) {
       return null;
     }
   } catch (err) {
@@ -258,14 +264,37 @@ export function extractImagingStudyFiles(context) {
 }
 
 /**
+ * SeriesInstanceUID for IDC direct bucket load (``identifier`` system ``idc``).
+ *
  * @param {unknown} context
- * @returns {string} ``dicomweb`` | ``files`` | ``''``
+ * @returns {string}
+ */
+export function extractIdcSeriesUid(context) {
+  return normalizeUid(extractIdentifierValue(context, CAST_IDENTIFIER_IDC));
+}
+
+/**
+ * @param {unknown} context
+ * @returns {'aws' | 'gcs'}
+ */
+export function extractIdcSourceBucket(context) {
+  const value = extractIdentifierValue(
+    context,
+    CAST_IDENTIFIER_IDC_SOURCE_BUCKET
+  ).toLowerCase();
+  return value === 'gcs' ? 'gcs' : 'aws';
+}
+
+/**
+ * @param {unknown} context
+ * @returns {string} ``dicomweb`` | ``files`` | ``idc`` | ``''``
  */
 export function extractOpenMode(context) {
   const explicit = extractIdentifierValue(context, CAST_OPEN_MODE);
   if (
     explicit === CAST_OPEN_MODE_DICOMWEB ||
-    explicit === CAST_OPEN_MODE_FILES
+    explicit === CAST_OPEN_MODE_FILES ||
+    explicit === CAST_OPEN_MODE_IDC
   ) {
     return explicit;
   }
@@ -432,6 +461,106 @@ export function buildDicomwebImagingStudyOpenContext({
       resource: {
         resourceType: 'ImagingStudy',
         uid: seriesUid,
+      },
+    });
+  }
+
+  return context;
+}
+
+/**
+ * Build FHIRcast ImagingStudy-open context for IDC direct bucket load.
+ *
+ * @param {object} params
+ * @param {string} params.id
+ * @param {string} params.studyInstanceUID
+ * @param {string} [params.seriesInstanceUID]
+ * @param {'aws' | 'gcs'} [params.sourceBucket]
+ * @param {Array<{ url: string, fileName?: string, mimeType?: string, role?: string, label?: string }>} params.files
+ * @param {string} [params.patientReference]
+ * @returns {Array<object>}
+ */
+export function buildIdcImagingStudyOpenContext({
+  id,
+  studyInstanceUID,
+  seriesInstanceUID,
+  sourceBucket,
+  files,
+  patientReference,
+}) {
+  const studyId = String(id || '').trim() || 'study';
+  const studyUid = normalizeUid(studyInstanceUID);
+  const seriesUid = normalizeUid(seriesInstanceUID);
+  const bucket =
+    String(sourceBucket || 'aws')
+      .trim()
+      .toLowerCase() === 'gcs'
+      ? 'gcs'
+      : 'aws';
+
+  const normalizedFiles = (Array.isArray(files) ? files : [])
+    .map((entry) => normalizeFileEntry(entry))
+    .filter((entry) => entry !== null);
+
+  const identifiers = [
+    { system: CAST_OPEN_MODE, value: CAST_OPEN_MODE_IDC },
+    { system: CAST_IDENTIFIER_DICOM_UID, value: studyUid },
+    {
+      system: CAST_IDENTIFIER_WORKLIST_SAMPLE_ID,
+      value: studyId,
+    },
+    {
+      system: CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID,
+      value: studyId,
+    },
+    { system: CAST_IDENTIFIER_IDC_SOURCE_BUCKET, value: bucket },
+  ];
+  if (seriesUid) {
+    identifiers.push({ system: CAST_IDENTIFIER_IDC, value: seriesUid });
+  }
+
+  const studyResource = {
+    resourceType: 'ImagingStudy',
+    id: studyId,
+    uid: studyUid,
+    meta: {
+      profile: [CAST_IMAGING_STUDY_OPEN_PROFILE],
+    },
+    identifier: identifiers,
+    status: 'available',
+  };
+  if (patientReference) {
+    studyResource.subject = { reference: String(patientReference).trim() };
+  }
+
+  const context = [
+    {
+      key: 'study',
+      resource: studyResource,
+    },
+  ];
+
+  if (seriesUid) {
+    context.push({
+      key: 'series',
+      resource: {
+        resourceType: 'ImagingStudy',
+        uid: seriesUid,
+      },
+    });
+  }
+
+  if (normalizedFiles.length > 0) {
+    context.push({
+      key: 'files',
+      resource: {
+        files: normalizedFiles.map((file) => ({
+          url: file.url,
+          fileName: file.fileName || undefined,
+          mimeType: file.mimeType || undefined,
+          role: file.role || undefined,
+          label: file.label || undefined,
+        })),
       },
     });
   }
