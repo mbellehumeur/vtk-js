@@ -210,6 +210,7 @@ export const CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID: string;
 export const CAST_IDENTIFIER_WORKLIST_SAMPLE_ID: string;
 export const CAST_OPEN_MODE: string;
 export const CAST_OPEN_MODE_DICOMWEB: string;
+export const CAST_OPEN_MODE_DICOM_URL: string;
 export const CAST_OPEN_MODE_FILES: string;
 export const CAST_OPEN_MODE_IDC: string;
 export const CAST_IDENTIFIER_IDC: string;
@@ -261,6 +262,12 @@ export function buildFilesImagingStudyOpenContext(params: {
   files: CastImagingStudyFileEntry[];
   patientReference?: string;
   includeLegacyNiftiIdentifiers?: boolean;
+}): Array<{ key: string; resource: Record<string, unknown> }>;
+
+export function buildDicomUrlImagingStudyOpenContext(params: {
+  id: string;
+  files: CastImagingStudyFileEntry[];
+  patientReference?: string;
 }): Array<{ key: string; resource: Record<string, unknown> }>;
 
 export function buildDicomwebImagingStudyOpenContext(params: {

@@ -11,6 +11,7 @@ export const CAST_IDENTIFIER_WORKLIST_SAMPLE_ID = 'urn:cast:worklist-sample-id';
 
 export const CAST_OPEN_MODE = 'urn:cast:open-mode';
 export const CAST_OPEN_MODE_DICOMWEB = 'dicomweb';
+export const CAST_OPEN_MODE_DICOM_URL = 'dicom-url';
 export const CAST_OPEN_MODE_FILES = 'files';
 export const CAST_OPEN_MODE_IDC = 'idc';
 
@@ -287,12 +288,13 @@ export function extractIdcSourceBucket(context) {
 
 /**
  * @param {unknown} context
- * @returns {string} ``dicomweb`` | ``files`` | ``idc`` | ``''``
+ * @returns {string} ``dicomweb`` | ``dicom-url`` | ``files`` | ``idc`` | ``''``
  */
 export function extractOpenMode(context) {
   const explicit = extractIdentifierValue(context, CAST_OPEN_MODE);
   if (
     explicit === CAST_OPEN_MODE_DICOMWEB ||
+    explicit === CAST_OPEN_MODE_DICOM_URL ||
     explicit === CAST_OPEN_MODE_FILES ||
     explicit === CAST_OPEN_MODE_IDC
   ) {
@@ -360,6 +362,76 @@ export function buildFilesImagingStudyOpenContext({
       });
     }
   }
+
+  const studyResource = {
+    resourceType: 'ImagingStudy',
+    id: studyId,
+    meta: {
+      profile: [CAST_IMAGING_STUDY_OPEN_PROFILE],
+    },
+    identifier: identifiers,
+    status: 'available',
+  };
+  if (patientReference) {
+    studyResource.subject = { reference: String(patientReference).trim() };
+  }
+
+  const context = [
+    {
+      key: 'study',
+      resource: studyResource,
+    },
+  ];
+
+  if (normalizedFiles.length > 0) {
+    context.push({
+      key: 'files',
+      resource: {
+        files: normalizedFiles.map((file) => ({
+          url: file.url,
+          fileName: file.fileName || undefined,
+          mimeType: file.mimeType || undefined,
+          role: file.role || undefined,
+          label: file.label || undefined,
+        })),
+      },
+    });
+  }
+
+  return context;
+}
+
+/**
+ * Remote DICOM file(s) to download for ImagingStudy-open (``open-mode`` = ``dicom-url``).
+ * Use for ``.dcm`` or ``.zip`` archives of DICOM instances (not NIfTI / generic volumes).
+ *
+ * @param {object} params
+ * @param {string} params.id
+ * @param {Array<{ url: string, fileName?: string, mimeType?: string, role?: string, label?: string }>} params.files
+ * @param {string} [params.patientReference]
+ * @returns {Array<object>}
+ */
+export function buildDicomUrlImagingStudyOpenContext({
+  id,
+  files,
+  patientReference,
+}) {
+  const studyId = String(id || '').trim() || 'study';
+  const normalizedFiles = (Array.isArray(files) ? files : [])
+    .map((entry) => normalizeFileEntry(entry))
+    .filter((entry) => entry !== null);
+
+  const identifiers = [
+    { system: CAST_OPEN_MODE, value: CAST_OPEN_MODE_DICOM_URL },
+    {
+      system: CAST_IDENTIFIER_WORKLIST_SAMPLE_ID,
+      value: studyId,
+    },
+    {
+      system: CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID,
+      value: studyId,
+    },
+  ];
 
   const studyResource = {
     resourceType: 'ImagingStudy',

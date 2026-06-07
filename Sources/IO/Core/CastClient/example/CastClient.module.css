@@ -241,10 +241,11 @@
 
 .headerStandardWrap {
   grid-column: 1;
-  justify-self: start;
-  display: inline-flex;
+  justify-self: stretch;
+  display: flex;
   flex-wrap: nowrap;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   min-width: 0;
 }
@@ -292,14 +293,35 @@
 }
 
 .headerViewerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
-  padding: 6px 12px;
+  padding: 6px 10px;
   cursor: pointer;
   white-space: nowrap;
   background: var(--cast-button-bg);
   color: var(--cast-button-fg);
   border: 1px solid var(--cast-button-border);
   border-radius: var(--cast-radius);
+}
+
+.headerViewerBtnIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.headerViewerBtnIconVolview {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.headerViewerBtnLabel {
+  line-height: 1;
 }
 
 .headerViewerBtn:hover:not(:disabled) {
@@ -579,8 +601,8 @@
 }
 
 .headerTitle {
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: 1.25rem;
+  font-weight: 300;
   color: var(--cast-foreground);
   line-height: 1.2;
 }
@@ -943,6 +965,18 @@
   cursor: not-allowed;
 }
 
+.cast button.headerViewerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  line-height: 1;
+}
+
+.cast button.headerViewerBtn svg {
+  flex-shrink: 0;
+}
+
 /* Header gear: transparent ghost icon (overrides .cast button chrome) */
 .cast button.castHeaderMenuBtn {
   display: inline-flex;
@@ -1044,6 +1078,8 @@
 
 .worklistSectionHeader h2 {
   margin-bottom: 0;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 /* Override .section select { width: 100% } — native select also sizes to longest option */
@@ -1086,60 +1122,51 @@
 }
 
 .worklistEntries {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns:
+    minmax(6.5rem, 1.15fr)
+    minmax(8rem, 1.35fr)
+    minmax(0, 2.5fr)
+    5.5rem
+    4.5rem
+    minmax(6.5rem, max-content);
+  column-gap: 16px;
+  align-items: center;
+  padding: 0 12px;
 }
 
 .worklistEntry {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--cast-border);
-}
-
-.worklistEntry:last-child {
-  border-bottom: none;
-}
-
-.worklistEntryMain {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: grid;
-  grid-template-columns:
-    minmax(6.5rem, 16%)
-    minmax(8rem, 22%)
-    1fr
-    minmax(4.5rem, 7rem);
-  gap: 12px 16px;
-  align-items: start;
-}
-
-.worklistEntryMain > .worklistEntryOrg {
-  grid-column: 1;
-}
-
-.worklistEntryMain > .worklistEntryTitle {
-  grid-column: 2;
-}
-
-.worklistEntryMain > .worklistEntryDesc {
-  grid-column: 3;
-}
-
-.worklistEntryMain > .worklistEntrySize {
-  grid-column: 4;
+  display: contents;
 }
 
 .worklistEntryHeaderRow {
-  padding: 0;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--cast-border);
+  background: color-mix(in srgb, var(--cast-card) 80%, transparent);
+}
+
+.worklistEntryOrg,
+.worklistEntryTitle,
+.worklistEntryDesc,
+.worklistEntryFormat,
+.worklistEntrySize,
+.worklistOpenBtn {
+  padding: 10px 0;
   border-bottom: 1px solid var(--cast-border);
 }
 
-.worklistEntryHeaderRow > .worklistEntryMain {
-  padding: 8px 12px;
-  background: color-mix(in srgb, var(--cast-card) 80%, transparent);
+.worklistEntryHeaderRow .worklistEntryOrg,
+.worklistEntryHeaderRow .worklistEntryTitle,
+.worklistEntryHeaderRow .worklistEntryDesc,
+.worklistEntryHeaderRow .worklistEntryFormat,
+.worklistEntryHeaderRow .worklistEntrySize,
+.worklistEntryHeaderRow .worklistOpenBtnSpacer {
+  padding: 0;
+  border-bottom: none;
 }
 
 .worklistOpenBtnSpacer {
@@ -1157,15 +1184,12 @@
 .worklistEntryHeaderRow .worklistEntryOrg,
 .worklistEntryHeaderRow .worklistEntryTitle,
 .worklistEntryHeaderRow .worklistEntryDesc,
+.worklistEntryHeaderRow .worklistEntryFormat,
 .worklistEntryHeaderRow .worklistEntrySize {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: var(--cast-muted-foreground);
-}
-
-.worklistEntryHeaderRow .worklistEntryOrg {
   color: var(--cast-foreground);
 }
 
@@ -1187,6 +1211,17 @@
   font-size: 12px;
   line-height: 1.4;
   color: var(--cast-muted-foreground);
+}
+
+.worklistEntryFormat {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--cast-muted-foreground);
+  white-space: nowrap;
+}
+
+.worklistEntries > :nth-last-child(-n + 6) {
+  border-bottom: none;
 }
 
 .worklistEntrySize {
