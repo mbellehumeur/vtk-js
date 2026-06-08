@@ -1,7 +1,7 @@
 // Cast binary-family events: any ``hub.event`` whose name matches one of these
 // prefixes (exact or followed by ``-`` / ``_``) may carry a file attachment.
 // Publishers POST multipart/related STOW (JSON + file parts); the hub stores
-// bytes and fans out ``context.files[].payloadId`` on the WebSocket text frame.
+// bytes and fans out ``context.files[].payloadIds[]`` on the WebSocket text frame.
 // Receivers call ``fetchPayload`` when the application chooses to download.
 const CAST_BINARY_EVENT_PREFIXES = ['dicom', 'nifti', 'jpg', 'png', 'nrrd'];
 
@@ -57,17 +57,70 @@ function contextFilesFromEvent(event) {
   return files.filter((entry) => entry && typeof entry === 'object');
 }
 
-function firstPendingPayloadSlot(event) {
+/** Resolve ``payloadIds`` / ``chunkByteLengths`` (legacy ``payloadId`` fallback). */
+export function payloadChunkPlan(entry) {
+  if (!entry || typeof entry !== 'object' || entry.data != null) {
+    return { payloadIds: [], chunkByteLengths: [] };
+  }
+  const payloadIdsRaw = entry.payloadIds;
+  if (Array.isArray(payloadIdsRaw) && payloadIdsRaw.length) {
+    const payloadIds = payloadIdsRaw
+      .map((id) => (typeof id === 'string' ? id.trim() : ''))
+      .filter(Boolean);
+    const chunkByteLengths = Array.isArray(entry.chunkByteLengths)
+      ? entry.chunkByteLengths.filter((n) => typeof n === 'number' && n >= 0)
+      : [];
+    if (chunkByteLengths.length === payloadIds.length) {
+      return { payloadIds, chunkByteLengths };
+    }
+    if (payloadIds.length === 1) {
+      const byteLength =
+        typeof entry.byteLength === 'number' && entry.byteLength >= 0
+          ? entry.byteLength
+          : null;
+      return {
+        payloadIds,
+        chunkByteLengths: byteLength != null ? [byteLength] : [],
+      };
+    }
+  }
+  const legacyId =
+    typeof entry.payloadId === 'string' ? entry.payloadId.trim() : '';
+  if (legacyId) {
+    const byteLength =
+      typeof entry.byteLength === 'number' && entry.byteLength >= 0
+        ? entry.byteLength
+        : null;
+    return {
+      payloadIds: [legacyId],
+      chunkByteLengths: byteLength != null ? [byteLength] : [],
+    };
+  }
+  return { payloadIds: [], chunkByteLengths: [] };
+}
+
+function firstPendingFileChunkSlot(event) {
   const files = contextFilesFromEvent(event);
   for (let i = 0; i < files.length; i++) {
     const entry = files[i];
-    const payloadId =
-      typeof entry.payloadId === 'string' ? entry.payloadId.trim() : '';
-    if (payloadId && entry.data == null) {
-      return { kind: 'files', index: i, payloadId };
+    if (entry.data == null) {
+      const plan = payloadChunkPlan(entry);
+      if (plan.payloadIds.length) {
+        return {
+          kind: 'files',
+          index: i,
+          chunkIndex: 0,
+          payloadId: plan.payloadIds[0],
+          expectedChunkBytes: plan.chunkByteLengths[0] ?? null,
+        };
+      }
     }
   }
   return null;
+}
+
+function firstPendingPayloadSlot(event) {
+  return firstPendingFileChunkSlot(event);
 }
 
 export function castPayloadIdFromEvent(event) {
@@ -79,16 +132,27 @@ export function hasPendingPayload(event) {
   return Boolean(firstPendingPayloadSlot(event));
 }
 
-/** Every unfetched ``payloadId`` on ``context.files[]``. */
+/** Every unfetched chunk ``payloadId`` on ``context.files[]``. */
 export function listPendingPayloadSlots(event) {
   const slots = [];
   const files = contextFilesFromEvent(event);
   for (let i = 0; i < files.length; i++) {
     const entry = files[i];
-    const payloadId =
-      typeof entry.payloadId === 'string' ? entry.payloadId.trim() : '';
-    if (payloadId && entry.data == null) {
-      slots.push({ kind: 'files', index: i, payloadId });
+    if (entry.data == null) {
+      const plan = payloadChunkPlan(entry);
+      for (
+        let chunkIndex = 0;
+        chunkIndex < plan.payloadIds.length;
+        chunkIndex++
+      ) {
+        slots.push({
+          kind: 'files',
+          index: i,
+          chunkIndex,
+          payloadId: plan.payloadIds[chunkIndex],
+          expectedChunkBytes: plan.chunkByteLengths[chunkIndex] ?? null,
+        });
+      }
     }
   }
   return slots;
@@ -459,6 +523,8 @@ async function normalizeStowBatchFileEntry(entry, hubEvent = '', index = 0) {
   delete normalized.binaryTransfer;
   delete normalized.url;
   delete normalized.payloadId;
+  delete normalized.payloadIds;
+  delete normalized.chunkByteLengths;
   delete normalized.expiresAt;
   normalized.byteLength = byteLength;
   if (typeof normalized.fileName !== 'string' || !normalized.fileName.trim()) {

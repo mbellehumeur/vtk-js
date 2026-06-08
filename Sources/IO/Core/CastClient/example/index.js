@@ -38,8 +38,8 @@
  *     'subscriber.name': client.getSessionConfig().subscriberName,
  *     event: {
  *       'hub.topic': 'my-topic',
- *       'hub.event': 'fhircastcontext-request',
- *       context: { dataType: 'FHIRcastContext' },
+ *       'hub.event': 'status-request',
+ *       context: { dataType: 'STATUS' },
  *     },
  *     'subscriber.actor': 'WORKLIST_CLIENT',
  *     'target.actor': 'WORKLIST_CLIENT',
@@ -101,7 +101,7 @@ const EXAMPLE_SUBSCRIBER_PREFIX = EXAMPLE_PRODUCT_NAME;
 
 const DEFAULT_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const DEFAULT_SUBSCRIBE_EVENTS =
-  'imagingstudy-open,imagingstudy-close,fhircastcontext-request,subscription-removed';
+  'imagingstudy-open,imagingstudy-close,status-request,subscription-removed';
 const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}"]`;
 const DEFAULT_GET_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const DEFAULT_TARGET_ACTOR_KEYWORD = '*';
@@ -114,7 +114,6 @@ const EMPTY_FHIRCAST_CONTEXT = {
 };
 
 const WORKLIST_ORG_VOLVIEW = 'volview';
-const WORKLIST_ORG_SLICER = 'slicer';
 const WORKLIST_ORG_IDC = 'idc';
 const WORKLIST_ORG_IDC_LUNG = 'idc-lung-screen';
 const WORKLIST_ORG_HUB = 'hub';
@@ -123,7 +122,6 @@ const WORKLIST_ORGANIZATION_OPTIONS = [
   { value: '', label: 'All organizations' },
   { value: WORKLIST_ORG_HUB, label: 'Hub samples' },
   { value: WORKLIST_ORG_VOLVIEW, label: 'VolView samples' },
-  { value: WORKLIST_ORG_SLICER, label: '3D Slicer samples' },
   { value: WORKLIST_ORG_IDC, label: 'Imaging Data Commons' },
   { value: WORKLIST_ORG_IDC_LUNG, label: 'IDC - CT Lung Screenings' },
 ];
@@ -131,7 +129,6 @@ const WORKLIST_ORGANIZATION_OPTIONS = [
 const WORKLIST_ORG_LABELS = {
   [WORKLIST_ORG_HUB]: 'Hub samples',
   [WORKLIST_ORG_VOLVIEW]: 'VolView samples',
-  [WORKLIST_ORG_SLICER]: '3D Slicer samples',
   [WORKLIST_ORG_IDC]: 'Imaging Data Commons',
   [WORKLIST_ORG_IDC_LUNG]: 'IDC - CT Lung Screenings',
 };
@@ -140,17 +137,10 @@ function withWorklistOrganization(studies, organization) {
   return studies.map((study) => ({ ...study, organization }));
 }
 
-/* Slicer SampleData URLs (all SLICER_SAMPLE_STUDIES entries commented out).
-const SLICER_TESTING_DATA_URL =
-  'https://github.com/Slicer/SlicerTestingData/releases/download/';
-const SLICER_DATA_STORE_URL =
-  'https://github.com/Slicer/SlicerDataStore/releases/download/';
-*/
-
 const EXAMPLE_PAGE_TITLE_SUB = 'vtk.js IO module cast example';
 
 const CAST_ABOUT_BODY_TEXT =
-  'Cast worklist client example built on vtk.js CastClient. Connect to a Cast hub, browse sample studies, and coordinate VolView, OHIF, and other Cast subscribers over FHIRcast events.';
+  'Cast worklist client example built on vtk.js CastClient. Connect to a Cast hub, browse sample studies, and coordinate VolView, OHIF, and other Cast subscribers.';
 
 const CAST_STANDARD_CAST = 'cast';
 const CAST_STANDARD_FHIRCAST_V3 = 'fhircast-v3';
@@ -212,278 +202,6 @@ const VOLVIEW_SAMPLE_STUDIES = [
 ];
 
 /**
- * Mirrors 3D Slicer SampleData ``registerBuiltInSampleDataSources()`` (General).
- * @see Slicer/Modules/Scripted/SampleData/SampleData.py
- */
-const SLICER_SAMPLE_STUDIES = [
-  /* NRRD / NRRD-header Slicer samples (OHIF Cast worklist cannot open these yet).
-  {
-    id: 'MRHead',
-    name: 'MRHead',
-    size: '~15 MB',
-    description: 'MR head (Slicer built-in sample).',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/cc211f0dfd9a05ca3841ce1141b292898b2dd2d3f08286affadf823a7e58df93`,
-        fileName: 'MR-head.nrrd',
-        label: 'MRHead',
-      },
-    ],
-  },
-  {
-    id: 'CTChest',
-    name: 'CTChest',
-    size: '~25 MB',
-    description: 'CT chest (Slicer built-in sample).',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/4507b664690840abb6cb9af2d919377ffc4ef75b167cb6fd0f747befdb12e38e`,
-        fileName: 'CT-chest.nrrd',
-        label: 'CTChest',
-      },
-    ],
-  },
-  {
-    id: 'CTACardio',
-    name: 'CTACardio',
-    size: '~40 MB',
-    description: 'CTA cardio (Slicer built-in sample).',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/3b0d4eb1a7d8ebb0c5a89cc0504640f76a030b4e869e33ff34c564c3d3b88ad2`,
-        fileName: 'CTA-cardio.nrrd',
-        label: 'CTACardio',
-      },
-    ],
-  },
-  {
-    id: 'DTIBrain',
-    name: 'DTIBrain',
-    size: '~20 MB',
-    description: 'DTI brain (Slicer built-in sample).',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/5c78d00c86ae8d968caa7a49b870ef8e1c04525b1abc53845751d8bce1f0b91a`,
-        fileName: 'DTI-Brain.nrrd',
-        label: 'DTIBrain',
-      },
-    ],
-  },
-  {
-    id: 'MRBrainTumor1',
-    name: 'MRBrainTumor1',
-    size: '~25 MB',
-    description: 'MR brain tumor — registration library case 1.',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95`,
-        fileName: 'RegLib_C01_1.nrrd',
-        label: 'MRBrainTumor1',
-      },
-    ],
-  },
-  {
-    id: 'MRBrainTumor2',
-    name: 'MRBrainTumor2',
-    size: '~25 MB',
-    description: 'MR brain tumor — registration library case 2.',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97`,
-        fileName: 'RegLib_C01_2.nrrd',
-        label: 'MRBrainTumor2',
-      },
-    ],
-  },
-  {
-    id: 'BaselineVolume',
-    name: 'BaselineVolume',
-    size: '~30 MB',
-    description: 'Baseline volume (Slicer built-in sample).',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/dff28a7711d20b6e16d5416535f6010eb99fd0c8468aaa39be4e39da78e93ec2`,
-        fileName: 'BaselineVolume.nrrd',
-        label: 'BaselineVolume',
-      },
-    ],
-  },
-  {
-    id: 'DTIVolume',
-    name: 'DTIVolume',
-    size: 'Multi-file',
-    description: 'DTI volume (.nhdr + .raw.gz pair).',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/67564aa42c7e2eec5c3fd68afb5a910e9eab837b61da780933716a3b922e50fe`,
-        fileName: 'DTIVolume.nhdr',
-        role: 'header',
-        label: 'DTIVolume',
-      },
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/d785837276758ddd9d21d76a3694e7fd866505a05bc305793517774c117cb38d`,
-        fileName: 'DTIVolume.raw.gz',
-        role: 'data',
-        label: 'DTIVolume',
-      },
-    ],
-  },
-  {
-    id: 'DWIVolume',
-    name: 'DWIVolume',
-    size: 'Multi-file',
-    description: 'DWI volume (.nhdr + .raw.gz pair).',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/7666d83bc205382e418444ea60ab7df6dba6a0bd684933df8809da6b476b0fed`,
-        fileName: 'dwi.nhdr',
-        role: 'header',
-        label: 'dwi',
-      },
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/cf03fd53583dc05120d3314d0a82bdf5946799b1f72f2a7f08963f3fd24ca692`,
-        fileName: 'dwi.raw.gz',
-        role: 'data',
-        label: 'dwi',
-      },
-    ],
-  },
-  {
-    id: 'CTAAbdomenPanoramix',
-    name: 'CTA abdomen (Panoramix)',
-    size: '~45 MB',
-    description:
-      'CTA abdomen (Panoramix) — research/teaching use per Slicer SampleData.',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/146af87511520c500a3706b7b2bfb545f40d5d04dd180be3a7a2c6940e447433`,
-        fileName: 'Panoramix-cropped.nrrd',
-        label: 'Panoramix-cropped',
-      },
-    ],
-  },
-  {
-    id: 'MRUSProstate',
-    name: 'MR-US Prostate',
-    size: 'Multi-file',
-    description: 'MR and resampled ultrasound prostate (Case10).',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/4843cdc9ea5d7bcce61650d1492ce01035727c892019339dca726380496896aa`,
-        fileName: 'Case10-MR.nrrd',
-        label: 'MRProstate',
-      },
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/34decf58b1e6794069acbe947b460252262fe95b6858c5e320aeab03bc82ebb2`,
-        fileName: 'case10_US_resampled.nrrd',
-        label: 'USProstate',
-      },
-    ],
-  },
-  {
-    id: 'CTMRBrain',
-    name: 'CT-MR Brain',
-    size: 'Multi-file',
-    description: 'CT brain with MR T1 and T2 (three volumes).',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/6a5b6caccb76576a863beb095e3bfb910c50ca78f4c9bf043aa42f976cfa53d1`,
-        fileName: 'CT-brain.nrrd',
-        label: 'CTBrain',
-      },
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/2da3f655ed20356ee8cdf32aa0f8f9420385de4b6e407d28e67f9974d7ce1593`,
-        fileName: 'MR-brain-T1.nrrd',
-        label: 'MRBrainT1',
-      },
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/fa1fe5910a69182f2b03c0150d8151ac6c75df986449fb5a6c5ae67141e0f5e7`,
-        fileName: 'MR-brain-T2.nrrd',
-        label: 'MRBrainT2',
-      },
-    ],
-  },
-  {
-    id: 'CBCTMRHead',
-    name: 'CBCT-MR Head',
-    size: 'Multi-file',
-    description: 'CBCT and MR head (DZ-CBCT / DZ-MR).',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/4ce7aa75278b5a7b757ed0c8d7a6b3caccfc3e2973b020532456dbc8f3def7db`,
-        fileName: 'DZ-CBCT.nrrd',
-        label: 'DZ-CBCT',
-      },
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/b5e9f8afac58d6eb0e0d63d059616c25a98e0beb80f3108410b15260a6817842`,
-        fileName: 'DZ-MR.nrrd',
-        label: 'DZ-MR',
-      },
-    ],
-  },
-  {
-    id: 'CTLiver',
-    name: 'CTLiver',
-    size: '~35 MB',
-    description: 'CT liver (Medical Decathlon Task03_Liver).',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/e16eae0ae6fefa858c5c11e58f0f1bb81834d81b7102e021571056324ef6f37e`,
-        fileName: 'CTLiver.nrrd',
-        label: 'CTLiver',
-      },
-    ],
-  },
-  {
-    id: 'CTPCardioSeq',
-    name: 'CTP Cardio Sequence',
-    size: '~180 MB',
-    description:
-      'CTP cardiac sequence (.seq.nrrd). Best opened in 3D Slicer (SequenceFile).',
-    files: [
-      {
-        url: `${SLICER_DATA_STORE_URL}SHA256/7fbb6ad0aed9c00820d66e143c2f037568025ed63db0a8db05ae7f26affeb1c2`,
-        fileName: 'CTP-cardio.seq.nrrd',
-        label: 'CTPCardioSeq',
-      },
-    ],
-  },
-  {
-    id: 'CTCardioSeq',
-    name: 'CT Cardio Sequence',
-    size: '~180 MB',
-    description:
-      'CT cardiac sequence (.seq.nrrd). Best opened in 3D Slicer (SequenceFile).',
-    files: [
-      {
-        url: `${SLICER_DATA_STORE_URL}SHA256/d1a1119969acead6c39c7c3ec69223fa2957edc561bc5bf384a203e2284dbc93`,
-        fileName: 'CT-cardio.seq.nrrd',
-        label: 'CTCardioSeq',
-      },
-    ],
-  },
-  {
-    id: 'CBCTDentalSurgery',
-    name: 'CBCTDentalSurgery',
-    size: 'Multi-file',
-    description: 'Pre- and post-dental surgery CBCT volumes.',
-    files: [
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/7bfa16945629c319a439f414cfb7edddd2a97ba97753e12eede3b56a0eb09968`,
-        fileName: 'PreDentalSurgery.gipl.gz',
-        label: 'PreDentalSurgery',
-      },
-      {
-        url: `${SLICER_TESTING_DATA_URL}SHA256/4cdc3dc35519bb57daeef4e5df89c00849750e778809e94971d3876f95cc7bbd`,
-        fileName: 'PostDentalSurgery.gipl.gz',
-        label: 'PostDentalSurgery',
-      },
-    ],
-  },
-  */
-];
-
-/**
  * Curated IDC studies via direct bucket load (``open-mode`` = ``idc``).
  * Bucket URLs pre-resolved with idc-index; regenerate via scripts/generate-idc-worklist-data.py.
  * @see https://learn.canceridc.dev/data/downloading-data/direct-loading
@@ -523,7 +241,6 @@ const IDC_LUNG_SCREEN_STUDIES = (
 
 const WORKLIST_BUILTIN_STUDIES = [
   ...withWorklistOrganization(VOLVIEW_SAMPLE_STUDIES, WORKLIST_ORG_VOLVIEW),
-  ...withWorklistOrganization(SLICER_SAMPLE_STUDIES, WORKLIST_ORG_SLICER),
   ...withWorklistOrganization(IDC_SAMPLE_STUDIES, WORKLIST_ORG_IDC),
   ...withWorklistOrganization(IDC_LUNG_SCREEN_STUDIES, WORKLIST_ORG_IDC_LUNG),
 ];
@@ -1347,9 +1064,6 @@ function worklistSampleFormatLabel(sample) {
     }
     return formats[0];
   }
-  if (sample?.organization === WORKLIST_ORG_SLICER) {
-    return WORKLIST_FORMAT_NRRD;
-  }
   if (
     sample?.organization === WORKLIST_ORG_IDC ||
     sample?.organization === WORKLIST_ORG_IDC_LUNG
@@ -1604,11 +1318,11 @@ function buildPageHtml() {
   <label for="castStandardSelect">Example:</label><select id="castStandardSelect" class="${
     style.headerStandardSelect
   }"><option value="${CAST_STANDARD_FHIRCAST_V3}">FHIRcast v3.0 standard</option><option value="${CAST_STANDARD_CAST}" selected>Cast Interface v1.0</option></select>
-  --><button type="button" id="openVolViewBtn" class="${
+  --><button type="button" id="openOhifBtn" class="${
     style.headerViewerBtn
-  }" disabled>${VOLVIEW_MARK_SVG}<span class="${
+  }" disabled>${OHIF_MARK_SVG}<span class="${
     style.headerViewerBtnLabel
-  }">Open VolView</span></button></div><div class="${
+  }">Open OHIF</span></button></div><div class="${
     style.headerTitleWrap
   }"><div class="${style.headerTitleStack}"><span id="headerTitleMain" class="${
     style.headerTitle
@@ -1618,11 +1332,11 @@ function buildPageHtml() {
     style.castHeaderRight
   }"><div class="${style.castHeaderViewerSlot}"><div class="${
     style.castHeaderViewerButtons
-  }"><button type="button" id="openOhifBtn" class="${
+  }"><button type="button" id="openVolViewBtn" class="${
     style.headerViewerBtn
-  }" disabled>${OHIF_MARK_SVG}<span class="${
+  }" disabled>${VOLVIEW_MARK_SVG}<span class="${
     style.headerViewerBtnLabel
-  }">Open OHIF</span></button></div></div><div class="${
+  }">Open VolView</span></button></div></div><div class="${
     style.castHeaderActions
   }"><div class="${
     style.castHeaderStatusWrap
@@ -1638,7 +1352,7 @@ function buildPageHtml() {
     style.castHeaderMenu
   }" role="menu" hidden><button type="button" id="castHeaderStatusOpenHub" class="${
     style.castHeaderMenuItem
-  }" role="menuitem">Open the hub admin portal</button><button type="button" id="castHeaderStatusStartConference" class="${
+  }" role="menuitem">Open Hub</button><button type="button" id="castHeaderStatusStartConference" class="${
     style.castHeaderMenuItem
   }" role="menuitem">Start a conference</button></div></div><div class="${
     style.castHeaderMenuWrap
@@ -1811,7 +1525,7 @@ function buildPageHtml() {
         style.castHiddenEndpoint
       }"><label for="getSubscriber">Subscriber</label><input id="getSubscriber" /></div>
       <div class="${style.getDatatypeTopicActorRow}">
-        <div><label for="getDataType">Data Type</label><select id="getDataType"><option value="FHIRcastContext" selected>FHIRcastContext</option><option value="DICOM">DICOM</option><option value="PNGFULLSIZE">PNGFULLSIZE</option><option value="PNGTHUMBNAIL">PNGTHUMBNAIL</option><option value="JPGFULLSIZE">JPGFULLSIZE</option><option value="JPGTHUMBNAIL">JPGTHUMBNAIL</option><option value="SCENEVIEW">SCENEVIEW</option><option value="TRANSFORM">TRANSFORM</option></select><div id="getDataTypeHint" class="${
+        <div><label for="getDataType">Data Type</label><select id="getDataType"><option value="STATUS" selected>STATUS</option><option value="DICOM">DICOM</option><option value="PNGFULLSIZE">PNGFULLSIZE</option><option value="PNGTHUMBNAIL">PNGTHUMBNAIL</option><option value="JPGFULLSIZE">JPGFULLSIZE</option><option value="JPGTHUMBNAIL">JPGTHUMBNAIL</option><option value="TRANSFORM">TRANSFORM</option></select><div id="getDataTypeHint" class="${
           style.dataTypeHint || ''
         }" style="font-size:11px;opacity:0.7;margin-top:2px"></div></div>
         <div><label for="getActorPreset"${IHE_ACTORS_LABEL_TITLE}>Actor</label><select id="getActorPreset"></select></div>
@@ -2615,16 +2329,19 @@ async function captureWorklistThumbnailPng(
   return captureWorklistThumbnailPlaceholder(root, subscriberName, maxWidth);
 }
 
-function buildSceneviewRequestArgs(el, targetProductName) {
+function buildStatusRequestArgs(
+  el,
+  { targetActor = 'ID', targetProductName } = {}
+) {
   const requestArgs = {
     'subscriber.name': el.getSubscriber.value.trim(),
     event: {
-      'hub.event': requestEventFor('SCENEVIEW'),
+      'hub.event': requestEventFor('STATUS'),
       'hub.topic': el.topic.value.trim(),
-      context: { dataType: 'SCENEVIEW' },
+      context: { dataType: 'STATUS' },
     },
     'subscriber.actor': DEFAULT_GET_ACTOR_KEYWORD,
-    'target.actor': 'ID',
+    'target.actor': targetActor,
   };
   const product = String(targetProductName || '').trim();
   if (product && product !== '*') {
@@ -2633,22 +2350,45 @@ function buildSceneviewRequestArgs(el, targetProductName) {
   return requestArgs;
 }
 
+function sceneviewPayloadFromStatusData(data) {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+  if (data.sceneview && typeof data.sceneview === 'object') {
+    return data.sceneview;
+  }
+  if (data.source === 'sceneview') {
+    return data;
+  }
+  return null;
+}
+
 function parseSceneviewCollatedResponses(resultData) {
   const envelope =
     resultData && typeof resultData === 'object' ? resultData : {};
   const responses = Array.isArray(envelope.responses) ? envelope.responses : [];
   return responses
-    .map((item, idx) => ({
-      subscriber:
-        (item &&
-          (item.subscriber ||
-            item.subscriberName ||
-            item['subscriber.name'])) ||
-        `responder-${idx + 1}`,
-      productName: (item && item.productName) || '',
-      data: item && item.data,
-    }))
-    .filter((entry) => entry.data && typeof entry.data === 'object');
+    .map((item, idx) => {
+      const rawData = item && item.data;
+      const sceneview = sceneviewPayloadFromStatusData(rawData);
+      if (!sceneview) {
+        return null;
+      }
+      return {
+        subscriber:
+          (item &&
+            (item.subscriber ||
+              item.subscriberName ||
+              item['subscriber.name'])) ||
+          `responder-${idx + 1}`,
+        productName:
+          (item && item.productName) ||
+          (sceneview.product && String(sceneview.product)) ||
+          '',
+        data: sceneview,
+      };
+    })
+    .filter(Boolean);
 }
 
 function screenRectFromPayload(obj) {
@@ -2673,18 +2413,28 @@ function windowRectFromPayload(win) {
   if (!win || typeof win !== 'object') {
     return null;
   }
-  const left = Number(win.screenX);
-  const top = Number(win.screenY);
+  // Chromium: screenX/screenY are the viewport (client) top-left on screen.
+  const viewportLeft = Number(win.screenX);
+  const viewportTop = Number(win.screenY);
   const width = Number(win.outerWidth);
   const height = Number(win.outerHeight);
+  const innerW = Number(win.innerWidth) || width;
+  const innerH = Number(win.innerHeight) || height;
   if (
-    ![left, top, width, height].every(Number.isFinite) ||
+    ![viewportLeft, viewportTop, width, height].every(Number.isFinite) ||
     width <= 0 ||
     height <= 0
   ) {
     return null;
   }
-  return { left, top, width, height };
+  const chromeW = Math.max(0, width - innerW);
+  const chromeH = Math.max(0, height - innerH);
+  return {
+    left: viewportLeft - chromeW / 2,
+    top: viewportTop - chromeH,
+    width,
+    height,
+  };
 }
 
 function screenRectSummaryLine(prefix, rectObj) {
@@ -2852,25 +2602,99 @@ function buildSubscriberDetailsTreeHtml(captionContext) {
 }
 
 function windowContentRectFromPayload(win) {
+  if (!win || typeof win !== 'object') {
+    return null;
+  }
+  const viewportLeft = Number(win.screenX);
+  const viewportTop = Number(win.screenY);
+  const innerW = Number(win.innerWidth) || Number(win.outerWidth);
+  const innerH = Number(win.innerHeight) || Number(win.outerHeight);
+  if (
+    ![viewportLeft, viewportTop, innerW, innerH].every(Number.isFinite) ||
+    innerW <= 0 ||
+    innerH <= 0
+  ) {
+    return null;
+  }
+  return {
+    left: viewportLeft,
+    top: viewportTop,
+    width: innerW,
+    height: innerH,
+  };
+}
+
+function windowClientInsetsPercent(win) {
   const outer = windowRectFromPayload(win);
   if (!outer || !win || typeof win !== 'object') {
     return null;
   }
   const innerW = Number(win.innerWidth) || outer.width;
   const innerH = Number(win.innerHeight) || outer.height;
-  const chromeW = Math.max(0, outer.width - innerW);
-  const chromeH = Math.max(0, outer.height - innerH);
+  if (outer.width <= 0 || outer.height <= 0) {
+    return null;
+  }
   return {
-    left: outer.left + chromeW / 2,
-    top: outer.top + chromeH,
-    width: innerW,
-    height: innerH,
+    left: ((outer.width - innerW) / 2 / outer.width) * 100,
+    top: ((outer.height - innerH) / outer.height) * 100,
+    width: (innerW / outer.width) * 100,
+    height: (innerH / outer.height) * 100,
   };
 }
 
-/** Diagram uses client area (below browser chrome) for every window, including worklist. */
+function sceneviewClientAreaStyle(win) {
+  const inset = windowClientInsetsPercent(win);
+  if (!inset) {
+    return 'position:absolute;left:0;top:0;width:100%;height:100%;box-sizing:border-box';
+  }
+  return `position:absolute;left:${inset.left}%;top:${inset.top}%;width:${inset.width}%;height:${inset.height}%;box-sizing:border-box`;
+}
+
+const SCENEVIEW_WINDOW_SHELL_STYLE =
+  'position:absolute;left:0;top:0;width:100%;height:100%;box-sizing:border-box;overflow:hidden';
+
+function clampInsetsPercent(inset) {
+  const left = Math.max(0, Math.min(100, inset.left));
+  const top = Math.max(0, Math.min(100, inset.top));
+  const width = Math.max(0, Math.min(100 - left, inset.width));
+  const height = Math.max(0, Math.min(100 - top, inset.height));
+  if (width <= 0 || height <= 0) {
+    return { left: 0, top: 0, width: 100, height: 100 };
+  }
+  return { left, top, width, height };
+}
+
+/** Layout grid bounds as % of the diagram outer window frame. */
+function layoutGridInsetsPercent(win, layoutScreenRect) {
+  const outer = windowRectFromPayload(win);
+  const layout = screenRectFromPayload(layoutScreenRect);
+  if (!outer || !layout) {
+    return { left: 0, top: 0, width: 100, height: 100 };
+  }
+  return clampInsetsPercent({
+    left: ((layout.left - outer.left) / outer.width) * 100,
+    top: ((layout.top - outer.top) / outer.height) * 100,
+    width: (layout.width / outer.width) * 100,
+    height: (layout.height / outer.height) * 100,
+  });
+}
+
+function layoutGridAreaStyle(win, layoutScreenRect) {
+  const inset = layoutGridInsetsPercent(win, layoutScreenRect);
+  return `position:absolute;left:${inset.left}%;top:${inset.top}%;width:${inset.width}%;height:${inset.height}%;box-sizing:border-box;overflow:hidden`;
+}
+
+function clampLayoutPercent(pct) {
+  const left = Math.max(0, Math.min(100, pct.left));
+  const top = Math.max(0, Math.min(100, pct.top));
+  const width = Math.max(0, Math.min(100 - left, pct.width));
+  const height = Math.max(0, Math.min(100 - top, pct.height));
+  return { left, top, width, height };
+}
+
+/** Diagram uses outer window frames so gaps between products match the desktop. */
 function sceneviewWindowRectForDiagram(win) {
-  return windowContentRectFromPayload(win) || windowRectFromPayload(win);
+  return windowRectFromPayload(win);
 }
 
 function computeSceneviewDiagramBounds(worklistWindow, sceneviewEntries) {
@@ -3002,11 +2826,7 @@ function layoutClientSizeFromEntry(display, layoutScreenRect) {
   return null;
 }
 
-function viewportLayoutRectFromPayload(vp, layoutScreenRect) {
-  const layoutRect = screenRectFromPayload(vp && vp.layoutRect);
-  if (layoutRect) {
-    return layoutRect;
-  }
+function layoutRectFromScreenRects(vp, layoutScreenRect) {
   const screenRect = screenRectFromPayload(vp && vp.screenRect);
   if (!screenRect || !layoutScreenRect) {
     return null;
@@ -3017,6 +2837,22 @@ function viewportLayoutRectFromPayload(vp, layoutScreenRect) {
     width: screenRect.width,
     height: screenRect.height,
   };
+}
+
+function layoutRectMatchesScreenDerived(
+  fromPayload,
+  fromScreen,
+  tolerance = 4
+) {
+  if (!fromPayload || !fromScreen) {
+    return false;
+  }
+  return (
+    Math.abs(fromPayload.left - fromScreen.left) <= tolerance &&
+    Math.abs(fromPayload.top - fromScreen.top) <= tolerance &&
+    Math.abs(fromPayload.width - fromScreen.width) <= tolerance &&
+    Math.abs(fromPayload.height - fromScreen.height) <= tolerance
+  );
 }
 
 /** VolView flex-equal slots from display.layout (matches 3D Primary, Four Up, etc.). */
@@ -3076,65 +2912,110 @@ function viewportLayoutRectForDiagram(
   layoutSize,
   layoutScreenRect
 ) {
+  if (layoutSize) {
+    const slotRects = layoutSlotRectsFromDisplayLayout(
+      display,
+      layoutSize.width,
+      layoutSize.height
+    );
+    if (slotRects && vp && Number.isFinite(Number(vp.slotIndex))) {
+      const match = slotRects.find(
+        (slot) => slot.slotIndex === Number(vp.slotIndex)
+      );
+      if (match) {
+        return {
+          left: match.left,
+          top: match.top,
+          width: match.width,
+          height: match.height,
+        };
+      }
+    }
+  }
   const fromPayload = screenRectFromPayload(vp && vp.layoutRect);
+  const fromScreen = layoutRectFromScreenRects(vp, layoutScreenRect);
+  if (fromPayload && layoutRectMatchesScreenDerived(fromPayload, fromScreen)) {
+    return fromPayload;
+  }
   if (fromPayload) {
     return fromPayload;
   }
-  const slotRects = layoutSlotRectsFromDisplayLayout(
-    display,
-    layoutSize.width,
-    layoutSize.height
-  );
-  if (slotRects && vp && Number.isFinite(Number(vp.slotIndex))) {
-    const match = slotRects.find(
-      (slot) => slot.slotIndex === Number(vp.slotIndex)
-    );
-    if (match) {
-      return {
-        left: match.left,
-        top: match.top,
-        width: match.width,
-        height: match.height,
-      };
-    }
+  if (fromScreen) {
+    return fromScreen;
   }
-  return viewportLayoutRectFromPayload(vp, layoutScreenRect);
+  return null;
 }
 
 function mapLayoutRectToPercent(layoutRect, layoutW, layoutH) {
   const w = Math.max(1, layoutW);
   const h = Math.max(1, layoutH);
+  return clampLayoutPercent({
+    left: (layoutRect.left / w) * 100,
+    top: (layoutRect.top / h) * 100,
+    width: (layoutRect.width / w) * 100,
+    height: (layoutRect.height / h) * 100,
+  });
+}
+
+function clampLayoutRectToContainer(rect, targetW, targetH) {
+  const targetWidth = Math.max(1, targetW);
+  const targetHeight = Math.max(1, targetH);
+  const left = Math.max(0, Math.min(targetWidth, rect.left));
+  const top = Math.max(0, Math.min(targetHeight, rect.top));
+  const maxW = Math.max(0, targetWidth - left);
+  const maxH = Math.max(0, targetHeight - top);
   return {
-    left: Math.max(0, (layoutRect.left / w) * 100),
-    top: Math.max(0, (layoutRect.top / h) * 100),
-    width: Math.max(1, (layoutRect.width / w) * 100),
-    height: Math.max(1, (layoutRect.height / h) * 100),
+    left,
+    top,
+    width: Math.max(0, Math.min(maxW, rect.width)),
+    height: Math.max(0, Math.min(maxH, rect.height)),
   };
 }
 
-/** Scale viewport layout rects down when SCENEVIEW coords overflow layoutClientSize. */
-function fitViewportLayoutRectsToLayoutSize(layoutSize, layoutRects) {
-  if (!layoutSize || !layoutRects.length) {
+/** Uniformly scale layout-local viewport rects to fit a target box (contain + center). */
+function scaleLayoutRectsToFitContainer(layoutRects, targetW, targetH) {
+  if (!layoutRects.length) {
     return layoutRects;
   }
-  const layoutW = Math.max(1, layoutSize.width);
-  const layoutH = Math.max(1, layoutSize.height);
-  let maxRight = 0;
-  let maxBottom = 0;
-  layoutRects.forEach((rect) => {
+  const validRects = layoutRects.filter(Boolean);
+  if (!validRects.length) {
+    return layoutRects;
+  }
+  const targetWidth = Math.max(1, targetW);
+  const targetHeight = Math.max(1, targetH);
+  let minLeft = Infinity;
+  let minTop = Infinity;
+  let maxRight = -Infinity;
+  let maxBottom = -Infinity;
+  validRects.forEach((rect) => {
+    minLeft = Math.min(minLeft, rect.left);
+    minTop = Math.min(minTop, rect.top);
     maxRight = Math.max(maxRight, rect.left + rect.width);
     maxBottom = Math.max(maxBottom, rect.top + rect.height);
   });
-  const scale = Math.min(1, layoutW / maxRight, layoutH / maxBottom);
-  if (scale >= 0.999) {
+  const bboxW = maxRight - minLeft;
+  const bboxH = maxBottom - minTop;
+  if (!(bboxW > 0 && bboxH > 0)) {
     return layoutRects;
   }
-  return layoutRects.map((rect) => ({
-    left: rect.left * scale,
-    top: rect.top * scale,
-    width: rect.width * scale,
-    height: rect.height * scale,
-  }));
+  const scale = Math.min(targetWidth / bboxW, targetHeight / bboxH);
+  const offsetX = (targetWidth - bboxW * scale) / 2;
+  const offsetY = (targetHeight - bboxH * scale) / 2;
+  return layoutRects.map((rect) => {
+    if (!rect) {
+      return rect;
+    }
+    return clampLayoutRectToContainer(
+      {
+        left: offsetX + (rect.left - minLeft) * scale,
+        top: offsetY + (rect.top - minTop) * scale,
+        width: rect.width * scale,
+        height: rect.height * scale,
+      },
+      targetWidth,
+      targetHeight
+    );
+  });
 }
 
 function sceneviewBoxStyle(mapped, extra) {
@@ -3172,25 +3053,32 @@ function sceneviewDisplayShellHtml(
   innerHtml,
   zIndex
 ) {
-  const labelTop =
-    className.includes('svDisplayId') || className.includes('svWorklist');
   const labelHtml = centerLabel
-    ? `<div class="${
-        labelTop ? 'svDisplayLabel svDisplayLabelTop' : 'svDisplayLabel'
-      }"><span>${escapeHtml(centerLabel)}</span></div>`
+    ? `<div class="svDisplayLabelAbove"><span>${escapeHtml(
+        centerLabel
+      )}</span></div>`
     : '';
-  return `<div class="${className} svDisplay" style="${sceneviewBoxStyle(
+  return `<div class="svDisplayWrap" style="${sceneviewBoxStyle(
     mapped,
     `z-index:${zIndex}`
-  )}" title="${escapeHtml(title)}">${innerHtml || ''}${labelHtml}</div>`;
+  )}" title="${escapeHtml(
+    title
+  )}">${labelHtml}<div class="${className} svDisplay">${
+    innerHtml || ''
+  }</div></div>`;
 }
 
-function sceneviewWorklistDisplayInnerHtml(thumbnail) {
+function sceneviewWorklistDisplayInnerHtml(thumbnail, win) {
   const worklistThumbSrc = thumbnail ? castImageDataUrl(thumbnail) : '';
   const thumbHtml = worklistThumbSrc
     ? `<img class="svThumb" src="${worklistThumbSrc}" alt="" />`
     : '';
-  return thumbHtml ? `<div class="svThumbWrap">${thumbHtml}</div>` : '';
+  if (!thumbHtml) {
+    return '';
+  }
+  return `<div class="svDisplayContent" style="${sceneviewClientAreaStyle(
+    win
+  )}"><div class="svLayoutFit"><div class="svThumbWrap">${thumbHtml}</div></div></div>`;
 }
 
 function sceneviewViewportBoxPercentHtml(pct, title, thumbnail, zIndex) {
@@ -3213,64 +3101,66 @@ function sceneviewViewportBoxPercentHtml(pct, title, thumbnail, zIndex) {
 function sceneviewIdDisplayInnerHtml(win, display, viewports) {
   const layoutScreenRect = layoutScreenRectFromEntry(display, viewports, win);
   const layoutSize = layoutClientSizeFromEntry(display, layoutScreenRect);
-  if (!layoutSize) {
+  const viewportList = Array.isArray(viewports) ? viewports : [];
+  if (!viewportList.length) {
     return '';
   }
-  const layoutStyle =
-    'position:absolute;left:0;top:0;width:100%;height:100%;box-sizing:border-box';
-  const viewportList = Array.isArray(viewports) ? viewports : [];
-
-  if (display && display.maximized && viewportList.length) {
-    const activeVp =
-      viewportList.find((vp) => vp && vp.viewId === display.activeViewId) ||
-      viewportList[0];
-    const pct = { left: 0, top: 0, width: 100, height: 100 };
+  const gridStyle = layoutGridAreaStyle(win, layoutScreenRect);
+  const listForLayout =
+    display && display.maximized
+      ? [
+          viewportList.find((vp) => vp && vp.viewId === display.activeViewId) ||
+            viewportList[0],
+        ]
+      : viewportList;
+  if (display && display.maximized && listForLayout[0]) {
+    const activeVp = listForLayout[0];
     const vpName =
       (activeVp && (activeVp.name || activeVp.viewId)) || 'viewport';
     const vpTitle = activeVp.studyInstanceUID
       ? `${vpName} — ${activeVp.studyInstanceUID}`
       : vpName;
-    return `<div class="svDisplayContent" style="${layoutStyle}">${sceneviewViewportBoxPercentHtml(
+    const pct = { left: 0, top: 0, width: 100, height: 100 };
+    return `<div class="svDisplayContent" style="${SCENEVIEW_WINDOW_SHELL_STYLE}"><div class="svLayoutGrid" style="${gridStyle}"><div class="svLayoutFit">${sceneviewViewportBoxPercentHtml(
       pct,
       vpTitle,
       activeVp.thumbnail,
       3
-    )}</div>`;
+    )}</div></div></div>`;
   }
-
+  const coordSize =
+    layoutSize ||
+    (layoutScreenRect
+      ? { width: layoutScreenRect.width, height: layoutScreenRect.height }
+      : { width: 1, height: 1 });
+  const fitWidth = layoutScreenRect ? layoutScreenRect.width : coordSize.width;
+  const fitHeight = layoutScreenRect
+    ? layoutScreenRect.height
+    : coordSize.height;
   const viewportItems = [];
-  const useLayoutTree = Boolean(
-    layoutSlotRectsFromDisplayLayout(
-      display,
-      layoutSize.width,
-      layoutSize.height
-    )
-  );
-  viewportList.forEach((vp, vpIdx) => {
-    const vpLayoutRect = viewportLayoutRectForDiagram(
-      display,
-      vp,
-      layoutSize,
-      layoutScreenRect
-    );
-    if (!vpLayoutRect) {
+  listForLayout.forEach((vp, vpIdx) => {
+    if (!vp) {
       return;
     }
-    viewportItems.push({ vp, vpIdx, layoutRect: vpLayoutRect });
+    const layoutRect = viewportLayoutRectForDiagram(
+      display,
+      vp,
+      layoutSize || coordSize,
+      layoutScreenRect
+    );
+    if (layoutRect) {
+      viewportItems.push({ vp, vpIdx, layoutRect });
+    }
   });
-  const layoutRects = useLayoutTree
-    ? viewportItems.map((item) => item.layoutRect)
-    : fitViewportLayoutRectsToLayoutSize(
-        layoutSize,
-        viewportItems.map((item) => item.layoutRect)
-      );
+  const rawLayoutRects = viewportItems.map((item) => item.layoutRect);
+  const layoutRects = scaleLayoutRectsToFitContainer(
+    rawLayoutRects,
+    fitWidth,
+    fitHeight
+  );
   const viewportChunks = [];
   viewportItems.forEach((item, idx) => {
-    const pct = mapLayoutRectToPercent(
-      layoutRects[idx],
-      layoutSize.width,
-      layoutSize.height
-    );
+    const pct = mapLayoutRectToPercent(layoutRects[idx], fitWidth, fitHeight);
     const vpName =
       (item.vp && (item.vp.name || item.vp.viewId)) ||
       `viewport-${item.vpIdx + 1}`;
@@ -3281,9 +3171,9 @@ function sceneviewIdDisplayInnerHtml(win, display, viewports) {
       sceneviewViewportBoxPercentHtml(pct, vpTitle, item.vp.thumbnail, 3)
     );
   });
-  return `<div class="svDisplayContent" style="${layoutStyle}">${viewportChunks.join(
+  return `<div class="svDisplayContent" style="${SCENEVIEW_WINDOW_SHELL_STYLE}"><div class="svLayoutGrid" style="${gridStyle}"><div class="svLayoutFit">${viewportChunks.join(
     ''
-  )}</div>`;
+  )}</div></div></div>`;
 }
 
 function pushSceneviewDisplay(
@@ -3369,7 +3259,10 @@ function buildSceneviewLayoutDiagramHtml(
       'svWin svWorklist',
       wlTitle,
       wlSubscriber,
-      sceneviewWorklistDisplayInnerHtml(worklistMeta && worklistMeta.thumbnail),
+      sceneviewWorklistDisplayInnerHtml(
+        worklistMeta && worklistMeta.thumbnail,
+        worklistWindow
+      ),
       2
     );
   }
@@ -3423,11 +3316,6 @@ function buildSceneviewLayoutPageHtml(
   const imageDisplaysSection =
     buildSceneviewImageDisplaysSectionHtml(sceneviewEntries);
   const wrapMaxH = metrics?.wrapMaxH ?? 520;
-  const boundsLabel = bounds
-    ? `${Math.round(bounds.width)}×${Math.round(
-        bounds.height
-      )} px virtual desktop`
-    : '';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -3449,23 +3337,23 @@ function buildSceneviewLayoutPageHtml(
   .svCanvas { position: relative; margin: 0 auto; background: repeating-linear-gradient(
     0deg, #1a1a22 0, #1a1a22 20px, #15151c 20px, #15151c 40px
   ); }
-  .svDisplay { position: absolute; box-sizing: border-box; overflow: hidden; }
+  .svDisplayWrap { position: absolute; box-sizing: border-box; }
+  .svDisplay { position: absolute; left: 0; top: 0; width: 100%; height: 100%; box-sizing: border-box; overflow: hidden; }
   .svWin, .svViewport { box-sizing: border-box; }
   .svWorklist { border: 2px solid #ffc107; background: rgba(255, 193, 7, 0.12); }
   .svDisplayId { border: 2px solid #6cb6ff; background: #0a0a12; }
   .svDisplayContent { position: absolute; box-sizing: border-box; overflow: hidden; }
-  .svDisplayContent .svViewport { position: absolute; border: 1px solid #6cb6ff; background: #000; box-sizing: border-box; }
+  .svLayoutGrid { position: absolute; box-sizing: border-box; overflow: hidden; }
+  .svLayoutFit { position: absolute; inset: 0; box-sizing: border-box; overflow: hidden; }
+  .svDisplayContent .svViewport { position: absolute; border: 1px solid #6cb6ff; background: #000; box-sizing: border-box; overflow: hidden; }
   .svThumbWrap { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
-  .svWorklist .svThumb { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
-  .svDisplayContent .svThumb { width: 100%; height: 100%; object-fit: cover; object-position: center;
-    display: block; background: #000; }
-  .svDisplayLabel { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
-    padding: 6px; pointer-events: none; box-sizing: border-box; }
-  .svDisplayLabelTop { inset: auto 0 auto 0; top: 0; height: auto; align-items: flex-start; justify-content: center;
-    padding: 4px 6px; background: linear-gradient(to bottom, rgba(0, 0, 0, 0.72), transparent); }
-  .svDisplayLabel span { display: inline-block; max-width: calc(100% - 12px); padding: 4px 10px; font-size: 11px;
+  .svWorklist .svThumb { width: 100%; height: 100%; object-fit: fill; display: block; background: #000; }
+  .svDisplayContent .svThumb { width: 100%; height: 100%; object-fit: fill; display: block; background: #000; }
+  .svDisplayLabelAbove { position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 4px;
+    text-align: center; pointer-events: none; box-sizing: border-box; }
+  .svDisplayLabelAbove span { display: inline-block; max-width: calc(100% - 4px); padding: 2px 8px; font-size: 11px;
     font-weight: 700; line-height: 1.25; color: #fff; text-align: center; word-break: break-word;
-    background: rgba(0, 0, 0, 0.65); border-radius: 4px; text-shadow: 0 1px 2px #000; }
+    background: rgba(0, 0, 0, 0.72); border-radius: 4px; text-shadow: 0 1px 2px #000; }
   .svBelowSection { margin-top: 4px; }
   .svBelowSection h2 { margin: 0 0 10px; font-size: 1rem; font-weight: 600; color: #ddd; }
   .svBelowPanel { border: 1px solid #333; border-radius: 8px; background: #0a0a12; padding: 12px 14px; }
@@ -3482,17 +3370,14 @@ function buildSceneviewLayoutPageHtml(
 </head>
 <body>
 <header class="svPageHeader">
-<h1>Scene layout (SCENEVIEW)</h1>
+<h1>Scene views</h1>
 <div class="svTrainingRepoRow">
-<span class="svTrainingRepoLabel">Save Scene to my training repo in standard format</span>
+<span class="svTrainingRepoLabel">Upload scene layout to my AI training repo in standard format</span>
 <button type="button" class="svTrainingUploadBtn" title="Upload" aria-label="Upload">
 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
 </button>
 </div>
 </header>
-<p>19% scale layout (${escapeHtml(
-    boundsLabel
-  )}). Window client areas (below browser chrome) preserve relative positions from SCENEVIEW. Scroll the diagram if needed.</p>
 <div class="svWrap">${diagram}</div>
 <section class="svBelowSection">
 <h2>Image Displays</h2>
@@ -3569,7 +3454,7 @@ async function openSceneviewLayoutFromStatus(el, state) {
       480,
       wlSubscriber
     );
-    const result = await state.client.request(buildSceneviewRequestArgs(el));
+    const result = await state.client.request(buildStatusRequestArgs(el));
     if (!result.ok) {
       const detail =
         typeof result.data === 'string'
@@ -3657,7 +3542,7 @@ function updateOpenSceneviewsButton(el, state) {
     ? [...state.imageDisplaySubscribers].sort().join(', ')
     : '';
   el.openSceneviewsBtn.title = enabled
-    ? `Open scene layout (SCENEVIEW) for ${names}`
+    ? `Open scene views for ${names}`
     : 'Connect an image-display viewer first';
 }
 
@@ -3721,9 +3606,8 @@ function handleIncomingGetRequest(el, state, message) {
     return false;
   }
 
-  // The example app only knows how to answer FHIRcastContext requests; ignore
-  // image / dicom / sceneview requests so they can route elsewhere.
-  if (context.dataType !== 'FHIRcastContext') {
+  // Respond to status-request with worklist ImagingStudy context (legacy fhircast shape).
+  if (context.dataType !== 'STATUS') {
     return false;
   }
 
@@ -3738,13 +3622,13 @@ function handleIncomingGetRequest(el, state, message) {
 
   state.client.sendCastRequestResponse(
     correlationId,
-    context.dataType,
+    'STATUS',
     responseData,
     event['hub.topic']
   );
   addMessage(el, state, 'sent', 'Get response', {
     id: correlationId,
-    dataType: context.dataType,
+    dataType: 'STATUS',
     responseData,
   });
   return true;
@@ -4338,7 +4222,7 @@ async function handleCastRequest(el, state) {
   let responseText;
   if (typeof result.data === 'string') {
     responseText = result.data;
-  } else if (dataTypeToken === 'SCENEVIEW') {
+  } else if (dataTypeToken === 'STATUS') {
     responseText = JSON.stringify(
       redactSceneviewPayloadForLog(result.data),
       null,
@@ -4372,18 +4256,20 @@ async function handleCastRequest(el, state) {
     ];
     if (missing.length) parts.push(`missing: ${missing.join(', ')}`);
     if (envelope.timedOut) parts.push('timedOut');
-    if (dataTypeToken === 'SCENEVIEW') {
+    if (dataTypeToken === 'STATUS') {
       responses.forEach((item, idx) => {
-        const data = item && item.data;
+        const sceneview = sceneviewPayloadFromStatusData(item && item.data);
         const viewports =
-          data && typeof data === 'object' && Array.isArray(data.viewports)
-            ? data.viewports
+          sceneview && Array.isArray(sceneview.viewports)
+            ? sceneview.viewports
             : [];
         const product =
-          data && typeof data === 'object' && data.product
-            ? String(data.product)
+          sceneview && sceneview.product
+            ? String(sceneview.product)
             : (item && item.productName) || `responder-${idx + 1}`;
-        parts.push(`${product}: ${viewports.length} viewport(s)`);
+        if (viewports.length) {
+          parts.push(`${product}: ${viewports.length} viewport(s)`);
+        }
       });
     }
     el.getResponseSummary.textContent = parts.join(' | ');
@@ -4400,10 +4286,10 @@ async function handleCastRequest(el, state) {
       item && typeof item.id === 'string' && item.id.trim()
         ? item.id.trim().slice(0, 8)
         : '';
-    if (dataTypeToken === 'SCENEVIEW') {
+    if (dataTypeToken === 'STATUS') {
       collected.push(
         ...collectSceneviewViewportThumbnails(
-          item && item.data,
+          sceneviewPayloadFromStatusData(item && item.data),
           productName,
           subscriber
         )
@@ -4642,10 +4528,10 @@ async function boot() {
     const normalized = el.getDataType.value.trim().toUpperCase();
     const isImageType =
       normalized.startsWith('PNG') || normalized.startsWith('JPG');
-    const isSceneview = normalized === 'SCENEVIEW';
+    const isStatus = normalized === 'STATUS';
     el.getActorPreset.value = isImageType ? 'ID' : DEFAULT_GET_ACTOR_KEYWORD;
     el.getTargetActorPreset.value =
-      isImageType || isSceneview ? 'ID' : DEFAULT_TARGET_ACTOR_KEYWORD;
+      isImageType || isStatus ? '*' : DEFAULT_TARGET_ACTOR_KEYWORD;
     if (el.getDataTypeHint) {
       const eventName = el.getDataType.value
         ? requestEventFor(el.getDataType.value)

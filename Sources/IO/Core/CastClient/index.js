@@ -13,9 +13,9 @@ import {
   extractStowBatchFileBytes,
   firstPendingPayloadSlot,
   hasPendingPayload,
-  listPendingPayloadSlots,
   messageNeedsStowBatchPublish,
   normalizeStowBatchMessageMetadataOnly,
+  payloadChunkPlan,
   toArrayBufferStrict,
 } from './sendNormalize';
 import {
@@ -187,90 +187,47 @@ function vtkCastClient(publicAPI, model) {
     emitConnectionState('disconnected');
   }
 
-  function attachPayloadToSlot(castMessage, buf, slot) {
-    const event = castMessage && castMessage.event;
-    if (!event || !slot) {
-      return false;
-    }
-    if (slot.kind === 'files') {
-      const ctx = event.context;
-      const files = ctx && ctx.files;
-      const entry = files && files[slot.index];
-      if (entry && typeof entry === 'object') {
-        delete entry.binaryTransfer;
-        delete entry.url;
-        delete entry.payloadId;
-        delete entry.expiresAt;
-        entry.data = buf;
-        entry.byteLength = buf.byteLength;
-        return true;
-      }
-      return false;
-    }
-    const context = event.context;
-    let items = [];
-    if (Array.isArray(context)) {
-      items = context;
-    } else if (context != null) {
-      items = [context];
-    }
-    const item = items[slot.index];
-    if (item && typeof item === 'object') {
-      const resource = item.resource;
-      if (resource && typeof resource === 'object') {
-        delete resource.binaryTransfer;
-        delete resource.url;
-        delete resource.payloadId;
-        delete resource.expiresAt;
-        resource.data = buf;
-        resource.byteLength = buf.byteLength;
-        return true;
-      }
-    }
-    return false;
+  function clearPayloadRefs(entry) {
+    delete entry.binaryTransfer;
+    delete entry.url;
+    delete entry.payloadId;
+    delete entry.payloadIds;
+    delete entry.chunkByteLengths;
+    delete entry.expiresAt;
   }
 
-  function attachPayloadToResource(castMessage, buf) {
+  function reassembleFileChunks(chunks, expectedTotal) {
+    const total = chunks.reduce((sum, buf) => sum + buf.byteLength, 0);
+    if (
+      typeof expectedTotal === 'number' &&
+      expectedTotal >= 0 &&
+      total !== expectedTotal
+    ) {
+      throw new Error(
+        `CastClient: payload size mismatch expected=${expectedTotal} received=${total}`
+      );
+    }
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (let i = 0; i < chunks.length; i++) {
+      out.set(new Uint8Array(chunks[i]), offset);
+      offset += chunks[i].byteLength;
+    }
+    return out.buffer;
+  }
+
+  function attachPayloadToFile(castMessage, fileIndex, buf) {
     const event = castMessage && castMessage.event;
-    const slot = event && firstPendingPayloadSlot(event);
-    if (slot && slot.kind === 'files') {
-      const ctx = event.context;
-      const files = ctx && ctx.files;
-      const entry = files && files[slot.index];
-      if (entry && typeof entry === 'object') {
-        delete entry.binaryTransfer;
-        delete entry.url;
-        delete entry.payloadId;
-        delete entry.expiresAt;
-        entry.data = buf;
-        entry.byteLength = buf.byteLength;
-        return true;
-      }
+    const ctx = event && event.context;
+    const files = ctx && ctx.files;
+    const entry = files && files[fileIndex];
+    if (!entry || typeof entry !== 'object') {
       return false;
     }
-    const context = event && event.context;
-    let items = [];
-    if (Array.isArray(context)) {
-      items = context;
-    } else if (context != null) {
-      items = [context];
-    }
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item && typeof item === 'object') {
-        const resource = item.resource;
-        if (resource && typeof resource === 'object') {
-          delete resource.binaryTransfer;
-          delete resource.url;
-          delete resource.payloadId;
-          delete resource.expiresAt;
-          resource.data = buf;
-          resource.byteLength = buf.byteLength;
-          return true;
-        }
-      }
-    }
-    return false;
+    clearPayloadRefs(entry);
+    entry.data = buf;
+    entry.byteLength = buf.byteLength;
+    return true;
   }
 
   function buildStowRelatedBody(boundary, jsonText, fileParts) {
@@ -311,7 +268,7 @@ function vtkCastClient(publicAPI, model) {
     }
   }
 
-  async function downloadPayloadBytes(payloadId) {
+  async function downloadPayloadBytes(payloadId, expectedChunkBytes) {
     const resolved = resolvePayloadUrl(payloadId);
     if (!resolved) {
       throw new Error('CastClient.fetchPayload: missing or invalid payloadId');
@@ -325,7 +282,53 @@ function vtkCastClient(publicAPI, model) {
         `CastClient.fetchPayload: GET ${response.status} ${response.statusText}`
       );
     }
-    return response.arrayBuffer();
+    const buf = await response.arrayBuffer();
+    if (
+      typeof expectedChunkBytes === 'number' &&
+      expectedChunkBytes >= 0 &&
+      buf.byteLength !== expectedChunkBytes
+    ) {
+      throw new Error(
+        `CastClient.fetchPayload: chunk size mismatch payloadId=${payloadId.slice(
+          0,
+          8
+        )} expected=${expectedChunkBytes} received=${buf.byteLength}`
+      );
+    }
+    return buf;
+  }
+
+  async function downloadFilePayloadChunks(entry) {
+    const plan = payloadChunkPlan(entry);
+    if (!plan.payloadIds.length) {
+      throw new Error('CastClient.fetchPayload: no payloadIds on file entry');
+    }
+    const chunks = [];
+    for (
+      let start = 0;
+      start < plan.payloadIds.length;
+      start += HTTP_PAYLOAD_MAX_CONCURRENT
+    ) {
+      const batchIds = plan.payloadIds.slice(
+        start,
+        start + HTTP_PAYLOAD_MAX_CONCURRENT
+      );
+      const batchLens = plan.chunkByteLengths.slice(
+        start,
+        start + HTTP_PAYLOAD_MAX_CONCURRENT
+      );
+      // eslint-disable-next-line no-await-in-loop
+      const batchBufs = await Promise.all(
+        batchIds.map((id, idx) =>
+          downloadPayloadBytes(id, batchLens[idx] ?? null)
+        )
+      );
+      chunks.push(...batchBufs);
+    }
+    return reassembleFileChunks(
+      chunks,
+      typeof entry.byteLength === 'number' ? entry.byteLength : null
+    );
   }
 
   function processTextMessage(eventData) {
@@ -886,14 +889,17 @@ function vtkCastClient(publicAPI, model) {
       return castMessage;
     }
     const slot = firstPendingPayloadSlot(event);
-    const payloadId = slot ? slot.payloadId : '';
+    if (!slot) {
+      return castMessage;
+    }
     const startedAt =
       typeof performance !== 'undefined' && performance.now
         ? performance.now()
         : Date.now();
-    const buf = await downloadPayloadBytes(payloadId);
+    const entry = event.context.files[slot.index];
+    const buf = await downloadFilePayloadChunks(entry);
     const enriched = JSON.parse(JSON.stringify(castMessage));
-    const attached = attachPayloadToResource(enriched, buf);
+    const attached = attachPayloadToFile(enriched, slot.index, buf);
     if (!attached) {
       throw new Error('CastClient.fetchPayload: no payload slot on message');
     }
@@ -902,7 +908,7 @@ function vtkCastClient(publicAPI, model) {
         ? performance.now()
         : Date.now()) - startedAt;
     console.debug(
-      `CastClient: payload fetched payloadId=${payloadId.slice(0, 8)}... ` +
+      `CastClient: payload fetched fileIndex=${slot.index} ` +
         `bytes=${buf.byteLength} elapsed=${(elapsedMs / 1000).toFixed(2)}s`
     );
     return enriched;
@@ -910,25 +916,25 @@ function vtkCastClient(publicAPI, model) {
 
   publicAPI.fetchAllPayloads = async (castMessage) => {
     const event = castMessage && castMessage.event;
-    const slots = event ? listPendingPayloadSlots(event) : [];
-    if (!slots.length) {
+    const files = event ? contextFilesFromEvent(event) : [];
+    const pendingIndices = [];
+    for (let i = 0; i < files.length; i++) {
+      const plan = payloadChunkPlan(files[i]);
+      if (plan.payloadIds.length && files[i].data == null) {
+        pendingIndices.push(i);
+      }
+    }
+    if (!pendingIndices.length) {
       return castMessage;
     }
     const msg = castMessage;
-    for (
-      let start = 0;
-      start < slots.length;
-      start += HTTP_PAYLOAD_MAX_CONCURRENT
-    ) {
-      const batch = slots.slice(start, start + HTTP_PAYLOAD_MAX_CONCURRENT);
+    for (let f = 0; f < pendingIndices.length; f++) {
+      const fileIndex = pendingIndices[f];
+      const entry = msg.event.context.files[fileIndex];
       // eslint-disable-next-line no-await-in-loop
-      const buffers = await Promise.all(
-        batch.map((slot) => downloadPayloadBytes(slot.payloadId))
-      );
-      for (let i = 0; i < batch.length; i++) {
-        if (!attachPayloadToSlot(msg, buffers[i], batch[i])) {
-          throw new Error('CastClient.fetchAllPayloads: attach failed');
-        }
+      const buf = await downloadFilePayloadChunks(entry);
+      if (!attachPayloadToFile(msg, fileIndex, buf)) {
+        throw new Error('CastClient.fetchAllPayloads: attach failed');
       }
     }
     return msg;
