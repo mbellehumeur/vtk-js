@@ -8,6 +8,8 @@ export const CAST_IDENTIFIER_NIFTI_URL = 'urn:cast:nifti-url';
 export const CAST_IDENTIFIER_NIFTI_FILENAME = 'urn:cast:nifti-filename';
 export const CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID = 'urn:cast:volview-sample-id';
 export const CAST_IDENTIFIER_WORKLIST_SAMPLE_ID = 'urn:cast:worklist-sample-id';
+/** OHIF mode route segment (e.g. `viewer`, `usAnnotation`). */
+export const CAST_IDENTIFIER_OHIF_MODE = 'urn:cast:ohif-mode';
 
 export const CAST_OPEN_MODE = 'urn:cast:open-mode';
 export const CAST_OPEN_MODE_DICOMWEB = 'dicomweb';
@@ -158,6 +160,14 @@ export function extractNiftiDownloadUrl(context) {
  */
 export function extractNiftiFilename(context) {
   return extractIdentifierValue(context, CAST_IDENTIFIER_NIFTI_FILENAME);
+}
+
+/**
+ * @param {unknown} context
+ * @returns {string}
+ */
+export function extractOhifMode(context) {
+  return extractIdentifierValue(context, CAST_IDENTIFIER_OHIF_MODE);
 }
 
 /**
@@ -550,6 +560,7 @@ export function buildDicomwebImagingStudyOpenContext({
  * @param {'aws' | 'gcs'} [params.sourceBucket]
  * @param {Array<{ url: string, fileName?: string, mimeType?: string, role?: string, label?: string }>} params.files
  * @param {string} [params.patientReference]
+ * @param {string} [params.ohifMode] OHIF mode route segment (e.g. `usAnnotation`)
  * @returns {Array<object>}
  */
 export function buildIdcImagingStudyOpenContext({
@@ -559,6 +570,7 @@ export function buildIdcImagingStudyOpenContext({
   sourceBucket,
   files,
   patientReference,
+  ohifMode,
 }) {
   const studyId = String(id || '').trim() || 'study';
   const studyUid = normalizeUid(studyInstanceUID);
@@ -589,6 +601,13 @@ export function buildIdcImagingStudyOpenContext({
   ];
   if (seriesUid) {
     identifiers.push({ system: CAST_IDENTIFIER_IDC, value: seriesUid });
+  }
+  const ohifModeValue = String(ohifMode || '').trim();
+  if (ohifModeValue) {
+    identifiers.push({
+      system: CAST_IDENTIFIER_OHIF_MODE,
+      value: ohifModeValue,
+    });
   }
 
   const studyResource = {

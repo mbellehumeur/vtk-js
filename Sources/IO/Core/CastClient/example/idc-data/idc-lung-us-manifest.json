@@ -1,0 +1,95 @@
+{
+  "organization": "idc-lung-us",
+  "organizationLabel": "IDC - Lung Ultrasound",
+  "ohifMode": "usAnnotation",
+  "collection_ids": [
+    "cmb_crc",
+    "cmb_lca"
+  ],
+  "selectionNote": "IDC has no ultrasound series labeled pleura; list is thoracentesis and chest US from cmb_lca / cmb_crc.",
+  "studies": [
+    {
+      "id": "idc-lung-us-01",
+      "name": "Pleural US 1 (US_Biop_Thoracentesis)",
+      "description": "cmb_lca US \u2014 MSB-06433 \u2014 US_Biop_Thoracentesis \u2014 US THORACENTESIS",
+      "size": "6 MB",
+      "format": "DICOM",
+      "studyInstanceUID": "1.3.6.1.4.1.14519.5.2.1.264344986974798429982015033806575738045",
+      "seriesInstanceUID": "1.3.6.1.4.1.14519.5.2.1.292815029622112450790978260869380719538",
+      "sourceBucket": "aws",
+      "instanceCount": 8,
+      "files": [
+        {
+          "url": "https://idc-open-data.s3.amazonaws.com/7ce131dc-5b0a-47b9-9cf9-4426c19700a0/06461d27-29d0-41d8-90e2-1305497d548a.dcm",
+          "fileName": "06461d27-29d0-41d8-90e2-1305497d548a.dcm"
+        },
+        {
+          "url": "https://idc-open-data.s3.amazonaws.com/7ce131dc-5b0a-47b9-9cf9-4426c19700a0/08d41ce0-30fa-40c8-bf23-15ef811df818.dcm",
+          "fileName": "08d41ce0-30fa-40c8-bf23-15ef811df818.dcm"
+        },
+        {
+          "url": "https://idc-open-data.s3.amazonaws.com/7ce131dc-5b0a-47b9-9cf9-4426c19700a0/1d43656b-09ac-4d3c-bde1-597430ae4aa0.dcm",
+          "fileName": "1d43656b-09ac-4d3c-bde1-597430ae4aa0.dcm"
+        },
+        {
+          "url": "https://idc-open-data.s3.amazonaws.com/7ce131dc-5b0a-47b9-9cf9-4426c19700a0/3b6647f5-1ed1-4a64-b37d-5f07c364f1f2.dcm",
+          "fileName": "3b6647f5-1ed1-4a64-b37d-5f07c364f1f2.dcm"
+        },
+        {
+          "url": "https://idc-open-data.s3.amazonaws.com/7ce131dc-5b0a-47b9-9cf9-4426c19700a0/6663920f-d177-4fd1-b114-05c6cc9135bf.dcm",
+          "fileName": "6663920f-d177-4fd1-b114-05c6cc9135bf.dcm"
+        },
+        {
+          "url": "https://idc-open-data.s3.amazonaws.com/7ce131dc-5b0a-47b9-9cf9-4426c19700a0/84fbcfd5-f652-4954-a8b7-a8becbd72218.dcm",
+          "fileName": "84fbcfd5-f652-4954-a8b7-a8becbd72218.dcm"
+        },
+        {
+          "url": "https://idc-open-data.s3.amazonaws.com/7ce131dc-5b0a-47b9-9cf9-4426c19700a0/8edbcba7-7a17-4bf2-9f09-006e6b9369c3.dcm",
+          "fileName": "8edbcba7-7a17-4bf2-9f09-006e6b9369c3.dcm"
+        },
+        {
+          "url": "https://idc-open-data.s3.amazonaws.com/7ce131dc-5b0a-47b9-9cf9-4426c19700a0/af3103c0-c149-43e5-a027-8d6c78627efb.dcm",
+          "fileName": "af3103c0-c149-43e5-a027-8d6c78627efb.dcm"
+        }
+      ]
+    },
+    {
+      "id": "idc-lung-us-03",
+      "name": "Pleural US 3 (US_Thoracentesis)",
+      "description": "cmb_lca US \u2014 MSB-02120 \u2014 US_Thoracentesis \u2014 US THORACENTESIS",
+      "size": "2 MB",
+      "format": "DICOM",
+      "studyInstanceUID": "1.3.6.1.4.1.14519.5.2.1.318060794858341961138930742957119403379",
+      "seriesInstanceUID": "1.3.6.1.4.1.14519.5.2.1.297583912908058148474832796742728056684",
+      "sourceBucket": "aws",
+      "instanceCount": 2,
+      "files": [
+        {
+          "url": "https://idc-open-data.s3.amazonaws.com/925b3d11-4417-4a6d-9d68-ec99b15e910c/203cd516-6c76-40c5-a3be-8eae22a31af0.dcm",
+          "fileName": "203cd516-6c76-40c5-a3be-8eae22a31af0.dcm"
+        },
+        {
+          "url": "https://idc-open-data.s3.amazonaws.com/925b3d11-4417-4a6d-9d68-ec99b15e910c/dc5909ee-76f9-425e-a043-fee8b4c2f09c.dcm",
+          "fileName": "dc5909ee-76f9-425e-a043-fee8b4c2f09c.dcm"
+        }
+      ]
+    },
+    {
+      "id": "idc-lung-us-04",
+      "name": "Pleural US 4 (US_Thoracentesis)",
+      "description": "cmb_lca US \u2014 MSB-07342 \u2014 US_Thoracentesis \u2014 US THORACENTESIS",
+      "size": "0.8 MB",
+      "format": "DICOM",
+      "studyInstanceUID": "1.3.6.1.4.1.14519.5.2.1.207788991832140112127102585298624340250",
+      "seriesInstanceUID": "1.3.6.1.4.1.14519.5.2.1.153603531453003954951729780288552943659",
+      "sourceBucket": "aws",
+      "instanceCount": 1,
+      "files": [
+        {
+          "url": "https://idc-open-data.s3.amazonaws.com/2fd2004b-d682-4c9f-be99-57542f2ae3da/b173ee44-9284-43ef-be72-8a4c8b29410a.dcm",
+          "fileName": "b173ee44-9284-43ef-be72-8a4c8b29410a.dcm"
+        }
+      ]
+    }
+  ]
+}

@@ -340,17 +340,10 @@
 
 .castHeaderRight {
   grid-column: 3;
-  display: grid;
-  grid-template-columns: 1fr auto;
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
   width: 100%;
-  min-width: 0;
-}
-
-.castHeaderViewerSlot {
-  display: flex;
-  justify-content: center;
-  align-items: center;
   min-width: 0;
 }
 
@@ -579,7 +572,9 @@
 
 .worklistSceneviewActions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
   grid-column: 2;
   justify-self: end;
@@ -1136,7 +1131,11 @@
 }
 
 .worklistEntry {
-  display: contents;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  border-bottom: 1px solid var(--cast-border);
 }
 
 .worklistEntryHeaderRow {
@@ -1156,7 +1155,34 @@
 .worklistEntrySize,
 .worklistOpenBtn {
   padding: 10px 0;
-  border-bottom: 1px solid var(--cast-border);
+}
+
+.worklistEntryOpen {
+  position: relative;
+  border-bottom-color: color-mix(in srgb, var(--cast-primary) 50%, var(--cast-border));
+}
+
+.worklistEntryOpen::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  /* Stop before the action column (gap + button track). */
+  right: calc(6.5rem + 16px);
+  background: color-mix(in srgb, var(--cast-primary) 34%, var(--cast-card));
+  box-shadow: inset 4px 0 0 var(--cast-primary);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.worklistEntryOpen .worklistEntryOrg,
+.worklistEntryOpen .worklistEntryTitle,
+.worklistEntryOpen .worklistEntryDesc,
+.worklistEntryOpen .worklistEntryFormat,
+.worklistEntryOpen .worklistEntrySize {
+  position: relative;
+  z-index: 1;
 }
 
 .worklistEntryHeaderRow .worklistEntryOrg,
@@ -1220,10 +1246,6 @@
   white-space: nowrap;
 }
 
-.worklistEntries > :nth-last-child(-n + 6) {
-  border-bottom: none;
-}
-
 .worklistEntrySize {
   font-size: 12px;
   line-height: 1.4;
@@ -1233,7 +1255,10 @@
 }
 
 .worklistOpenBtn {
+  position: relative;
+  z-index: 1;
   flex-shrink: 0;
+  justify-self: end;
   padding: 6px 14px;
   border: 1px solid var(--cast-button-border);
   border-radius: calc(var(--cast-radius) * 0.75);
@@ -1245,12 +1270,14 @@
 }
 
 .worklistOpenBtnClose {
-  background: var(--cast-popover);
-  border-color: var(--cast-ring);
+  background: var(--cast-button-hover-bg);
+  border-color: var(--cast-primary);
+  color: var(--cast-primary);
+  font-weight: 600;
 }
 
 .worklistOpenBtnClose:hover:not(:disabled) {
-  background: var(--cast-button-hover-bg);
+  background: color-mix(in srgb, var(--cast-primary) 10%, var(--cast-button-hover-bg));
 }
 
 .worklistOpenBtn:disabled {

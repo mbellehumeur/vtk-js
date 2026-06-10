@@ -208,6 +208,7 @@ export const CAST_IDENTIFIER_NIFTI_URL: string;
 export const CAST_IDENTIFIER_NIFTI_FILENAME: string;
 export const CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID: string;
 export const CAST_IDENTIFIER_WORKLIST_SAMPLE_ID: string;
+export const CAST_IDENTIFIER_OHIF_MODE: string;
 export const CAST_OPEN_MODE: string;
 export const CAST_OPEN_MODE_DICOMWEB: string;
 export const CAST_OPEN_MODE_DICOM_URL: string;
@@ -255,6 +256,8 @@ export function extractNiftiDownloadUrl(context: unknown): string;
 
 export function extractNiftiFilename(context: unknown): string;
 
+export function extractOhifMode(context: unknown): string;
+
 export function extractVolviewSampleId(context: unknown): string;
 
 export function buildFilesImagingStudyOpenContext(params: {
@@ -285,6 +288,7 @@ export function buildIdcImagingStudyOpenContext(params: {
   sourceBucket?: 'aws' | 'gcs';
   files: CastImagingStudyFileEntry[];
   patientReference?: string;
+  ohifMode?: string;
 }): Array<{ key: string; resource: Record<string, unknown> }>;
 
 export function buildNiftiUrlImagingStudyOpenContext(params: {
@@ -357,6 +361,7 @@ export declare const vtkCastClient: {
   CAST_IDENTIFIER_NIFTI_URL: typeof CAST_IDENTIFIER_NIFTI_URL;
   CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID: typeof CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID;
   CAST_IDENTIFIER_WORKLIST_SAMPLE_ID: typeof CAST_IDENTIFIER_WORKLIST_SAMPLE_ID;
+  CAST_IDENTIFIER_OHIF_MODE: typeof CAST_IDENTIFIER_OHIF_MODE;
   CAST_IMAGING_STUDY_OPEN_PROFILE: typeof CAST_IMAGING_STUDY_OPEN_PROFILE;
   CAST_OPEN_MODE: typeof CAST_OPEN_MODE;
   CAST_OPEN_MODE_DICOMWEB: typeof CAST_OPEN_MODE_DICOMWEB;
@@ -371,6 +376,7 @@ export declare const vtkCastClient: {
   extractImagingStudyFiles: typeof extractImagingStudyFiles;
   extractNiftiDownloadUrl: typeof extractNiftiDownloadUrl;
   extractNiftiFilename: typeof extractNiftiFilename;
+  extractOhifMode: typeof extractOhifMode;
   extractOpenMode: typeof extractOpenMode;
   extractStudyContextItem: typeof extractStudyContextItem;
   extractVolviewSampleId: typeof extractVolviewSampleId;
