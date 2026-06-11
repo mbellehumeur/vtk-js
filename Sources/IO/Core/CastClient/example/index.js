@@ -64,6 +64,7 @@ import html2canvas from 'html2canvas';
 import { isRequestEvent, requestEventFor } from '../eventNames';
 import idcPortalDemoSeries2 from './idc-data/idc-portal-demo-series-2.json';
 import idcLungScreenManifest from './idc-data/idc-lung-screen-manifest.json';
+import idcLungUsManifest from './idc-data/idc-lung-us-manifest.json';
 
 import style from './CastClient.module.css';
 
@@ -116,6 +117,7 @@ const EMPTY_FHIRCAST_CONTEXT = {
 const WORKLIST_ORG_VOLVIEW = 'volview';
 const WORKLIST_ORG_IDC = 'idc';
 const WORKLIST_ORG_IDC_LUNG = 'idc-lung-screen';
+const WORKLIST_ORG_IDC_LUNG_US = 'idc-lung-us';
 const WORKLIST_ORG_HUB = 'hub';
 
 const WORKLIST_ORGANIZATION_OPTIONS = [
@@ -124,6 +126,7 @@ const WORKLIST_ORGANIZATION_OPTIONS = [
   { value: WORKLIST_ORG_VOLVIEW, label: 'VolView samples' },
   { value: WORKLIST_ORG_IDC, label: 'Imaging Data Commons' },
   { value: WORKLIST_ORG_IDC_LUNG, label: 'IDC - CT Lung Screenings' },
+  { value: WORKLIST_ORG_IDC_LUNG_US, label: 'IDC - Lung Ultrasound' },
 ];
 
 const WORKLIST_ORG_LABELS = {
@@ -131,6 +134,7 @@ const WORKLIST_ORG_LABELS = {
   [WORKLIST_ORG_VOLVIEW]: 'VolView samples',
   [WORKLIST_ORG_IDC]: 'Imaging Data Commons',
   [WORKLIST_ORG_IDC_LUNG]: 'IDC - CT Lung Screenings',
+  [WORKLIST_ORG_IDC_LUNG_US]: 'IDC - Lung Ultrasound',
 };
 
 function withWorklistOrganization(studies, organization) {
@@ -139,8 +143,20 @@ function withWorklistOrganization(studies, organization) {
 
 const EXAMPLE_PAGE_TITLE_SUB = 'vtk.js IO module cast example';
 
-const CAST_ABOUT_BODY_TEXT =
-  'Cast worklist client example built on vtk.js CastClient. Connect to a Cast hub, browse sample studies, and coordinate VolView, OHIF, and other Cast subscribers.';
+const CAST_SLICER_CAST_INTERFACE_DOCS_URL =
+  'https://github.com/mbellehumeur/SlicerCastInterface/';
+
+const CAST_ABOUT_BODY_HTML = `Imaging worklist client example built on vtk.js CastClient. Browse sample studies, open multiple VolView, OHIF instances. Try the global scene view display. Use resource servers and conferencing. Documentation for the 3D Slicer Cast Interface Extension is here: <a class="${style.castAboutLink}" href="${CAST_SLICER_CAST_INTERFACE_DOCS_URL}" target="_blank" rel="noopener noreferrer">${CAST_SLICER_CAST_INTERFACE_DOCS_URL}</a>`;
+
+const CAST_ABOUT_DISCLAIMER_HTML = `<div class="${style.castAboutDisclaimer}">
+  <p class="${style.castAboutDisclaimerHeading}"><strong>Standards and trademarks</strong></p>
+  <p>DICOM® is the registered trademark of the National Electrical Manufacturers Association (NEMA) for its standards publications relating to digital imaging and communications in medicine. FHIR® and related HL7 marks are registered trademarks of Health Level Seven International (HL7). IHE® is a registered trademark of HIMSS.</p>
+  <p>The Cast Interface (including its hub, clients, and documentation) references ideas, workflows, and vocabulary drawn from these standards—such as DICOM objects and metadata, FHIR and FHIRcast-style context and events, and IHE actor roles (for example, Image Display and Evidence Creator)—solely to describe interoperability behavior.</p>
+  <p><strong>Cast Interface is not part of these standards.</strong> It is not published by NEMA, HL7, or HIMSS, and is not an IHE Integration Profile, a FHIR implementation guide, or a DICOM conformance statement. Use of standard names and terms does not imply endorsement, certification, or official status. All other product and company names are trademarks of their respective owners.</p>
+</div>`;
+
+const HANGING_PROTOCOL_TRAINING_INFO_TEXT =
+  'Standardized hanging protocol training data could mean personalized protocols without training each product separately: from NA-MIC project week 43.';
 
 const CAST_STANDARD_CAST = 'cast';
 const CAST_STANDARD_FHIRCAST_V3 = 'fhircast-v3';
@@ -239,10 +255,23 @@ const IDC_LUNG_SCREEN_STUDIES = (
   )
 );
 
+/** Lung ultrasound US — regenerate via scripts/generate-idc-lung-us-worklist.py */
+const IDC_LUNG_US_STUDIES = (
+  Array.isArray(idcLungUsManifest?.studies) ? idcLungUsManifest.studies : []
+).map((entry) =>
+  idcWorklistEntry(
+    entry,
+    entry.name || entry.id,
+    entry.description || 'IDC lung ultrasound',
+    entry.size
+  )
+);
+
 const WORKLIST_BUILTIN_STUDIES = [
   ...withWorklistOrganization(VOLVIEW_SAMPLE_STUDIES, WORKLIST_ORG_VOLVIEW),
   ...withWorklistOrganization(IDC_SAMPLE_STUDIES, WORKLIST_ORG_IDC),
   ...withWorklistOrganization(IDC_LUNG_SCREEN_STUDIES, WORKLIST_ORG_IDC_LUNG),
+  ...withWorklistOrganization(IDC_LUNG_US_STUDIES, WORKLIST_ORG_IDC_LUNG_US),
 ];
 
 const OPENIGT_LINK_ACTOR_TOOLTIP =
@@ -800,9 +829,17 @@ function updateWorklistContextControls(el, state) {
         btn.title = 'Close the open study';
         return;
       }
-      btn.textContent = 'Close and Open';
-      btn.dataset.worklistAction = 'close-and-open';
-      btn.title = 'Close the current study and open this one';
+      btn.textContent = 'Open';
+      btn.dataset.worklistAction = 'open';
+      btn.title = 'Open study';
+    });
+
+  el.worklistPanel
+    .querySelectorAll(`.${style.worklistEntry}`)
+    .forEach((row) => {
+      const sampleId = row.dataset.worklistSampleId;
+      const isOpenRow = hasContext && sampleId === openId;
+      row.classList.toggle(style.worklistEntryOpen, isOpenRow);
     });
 }
 
@@ -1066,7 +1103,8 @@ function worklistSampleFormatLabel(sample) {
   }
   if (
     sample?.organization === WORKLIST_ORG_IDC ||
-    sample?.organization === WORKLIST_ORG_IDC_LUNG
+    sample?.organization === WORKLIST_ORG_IDC_LUNG ||
+    sample?.organization === WORKLIST_ORG_IDC_LUNG_US
   ) {
     return WORKLIST_FORMAT_DICOM;
   }
@@ -1113,6 +1151,9 @@ async function handleWorklistSampleOpen(el, state, sampleId) {
   const openMode = String(sample.openMode || '').trim();
   let context;
   if (isIdcWorklistSample(sample)) {
+    const ohifMode =
+      String(sample.ohifMode || '').trim() ||
+      (sample.organization === WORKLIST_ORG_IDC_LUNG_US ? 'usAnnotation' : '');
     context = buildIdcImagingStudyOpenContext({
       id: sample.id,
       studyInstanceUID: sample.studyInstanceUID,
@@ -1120,6 +1161,7 @@ async function handleWorklistSampleOpen(el, state, sampleId) {
       sourceBucket: sample.sourceBucket || 'aws',
       files: sample.files,
       patientReference,
+      ohifMode: ohifMode || undefined,
     });
   } else if (openMode === CAST_OPEN_MODE_DICOM_URL) {
     context = buildDicomUrlImagingStudyOpenContext({
@@ -1213,13 +1255,16 @@ function renderWorklistStudyList(panelEl, studies, ariaLabel, el, state) {
 
   const headerBtnSpacer = document.createElement('span');
   headerBtnSpacer.className = style.worklistOpenBtnSpacer;
-  headerBtnSpacer.textContent = 'Close and Open';
+  headerBtnSpacer.textContent = 'Open';
   headerRow.append(headerBtnSpacer);
   list.append(headerRow);
 
   sortWorklistStudiesBySize(studies).forEach((sample) => {
     const row = document.createElement('div');
     row.className = style.worklistEntry;
+    row.dataset.worklistSampleId = sample.id;
+
+    const rowCells = [];
 
     const org = document.createElement('div');
     org.className = style.worklistEntryOrg;
@@ -1246,6 +1291,8 @@ function renderWorklistStudyList(panelEl, studies, ariaLabel, el, state) {
     actionBtn.className = style.worklistOpenBtn;
     actionBtn.textContent = 'Open';
     actionBtn.dataset.sampleId = sample.id;
+
+    rowCells.push(org, title, desc, format, size, actionBtn);
     actionBtn.dataset.worklistAction = 'open';
     const openDisabledReason = worklistSampleActionDisabledReason(sample);
     if (openDisabledReason) {
@@ -1318,27 +1365,15 @@ function buildPageHtml() {
   <label for="castStandardSelect">Example:</label><select id="castStandardSelect" class="${
     style.headerStandardSelect
   }"><option value="${CAST_STANDARD_FHIRCAST_V3}">FHIRcast v3.0 standard</option><option value="${CAST_STANDARD_CAST}" selected>Cast Interface v1.0</option></select>
-  --><button type="button" id="openOhifBtn" class="${
-    style.headerViewerBtn
-  }" disabled>${OHIF_MARK_SVG}<span class="${
-    style.headerViewerBtnLabel
-  }">Open OHIF</span></button></div><div class="${
-    style.headerTitleWrap
-  }"><div class="${style.headerTitleStack}"><span id="headerTitleMain" class="${
+  --></div><div class="${style.headerTitleWrap}"><div class="${
+    style.headerTitleStack
+  }"><span id="headerTitleMain" class="${
     style.headerTitle
   }">${titleMainForCastStandard(CAST_STANDARD_DEFAULT)}</span><span class="${
     style.headerTitleSub
   }">${EXAMPLE_PAGE_TITLE_SUB}</span></div></div><div class="${
     style.castHeaderRight
-  }"><div class="${style.castHeaderViewerSlot}"><div class="${
-    style.castHeaderViewerButtons
-  }"><button type="button" id="openVolViewBtn" class="${
-    style.headerViewerBtn
-  }" disabled>${VOLVIEW_MARK_SVG}<span class="${
-    style.headerViewerBtnLabel
-  }">Open VolView</span></button></div></div><div class="${
-    style.castHeaderActions
-  }"><div class="${
+  }"><div class="${style.castHeaderActions}"><div class="${
     style.castHeaderStatusWrap
   }"><button type="button" id="castHeaderStatusBtn" class="${
     style.castHeaderStatusBtn
@@ -1354,7 +1389,7 @@ function buildPageHtml() {
     style.castHeaderMenuItem
   }" role="menuitem">Open Hub</button><button type="button" id="castHeaderStatusStartConference" class="${
     style.castHeaderMenuItem
-  }" role="menuitem">Start a conference</button></div></div><div class="${
+  }" role="menuitem">Conferencing</button></div></div><div class="${
     style.castHeaderMenuWrap
   }"><button type="button" id="castHeaderMenuBtn" class="${
     style.castHeaderMenuBtn
@@ -1404,9 +1439,21 @@ function buildPageHtml() {
           class="${style.worklistImageDisplayLabel}"
           hidden
         ></span>
+        <div class="${style.castHeaderViewerButtons}">
+          <button type="button" id="openVolViewBtn" class="${
+            style.headerViewerBtn
+          }" disabled>${VOLVIEW_MARK_SVG}<span class="${
+    style.headerViewerBtnLabel
+  }">Open VolView</span></button>
+          <button type="button" id="openOhifBtn" class="${
+            style.headerViewerBtn
+          }" disabled>${OHIF_MARK_SVG}<span class="${
+    style.headerViewerBtnLabel
+  }">Open OHIF</span></button>
+        </div>
         <button type="button" id="openSceneviewsBtn" class="${
           style.headerViewerBtn
-        }" disabled>Open scene views</button>
+        }" disabled>Open Scene Views</button>
       </div>
     </div>
     <div id="worklistPanel" class="${style.worklistPanel}"></div>
@@ -1473,7 +1520,7 @@ function buildPageHtml() {
         style.subscribeActionsEnd
       }"><button type="button" id="startConferenceBtn" class="${
     style.startConferenceBtn
-  }" disabled>Start a conference</button></div>
+  }" disabled>Conferencing</button></div>
     </div>
   </div>
   <div class="${style.section} ${style.panelCard}">
@@ -1571,7 +1618,8 @@ function buildPageHtml() {
         style.castAboutTitle
       }">${titleMainForCastStandard(CAST_STANDARD_DEFAULT)}</h2>
       <p class="${style.castAboutSubtitle}">${EXAMPLE_PAGE_TITLE_SUB}</p>
-      <p class="${style.castAboutBody}">${CAST_ABOUT_BODY_TEXT}</p>
+      <p class="${style.castAboutBody}">${CAST_ABOUT_BODY_HTML}</p>
+      ${CAST_ABOUT_DISCLAIMER_HTML}
       <div class="${style.castAboutActions}">
         <button type="button" id="castAboutCloseBtn" class="${
           style.headerViewerBtn
@@ -2118,8 +2166,10 @@ function contextRequestSubscriber(message) {
 }
 
 const SCENEVIEW_LAYOUT_PAD = 24;
-/** Diagram scale vs reported screen coordinates (~19% of screen layout). */
-const SCENEVIEW_LAYOUT_DIAGRAM_SCALE = 0.1875;
+/** Scene layout popup width vs worklist outer width (match worklist; body scrolls vertically). */
+const SCENEVIEW_LAYOUT_POPUP_WIDTH_RATIO = 1;
+/** Scene layout popup height vs worklist outer height (short panel, body scrolls vertically). */
+const SCENEVIEW_LAYOUT_POPUP_HEIGHT_RATIO = 1.17;
 
 function escapeHtml(text) {
   return String(text)
@@ -2139,9 +2189,6 @@ function getWorklistScreenWindow() {
     innerHeight: window.innerHeight,
   };
 }
-
-/** Set in boot(); used for layout-popup worklist thumbnail capture only. */
-let castExampleRootElement = null;
 
 /** Object URL for worklist thumb in layout popup; revoked on next open. */
 let sceneviewLayoutWorklistThumbUrl = null;
@@ -2220,9 +2267,21 @@ function castImageDataUrl(thumbnail) {
   return `data:${contentType};base64,${data}`;
 }
 
-function captureWorklistThumbnailPlaceholder(root, subscriberName, maxWidth) {
-  const srcW = Math.max(1, root.offsetWidth || root.scrollWidth || 400);
-  const srcH = Math.max(1, root.offsetHeight || root.scrollHeight || 280);
+function captureWorklistThumbnailPlaceholder(
+  root,
+  subscriberName,
+  maxWidth,
+  viewportWidth,
+  viewportHeight
+) {
+  const srcW = Math.max(
+    1,
+    viewportWidth || root.offsetWidth || root.scrollWidth || 400
+  );
+  const srcH = Math.max(
+    1,
+    viewportHeight || root.offsetHeight || root.scrollHeight || 280
+  );
   const scale = Math.min(1, maxWidth / srcW);
   const outW = Math.max(1, Math.round(srcW * scale));
   const outH = Math.max(1, Math.round(srcH * scale));
@@ -2255,58 +2314,135 @@ function captureWorklistThumbnailPlaceholder(root, subscriberName, maxWidth) {
   return pngThumbnailFromCanvas(canvas, maxWidth);
 }
 
-/** html2canvas clone prep: CSS sanitization + collapse Test bench for layout PNG only. */
+function getWorklistThumbnailViewportSize() {
+  return {
+    width: Math.max(1, window.innerWidth),
+    height: Math.max(1, window.innerHeight),
+  };
+}
+
+function getWorklistThumbnailCaptureTarget() {
+  const castRoot = document.querySelector(`.${style.cast}`);
+  if (castRoot instanceof HTMLElement) {
+    return castRoot;
+  }
+  return document.body || document.documentElement;
+}
+
+/** html2canvas 1.x cannot parse oklch, color-mix, or CSS color(). */
+function rewriteCssColorsForHtml2Canvas(cssText) {
+  return String(cssText || '')
+    .replace(/color-mix\((?:[^()]*|\([^()]*\))*\)/gi, '#242c40')
+    .replace(/oklch\((?:[^()]*|\([^()]*\))*\)/gi, '#888888')
+    .replace(/\bcolor\((?:[^()]*|\([^()]*\))*\)/gi, '#888888')
+    .replace(/subgrid/gi, 'none');
+}
+
+/** html2canvas cannot paint subgrid; flatten worklist rows in the cloned DOM. */
+function flattenWorklistGridForHtml2Canvas(clonedDoc) {
+  if (!clonedDoc || typeof clonedDoc.querySelectorAll !== 'function') {
+    return;
+  }
+  clonedDoc.querySelectorAll(`.${style.worklistEntries}`).forEach((grid) => {
+    grid.style.display = 'block';
+    grid.style.gridTemplateColumns = 'none';
+    grid.style.padding = '0 12px';
+  });
+  clonedDoc.querySelectorAll(`.${style.worklistEntry}`).forEach((row) => {
+    row.style.display = 'flex';
+    row.style.flexWrap = 'wrap';
+    row.style.alignItems = 'center';
+    row.style.gap = '8px 16px';
+    row.style.gridColumn = 'auto';
+    row.style.gridTemplateColumns = 'none';
+    row.style.position = 'relative';
+    row.style.borderBottom = '1px solid #444';
+    row.style.padding = '8px 0';
+  });
+  clonedDoc.querySelectorAll(`.${style.worklistEntryOpen}`).forEach((row) => {
+    row.style.background = 'rgba(79, 140, 255, 0.22)';
+    row.style.boxShadow = 'inset 4px 0 0 #4f8cff';
+  });
+  clonedDoc
+    .querySelectorAll(`.${style.worklistEntryHeaderRow}`)
+    .forEach((row) => {
+      row.style.display = 'none';
+    });
+}
+
+/** html2canvas clone prep: CSS sanitization for the worklist browser snapshot. */
 function sanitizeHtml2CanvasCloneDocument(clonedDoc) {
   if (!clonedDoc || typeof clonedDoc.querySelectorAll !== 'function') {
     return;
   }
-  const rewrite = (cssText) =>
-    String(cssText || '')
-      .replace(/oklch\([^)]*\)/gi, '#888888')
-      .replace(/color-mix\([^)]*\)/gi, '#242c40');
   clonedDoc.querySelectorAll('style').forEach((node) => {
     if (node.textContent) {
-      node.textContent = rewrite(node.textContent);
+      node.textContent = rewriteCssColorsForHtml2Canvas(node.textContent);
     }
   });
   clonedDoc.querySelectorAll('[style]').forEach((node) => {
     const inline = node.getAttribute('style');
     if (inline) {
-      node.setAttribute('style', rewrite(inline));
+      node.setAttribute('style', rewriteCssColorsForHtml2Canvas(inline));
     }
   });
-  const castHubSection = clonedDoc.getElementById('castHubSection');
-  if (castHubSection) {
-    castHubSection.removeAttribute('open');
-    if ('open' in castHubSection) {
-      castHubSection.open = false;
+  const sourceDetails = Array.from(document.querySelectorAll('details'));
+  Array.from(clonedDoc.querySelectorAll('details')).forEach((details, idx) => {
+    const source = sourceDetails[idx];
+    const isOpen = source ? source.open : details.open;
+    details.open = isOpen;
+    if (isOpen) {
+      details.setAttribute('open', '');
+      return;
     }
-    castHubSection.querySelectorAll(`.${style.castHubBody}`).forEach((body) => {
-      body.setAttribute('style', 'display:none !important');
+    details.removeAttribute('open');
+    Array.from(details.children).forEach((child) => {
+      if (child.tagName.toLowerCase() !== 'summary') {
+        child.setAttribute('style', 'display:none !important');
+      }
     });
-  }
+  });
+  flattenWorklistGridForHtml2Canvas(clonedDoc);
 }
 
 async function captureWorklistThumbnailPng(
   maxWidth = 480,
-  subscriberName = 'Worklist'
+  subscriberName = 'Worklist',
+  el = null
 ) {
-  const root =
-    castExampleRootElement ||
-    document.querySelector(`.${style.cast}`) ||
-    document.body;
+  const captureTarget = getWorklistThumbnailCaptureTarget();
+  const viewport = getWorklistThumbnailViewportSize();
+  const priorScrollX =
+    window.scrollX || document.documentElement.scrollLeft || 0;
+  const priorScrollY =
+    window.scrollY || document.documentElement.scrollTop || 0;
+  window.scrollTo(0, 0);
   await new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(resolve));
   });
   try {
-    const rect = root.getBoundingClientRect();
-    const srcW = Math.max(1, Math.round(rect.width) || root.offsetWidth);
-    const scale = Math.min(2, Math.max(0.35, maxWidth / srcW));
-    const canvas = await html2canvas(root, {
+    const srcW = viewport.width;
+    const scale = Math.min(1, Math.max(0.25, maxWidth / srcW));
+    const targetRect = captureTarget.getBoundingClientRect();
+    const cropX = Math.max(0, Math.round(-targetRect.left));
+    const cropY = Math.max(0, Math.round(-targetRect.top));
+    const cropW = Math.max(
+      1,
+      Math.min(viewport.width, Math.round(targetRect.width))
+    );
+    const cropH = Math.max(
+      1,
+      Math.min(viewport.height, Math.round(targetRect.height))
+    );
+    const canvas = await html2canvas(captureTarget, {
       backgroundColor: '#000000',
       scale,
       logging: false,
       useCORS: true,
+      x: cropX,
+      y: cropY,
+      width: cropW,
+      height: cropH,
       onclone: sanitizeHtml2CanvasCloneDocument,
       ignoreElements: (element) => {
         if (!(element instanceof HTMLElement)) {
@@ -2323,10 +2459,21 @@ async function captureWorklistThumbnailPng(
     if (thumb && thumb.data.length > 100) {
       return thumb;
     }
+    console.warn(
+      '[vtkCastClient] worklist thumbnail capture produced empty PNG; using placeholder'
+    );
   } catch (err) {
     console.warn('[vtkCastClient] worklist thumbnail capture failed', err);
+  } finally {
+    window.scrollTo(priorScrollX, priorScrollY);
   }
-  return captureWorklistThumbnailPlaceholder(root, subscriberName, maxWidth);
+  return captureWorklistThumbnailPlaceholder(
+    captureTarget,
+    subscriberName,
+    maxWidth,
+    viewport.width,
+    viewport.height
+  );
 }
 
 function buildStatusRequestArgs(
@@ -2697,37 +2844,15 @@ function sceneviewWindowRectForDiagram(win) {
   return windowRectFromPayload(win);
 }
 
-function computeSceneviewDiagramBounds(worklistWindow, sceneviewEntries) {
-  const rects = [];
-  const worklistRect = sceneviewWindowRectForDiagram(worklistWindow);
-  if (worklistRect) {
-    rects.push(worklistRect);
-  }
-  sceneviewEntries.forEach((entry) => {
-    const data = entry.data;
-    const winRect = sceneviewWindowRectForDiagram(data && data.window);
-    if (winRect) {
-      rects.push(winRect);
-    }
-  });
-  if (!rects.length) {
-    return null;
-  }
-  let minLeft = Infinity;
-  let minTop = Infinity;
-  let maxRight = -Infinity;
-  let maxBottom = -Infinity;
-  rects.forEach((rect) => {
-    minLeft = Math.min(minLeft, rect.left);
-    minTop = Math.min(minTop, rect.top);
-    maxRight = Math.max(maxRight, rect.left + rect.width);
-    maxBottom = Math.max(maxBottom, rect.top + rect.height);
-  });
+/** Full primary monitor in screen coordinates (diagram shows desktop at reduced scale). */
+function getSceneviewMonitorDiagramBounds() {
+  const screenW = window.screen?.width || 1920;
+  const screenH = window.screen?.height || 1080;
   return {
-    minLeft,
-    minTop,
-    width: Math.max(1, maxRight - minLeft),
-    height: Math.max(1, maxBottom - minTop),
+    minLeft: 0,
+    minTop: 0,
+    width: Math.max(1, screenW),
+    height: Math.max(1, screenH),
   };
 }
 
@@ -2740,20 +2865,56 @@ function mapRectToDiagram(rect, bounds, scale, pad) {
   };
 }
 
-function resolveSceneviewLayoutPopupMetrics(bounds) {
+function resolveSceneviewLayoutPopupMetrics(bounds, worklistWindow) {
   const pad = SCENEVIEW_LAYOUT_PAD;
-  const scale = SCENEVIEW_LAYOUT_DIAGRAM_SCALE;
-  const canvasW = Math.ceil(bounds.width * scale + pad * 2);
-  const canvasH = Math.ceil(bounds.height * scale + pad * 2);
+  const worklistInnerW = Math.max(
+    1,
+    Number(worklistWindow?.innerWidth) || window.innerWidth || 800
+  );
+  const worklistOuterW = Math.max(
+    worklistInnerW,
+    Number(worklistWindow?.outerWidth) || window.outerWidth || worklistInnerW
+  );
+  const worklistOuterH =
+    Number(worklistWindow?.outerHeight) || window.outerHeight || 700;
+  const pageBodyPadX = 48;
+  const svWrapPadX = 24;
+  const popupChromeW = 16;
   const availW = window.screen.availWidth || window.screen.width || 1280;
   const availH = window.screen.availHeight || window.screen.height || 800;
-  const pageChromeW = 48;
-  const pageChromeH = 300;
-  const popupWidth = Math.min(canvasW + pageChromeW, availW - 8);
-  const wrapMaxH = Math.min(canvasH, Math.max(240, availH - pageChromeH - 8));
-  const popupHeight = Math.min(wrapMaxH + pageChromeH, availH - 8);
-  const left = Math.max(0, Math.floor((availW - popupWidth) / 2));
-  const top = Math.max(0, Math.floor((availH - popupHeight) / 2));
+  const popupWidth = Math.max(
+    360,
+    Math.min(
+      Math.round(worklistOuterW * SCENEVIEW_LAYOUT_POPUP_WIDTH_RATIO),
+      availW - 8
+    )
+  );
+  const diagramContentW = Math.max(
+    200,
+    popupWidth - pageBodyPadX - popupChromeW - svWrapPadX
+  );
+  const scale = diagramContentW / bounds.width;
+  const canvasW = Math.ceil(bounds.width * scale + pad * 2);
+  const canvasH = Math.ceil(bounds.height * scale + pad * 2);
+  const wrapMaxH = canvasH;
+  const popupHeight = Math.min(
+    Math.max(
+      360,
+      Math.round(worklistOuterH * SCENEVIEW_LAYOUT_POPUP_HEIGHT_RATIO)
+    ),
+    availH - 8
+  );
+  const screenX = Number(worklistWindow?.screenX);
+  const screenY = Number(worklistWindow?.screenY);
+  const outerH = Number(worklistWindow?.outerHeight) || window.outerHeight || 0;
+  let left = Number.isFinite(screenX)
+    ? Math.floor(screenX)
+    : Math.max(0, Math.floor((availW - popupWidth) / 2));
+  let top = Number.isFinite(screenY)
+    ? Math.floor(screenY + outerH + 8)
+    : Math.max(0, Math.floor((availH - popupHeight) / 2));
+  left = Math.max(0, Math.min(left, availW - popupWidth));
+  top = Math.max(0, Math.min(top, availH - popupHeight));
   return {
     scale,
     pad,
@@ -3032,17 +3193,11 @@ function sceneviewBoxStyle(mapped, extra) {
 }
 
 function thumbnailImgHtml(thumbnail) {
-  if (
-    !thumbnail ||
-    typeof thumbnail !== 'object' ||
-    typeof thumbnail.contentType !== 'string' ||
-    typeof thumbnail.data !== 'string' ||
-    !/^image\/(png|jpeg)$/i.test(thumbnail.contentType.trim())
-  ) {
+  const dataUrl = castImageDataUrl(thumbnail);
+  if (!dataUrl) {
     return '';
   }
-  const contentType = thumbnail.contentType.trim().toLowerCase();
-  return `<img class="svThumb" src="data:${contentType};base64,${thumbnail.data}" alt="" />`;
+  return `<img class="svThumb" src="${escapeHtml(dataUrl)}" alt="" />`;
 }
 
 function sceneviewDisplayShellHtml(
@@ -3068,10 +3223,12 @@ function sceneviewDisplayShellHtml(
   }</div></div>`;
 }
 
-function sceneviewWorklistDisplayInnerHtml(thumbnail, win) {
-  const worklistThumbSrc = thumbnail ? castImageDataUrl(thumbnail) : '';
+function sceneviewWorklistDisplayInnerHtml(thumbnail, win, thumbnailSrc) {
+  const worklistThumbSrc =
+    (typeof thumbnailSrc === 'string' && thumbnailSrc) ||
+    (thumbnail ? castImageDataUrl(thumbnail) : '');
   const thumbHtml = worklistThumbSrc
-    ? `<img class="svThumb" src="${worklistThumbSrc}" alt="" />`
+    ? `<img class="svThumb" src="${escapeHtml(worklistThumbSrc)}" alt="" />`
     : '';
   if (!thumbHtml) {
     return '';
@@ -3238,7 +3395,7 @@ function buildSceneviewLayoutDiagramHtml(
   if (!bounds) {
     return '<p class="svEmpty">No screen geometry in sceneview response.</p>';
   }
-  const scale = metrics?.scale ?? SCENEVIEW_LAYOUT_DIAGRAM_SCALE;
+  const scale = metrics?.scale ?? 0.2;
   const pad = metrics?.pad ?? SCENEVIEW_LAYOUT_PAD;
   const canvasW = metrics?.canvasW ?? Math.ceil(bounds.width * scale + pad * 2);
   const canvasH =
@@ -3261,7 +3418,8 @@ function buildSceneviewLayoutDiagramHtml(
       wlSubscriber,
       sceneviewWorklistDisplayInnerHtml(
         worklistMeta && worklistMeta.thumbnail,
-        worklistWindow
+        worklistWindow,
+        worklistMeta && worklistMeta.thumbnailSrc
       ),
       2
     );
@@ -3315,26 +3473,39 @@ function buildSceneviewLayoutPageHtml(
   );
   const imageDisplaysSection =
     buildSceneviewImageDisplaysSectionHtml(sceneviewEntries);
-  const wrapMaxH = metrics?.wrapMaxH ?? 520;
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <title>Scene layout — Cast worklist</title>
 <style>
-  body { margin: 0; padding: 20px 24px; background: #111; color: #eaeaea; font-family: system-ui, sans-serif; font-size: 14px; }
+  html { height: 100%; margin: 0; }
+  body { margin: 0; min-height: 100%; padding: 20px 24px; background: #111; color: #eaeaea;
+    font-family: system-ui, sans-serif; font-size: 14px; box-sizing: border-box;
+    overflow-x: hidden; overflow-y: auto; }
   .svPageHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
   h1 { margin: 0; font-size: 1.25rem; }
   .svTrainingRepoRow { display: flex; align-items: center; gap: 10px; flex-shrink: 0; max-width: min(420px, 45vw); }
-  .svTrainingRepoLabel { font-size: 13px; font-weight: 600; line-height: 1.35; color: #d4f0dc; }
+  .svTrainingRepoLabel { font-size: 11px; font-weight: 400; line-height: 1.35; color: #8a9a8e; }
   .svTrainingUploadBtn { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
-    width: 36px; height: 36px; padding: 0; border: 1px solid #4a7c59; border-radius: 6px;
-    background: #1e3a29; color: #d4f0dc; cursor: pointer; }
-  .svTrainingUploadBtn:hover { background: #265238; border-color: #5a9a6a; }
-  .svTrainingUploadBtn svg { width: 18px; height: 18px; display: block; fill: currentColor; }
+    width: 28px; height: 28px; padding: 0; border: 1px solid #3a4a40; border-radius: 6px;
+    background: transparent; color: #8a9a8e; cursor: pointer; opacity: 0.85; }
+  .svTrainingUploadBtn:hover { background: #1a2420; border-color: #4a7c59; color: #a8b8ac; opacity: 1; }
+  .svTrainingUploadBtn svg { width: 15px; height: 15px; display: block; fill: currentColor; }
+  .svTrainingDialog[hidden] { display: none !important; }
+  .svTrainingDialog { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+  .svTrainingDialogBackdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+  .svTrainingDialogPanel { position: relative; z-index: 1; max-width: min(440px, 92vw); margin: 16px; padding: 20px 22px;
+    background: #1a1a22; border: 1px solid #4a7c59; border-radius: 8px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); box-sizing: border-box; }
+  .svTrainingDialogMessage { margin: 0 0 12px; font-size: 11px; line-height: 1.4; color: #9a9a9a; font-style: italic; }
+  .svTrainingDialogActions { display: flex; justify-content: flex-end; margin-top: 16px; }
+  .svTrainingDialogOkBtn { padding: 4px 12px; border: 1px solid #4a7c59; border-radius: 4px; background: #1e3a29; color: #d4f0dc;
+    font-size: 11px; font-weight: 600; cursor: pointer; }
+  .svTrainingDialogOkBtn:hover { background: #265238; border-color: #5a9a6a; }
   p { margin: 0 0 12px; color: #b8b8b8; }
-  .svWrap { overflow: auto; max-height: ${wrapMaxH}px; border: 1px solid #333; border-radius: 8px; background: #0a0a12; padding: 12px; margin-bottom: 16px; }
-  .svCanvas { position: relative; margin: 0 auto; background: repeating-linear-gradient(
+  .svWrap { overflow: hidden; border: 1px solid #333; border-radius: 8px; background: #0a0a12; padding: 12px; margin-bottom: 16px; box-sizing: border-box; }
+  .svCanvas { position: relative; margin: 0 auto; box-sizing: border-box; border: 2px solid #3a3a48;
+    box-shadow: inset 0 0 0 1px #1a1a22; background: repeating-linear-gradient(
     0deg, #1a1a22 0, #1a1a22 20px, #15151c 20px, #15151c 40px
   ); }
   .svDisplayWrap { position: absolute; box-sizing: border-box; }
@@ -3347,8 +3518,10 @@ function buildSceneviewLayoutPageHtml(
   .svLayoutFit { position: absolute; inset: 0; box-sizing: border-box; overflow: hidden; }
   .svDisplayContent .svViewport { position: absolute; border: 1px solid #6cb6ff; background: #000; box-sizing: border-box; overflow: hidden; }
   .svThumbWrap { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
-  .svWorklist .svThumb { width: 100%; height: 100%; object-fit: fill; display: block; background: #000; }
-  .svDisplayContent .svThumb { width: 100%; height: 100%; object-fit: fill; display: block; background: #000; }
+  .svWorklist .svThumbWrap { background: #0a0a12; display: flex; align-items: center; justify-content: center; }
+  .svWorklist .svDisplayContent .svThumb { width: 100%; height: 100%; object-fit: contain; object-position: center center;
+    transform: scale(0.7); transform-origin: center center; display: block; background: transparent; }
+  .svDisplayId .svViewport .svThumb { width: 100%; height: 100%; object-fit: fill; display: block; background: #000; }
   .svDisplayLabelAbove { position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 4px;
     text-align: center; pointer-events: none; box-sizing: border-box; }
   .svDisplayLabelAbove span { display: inline-block; max-width: calc(100% - 4px); padding: 2px 8px; font-size: 11px;
@@ -3372,12 +3545,21 @@ function buildSceneviewLayoutPageHtml(
 <header class="svPageHeader">
 <h1>Scene views</h1>
 <div class="svTrainingRepoRow">
-<span class="svTrainingRepoLabel">Upload scene layout to my AI training repo in standard format</span>
-<button type="button" class="svTrainingUploadBtn" title="Upload" aria-label="Upload">
-<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
+<span class="svTrainingRepoLabel">Save scene layout to my AI training repository in standard format</span>
+<button type="button" class="svTrainingUploadBtn" title="About hanging protocol training data" aria-label="About hanging protocol training data" aria-haspopup="dialog" onclick="document.getElementById('svTrainingDialog').hidden=false">
+<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
 </button>
 </div>
 </header>
+<div id="svTrainingDialog" class="svTrainingDialog" hidden role="dialog" aria-modal="true" aria-labelledby="svTrainingDialogMessage">
+<div class="svTrainingDialogBackdrop" aria-hidden="true"></div>
+<div class="svTrainingDialogPanel">
+<p id="svTrainingDialogMessage" class="svTrainingDialogMessage">${HANGING_PROTOCOL_TRAINING_INFO_TEXT}</p>
+<div class="svTrainingDialogActions">
+<button type="button" class="svTrainingDialogOkBtn" onclick="document.getElementById('svTrainingDialog').hidden=true">OK</button>
+</div>
+</div>
+</div>
 <div class="svWrap">${diagram}</div>
 <section class="svBelowSection">
 <h2>Image Displays</h2>
@@ -3387,19 +3569,24 @@ function buildSceneviewLayoutPageHtml(
 </html>`;
 }
 
+function applySceneviewLayoutPopupSize(popup, targetWidth, targetHeight) {
+  if (!popup || popup.closed) {
+    return;
+  }
+  try {
+    popup.resizeTo(targetWidth, targetHeight);
+  } catch {
+    // Some browsers block resizeTo on popups.
+  }
+}
+
 function openSceneviewLayoutPopup(
   worklistWindow,
   sceneviewEntries,
   worklistMeta
 ) {
-  const bounds = computeSceneviewDiagramBounds(
-    worklistWindow,
-    sceneviewEntries
-  );
-  if (!bounds) {
-    return false;
-  }
-  const metrics = resolveSceneviewLayoutPopupMetrics(bounds);
+  const bounds = getSceneviewMonitorDiagramBounds();
+  const metrics = resolveSceneviewLayoutPopupMetrics(bounds, worklistWindow);
   const features = [
     'popup',
     `width=${metrics.popupWidth}`,
@@ -3412,9 +3599,19 @@ function openSceneviewLayoutPopup(
     return false;
   }
   revokeSceneviewLayoutWorklistThumbUrl();
+  const thumb = worklistMeta && worklistMeta.thumbnail;
+  let thumbnailSrc = '';
+  if (isCastImageBinaryNode(thumb)) {
+    sceneviewLayoutWorklistThumbUrl = imageToObjectUrl(
+      thumb.contentType,
+      thumb.data
+    );
+    thumbnailSrc = sceneviewLayoutWorklistThumbUrl || castImageDataUrl(thumb);
+  }
   const pageMeta = {
     subscriberName: (worklistMeta && worklistMeta.subscriberName) || 'Worklist',
-    thumbnail: worklistMeta && worklistMeta.thumbnail,
+    thumbnail: thumb,
+    thumbnailSrc,
   };
   popup.document.open();
   popup.document.write(
@@ -3427,6 +3624,7 @@ function openSceneviewLayoutPopup(
     )
   );
   popup.document.close();
+  applySceneviewLayoutPopupSize(popup, metrics.popupWidth, metrics.popupHeight);
   popup.focus();
   return true;
 }
@@ -3452,7 +3650,8 @@ async function openSceneviewLayoutFromStatus(el, state) {
     // Capture while the worklist UI is visible (layout popup only; not sent on Cast).
     const worklistThumbnail = await captureWorklistThumbnailPng(
       480,
-      wlSubscriber
+      wlSubscriber,
+      el
     );
     const result = await state.client.request(buildStatusRequestArgs(el));
     if (!result.ok) {
@@ -3478,6 +3677,32 @@ async function openSceneviewLayoutFromStatus(el, state) {
         responders: entries.length,
       });
     }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    addMessage(el, state, 'err', 'SCENEVIEW layout', msg);
+  } finally {
+    state.sceneviewLayoutBusy = false;
+  }
+}
+
+/** Worklist PNG layout only — no STATUS-request when no image displays are connected. */
+async function openSceneviewLayoutWorklistOnly(el, state) {
+  if (state.sceneviewLayoutBusy) {
+    return;
+  }
+  state.sceneviewLayoutBusy = true;
+  try {
+    const wlSubscriber = el.getSubscriber.value.trim() || 'Worklist';
+    const worklistWindow = getWorklistScreenWindow();
+    const worklistThumbnail = await captureWorklistThumbnailPng(
+      480,
+      wlSubscriber,
+      el
+    );
+    openSceneviewLayoutPopup(worklistWindow, [], {
+      subscriberName: wlSubscriber,
+      thumbnail: worklistThumbnail,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     addMessage(el, state, 'err', 'SCENEVIEW layout', msg);
@@ -3516,13 +3741,9 @@ function updateWorklistImageDisplayLabel(el, subscribers) {
 
 function openSceneviewLayoutForConnectedDisplays(el, state) {
   if (!state.imageDisplaySubscribers?.size) {
-    addMessage(
-      el,
-      state,
-      'err',
-      'SCENEVIEW layout',
-      'No image display connected yet'
-    );
+    openSceneviewLayoutWorklistOnly(el, state).catch((err) => {
+      console.error('[vtkCastClient] SCENEVIEW worklist layout failed', err);
+    });
     return;
   }
   openSceneviewLayoutFromStatus(el, state).catch((err) => {
@@ -3536,14 +3757,19 @@ function updateOpenSceneviewsButton(el, state) {
   }
   const wsConnected = state.wsState === 'connected';
   const hasDisplay = Boolean(state.imageDisplaySubscribers?.size);
-  const enabled = wsConnected && hasDisplay;
+  const enabled = hasDisplay ? wsConnected : true;
   el.openSceneviewsBtn.disabled = !enabled;
   const names = hasDisplay
     ? [...state.imageDisplaySubscribers].sort().join(', ')
     : '';
-  el.openSceneviewsBtn.title = enabled
-    ? `Open scene views for ${names}`
-    : 'Connect an image-display viewer first';
+  if (!hasDisplay) {
+    el.openSceneviewsBtn.title =
+      'Open worklist scene layout (no image display connected)';
+    return;
+  }
+  el.openSceneviewsBtn.title = wsConnected
+    ? `Open Scene Views for ${names}`
+    : 'Subscribe to the hub first';
 }
 
 function clearImageDisplayRequesters(state) {
@@ -3772,6 +3998,7 @@ function applyWebsocketStatus(el, state, wsState) {
       break;
     case 'connected':
       setConnection(el, state, 'connected', 'Websocket connected');
+      updateOpenSceneviewsButton(el, state);
       break;
     case 'error':
       clearImageDisplayRequesters(state);
@@ -4376,7 +4603,6 @@ async function boot() {
   const root = document.createElement('div');
   root.className = style.cast;
   root.innerHTML = buildPageHtml();
-  castExampleRootElement = root;
   const mountNode = document.getElementById('vtk-root') || document.body;
   mountNode.replaceChildren(root);
 
@@ -4502,6 +4728,7 @@ async function boot() {
     state
   );
   updateWorklistContextControls(el, state);
+  updateOpenSceneviewsButton(el, state);
 
   fillActorPresetSelect(el.publishActorPreset);
   fillTargetActorPresetSelect(el.publishTargetActorPreset);

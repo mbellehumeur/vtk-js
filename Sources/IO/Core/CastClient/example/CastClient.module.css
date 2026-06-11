@@ -447,8 +447,10 @@
 }
 
 .castAboutDialog {
-  width: min(28rem, 100%);
+  width: min(40rem, 100%);
+  max-height: min(90vh, 36rem);
   padding: 24px;
+  overflow-y: auto;
   border: 1px solid var(--cast-border);
   border-radius: calc(var(--cast-radius) * 1.25);
   background: var(--cast-card);
@@ -471,9 +473,40 @@
 }
 
 .castAboutBody {
-  margin: 0 0 20px;
+  margin: 0 0 16px;
   font-size: 14px;
   line-height: 1.5;
+}
+
+.castAboutLink {
+  color: var(--cast-primary);
+  word-break: break-all;
+}
+
+.castAboutLink:hover {
+  text-decoration: underline;
+}
+
+.castAboutDisclaimer {
+  margin: 0 0 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cast-border);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--cast-muted-foreground);
+}
+
+.castAboutDisclaimer p {
+  margin: 0 0 10px;
+}
+
+.castAboutDisclaimer p:last-child {
+  margin-bottom: 0;
+}
+
+.castAboutDisclaimerHeading {
+  margin: 0 0 8px !important;
+  color: var(--cast-card-foreground);
 }
 
 .castAboutActions {
