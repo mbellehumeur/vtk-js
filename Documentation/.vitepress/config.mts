@@ -11,6 +11,16 @@ export default defineConfig({
   lang: 'en-US',
   title: 'VTK.js ',
   description: 'VTK.js a Visualization Toolkit for the Web',
+  head: [
+    [
+      'link',
+      {
+        rel: 'icon',
+        href: withBase('/favicon.svg'),
+        type: 'image/svg+xml',
+      },
+    ],
+  ],
   lastUpdated: true,
   ignoreDeadLinks: true,
   srcExclude: ['**/scripts/**',],

@@ -1,6 +1,6 @@
 const head = document.querySelector('head');
 
-if (head) {
+if (head && !head.querySelector('link[rel="icon"]')) {
   [16, 32, 96, 160, 196].forEach((resolution) => {
     const link = document.createElement('link');
     link.setAttribute('rel', 'icon');

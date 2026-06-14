@@ -320,6 +320,20 @@
   display: block;
 }
 
+.headerViewerBtnIconIdc {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.headerViewerBtnIconSlicer {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: block;
+}
+
 .headerViewerBtnLabel {
   line-height: 1;
 }
@@ -488,12 +502,29 @@
 }
 
 .castAboutDisclaimer {
+  margin: 0 0 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cast-border);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--cast-muted-foreground);
+}
+
+.castAboutSampleAck {
   margin: 0 0 20px;
   padding-top: 16px;
   border-top: 1px solid var(--cast-border);
   font-size: 12px;
   line-height: 1.45;
   color: var(--cast-muted-foreground);
+}
+
+.castAboutSampleAck p {
+  margin: 0 0 10px;
+}
+
+.castAboutSampleAck p:last-child {
+  margin-bottom: 0;
 }
 
 .castAboutDisclaimer p {
@@ -575,6 +606,10 @@
   animation: castHeaderStatusPulse 1.5s ease-in-out infinite;
 }
 
+.castHeaderStatusConferencePulse .castHeaderStatusIcon {
+  animation: castHeaderStatusConferencePulse 1.2s ease-in-out infinite;
+}
+
 @keyframes castHeaderStatusPulse {
   0%,
   100% {
@@ -583,6 +618,17 @@
 
   50% {
     opacity: 0.45;
+  }
+}
+
+@keyframes castHeaderStatusConferencePulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
   }
 }
 
@@ -616,9 +662,13 @@
 .worklistImageDisplayLabel {
   font-size: 13px;
   line-height: 1.3;
-  color: var(--cast-foreground);
-  font-weight: 500;
+  color: var(--cast-card-foreground);
+  font-weight: 400;
   white-space: nowrap;
+  padding: 5px 10px;
+  border: 1px solid var(--cast-border);
+  border-radius: calc(var(--cast-radius) * 0.75);
+  background: var(--cast-popover);
 }
 
 .worklistOrganizationControls {
@@ -626,6 +676,212 @@
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
+}
+
+.idcClaudeActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.idcClaudeActionButtons {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.idcClaudeAvailability {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--cast-muted-foreground);
+}
+
+.idcClaudeFieldLabel {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.idcClaudePrompt {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  border: 1px solid var(--cast-border);
+  border-radius: calc(var(--cast-radius) * 0.75);
+  background: var(--cast-background);
+  color: var(--cast-foreground);
+  resize: vertical;
+}
+
+.idcClaudeOrgLabel {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+  border: 1px solid var(--cast-border);
+  border-radius: calc(var(--cast-radius) * 0.75);
+  background: var(--cast-background);
+  color: var(--cast-foreground);
+}
+
+.idcClaudeStatusRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0 0;
+  min-height: 1.25em;
+}
+
+.idcClaudeStatusSpinner {
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  border: 2px solid color-mix(in srgb, var(--cast-muted-foreground) 35%, transparent);
+  border-top-color: var(--cast-foreground);
+  border-radius: 50%;
+  animation: idcClaudeStatusSpin 0.75s linear infinite;
+}
+
+@keyframes idcClaudeStatusSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.idcClaudeStatus {
+  margin: 0;
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--cast-muted-foreground);
+  min-height: 1.25em;
+}
+
+.idcClaudeStatusBusy {
+  font-style: italic;
+}
+
+.idcClaudeCitation {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cast-muted-foreground);
+  font-style: italic;
+}
+
+.idcClaudeSqlSection {
+  margin-top: 10px;
+}
+
+.idcClaudeToggleSqlBtn {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  border: 1px solid var(--cast-border);
+  border-radius: calc(var(--cast-radius) * 0.75);
+  background: var(--cast-background);
+  color: var(--cast-foreground);
+  cursor: pointer;
+}
+
+.idcClaudeToggleSqlBtn:hover {
+  background: color-mix(in srgb, var(--cast-accent, var(--cast-background)) 15%, var(--cast-background));
+}
+
+.idcClaudeSqlPanel {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  max-height: 180px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--cast-border);
+  border-radius: calc(var(--cast-radius) * 0.75);
+  background: color-mix(in srgb, var(--cast-muted-foreground) 8%, var(--cast-background));
+  color: var(--cast-foreground);
+}
+
+.idcClaudeResultsSection {
+  margin-top: 12px;
+}
+
+.idcClaudeResults {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.idcClaudeResultRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--cast-border);
+  border-radius: calc(var(--cast-radius) * 0.75);
+  background: var(--cast-background);
+}
+
+.idcClaudeResultText {
+  flex: 1;
+  min-width: 0;
+}
+
+.idcClaudeResultTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--cast-foreground);
+}
+
+.idcClaudeResultDesc {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--cast-muted-foreground);
+}
+
+.idcClaudeResultMeta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--cast-muted-foreground);
+}
+
+.idcClaudeAddBtn {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  border: 1px solid var(--cast-border);
+  border-radius: calc(var(--cast-radius) * 0.75);
+  background: var(--cast-accent, var(--cast-background));
+  color: var(--cast-foreground);
+  cursor: pointer;
+}
+
+.idcClaudeAddBtn:disabled {
+  opacity: 0.65;
+  cursor: default;
 }
 
 .headerTitle {
@@ -1001,7 +1257,8 @@
   line-height: 1;
 }
 
-.cast button.headerViewerBtn svg {
+.cast button.headerViewerBtn svg,
+.cast button.headerViewerBtn img {
   flex-shrink: 0;
 }
 
@@ -1063,6 +1320,45 @@
   outline-offset: 0;
 }
 
+/* Worklist download: icon only, no button chrome (overrides .cast button) */
+.cast button.worklistDownloadBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  color: var(--cast-muted-foreground);
+  font: inherit;
+  font-weight: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cast button.worklistDownloadBtn:hover:not(:disabled) {
+  background: transparent;
+  border: none;
+  color: var(--cast-foreground);
+}
+
+.cast button.worklistDownloadBtn:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.cast button.worklistDownloadBtn:focus-visible svg {
+  outline: 2px solid var(--cast-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .messages {
   margin-top: 12px;
   max-height: 360px;
@@ -1121,6 +1417,20 @@
 
 .worklistPanel {
   min-height: 120px;
+}
+
+.worklistProvenanceNote {
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--cast-muted-foreground);
+}
+
+.worklistProvenanceStar {
+  margin-right: 0.25em;
+  font-style: normal;
+  color: var(--cast-primary);
 }
 
 .worklistPanelEmpty {
@@ -1201,8 +1511,7 @@
   top: 0;
   bottom: 0;
   left: 0;
-  /* Stop before the action column (gap + button track). */
-  right: calc(6.5rem + 16px);
+  right: 0;
   background: color-mix(in srgb, var(--cast-primary) 34%, var(--cast-card));
   box-shadow: inset 4px 0 0 var(--cast-primary);
   pointer-events: none;
@@ -1280,11 +1589,28 @@
 }
 
 .worklistEntrySize {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
   font-size: 12px;
   line-height: 1.4;
   color: var(--cast-muted-foreground);
-  text-align: right;
   white-space: nowrap;
+}
+
+.worklistEntrySizeLabel {
+  text-align: right;
+}
+
+.worklistDownloadBtn {
+  flex-shrink: 0;
+}
+
+.worklistDownloadIcon {
+  display: block;
+  width: 12px;
+  height: 12px;
 }
 
 .worklistOpenBtn {

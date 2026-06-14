@@ -47,8 +47,6 @@
  * }
  */
 
-import '@kitware/vtk.js/favicon';
-
 import vtkCastClient, {
   buildDicomUrlImagingStudyOpenContext,
   buildFilesImagingStudyOpenContext,
@@ -70,6 +68,8 @@ import style from './CastClient.module.css';
 
 const CAST_RADIO_ICON_SVG = `<svg class="${style.castHeaderStatusSvg}" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>`;
 
+const WORKLIST_DOWNLOAD_ICON_SVG = `<svg class="${style.worklistDownloadIcon}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+
 // Same gear icon as OHIF ViewerHeader (Icons.GearSettings).
 const CAST_SETTINGS_ICON_SVG = `<svg class="${style.castHeaderMenuBtnIcon}" width="20" height="20" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M20.2015688,10.2525279 C20.0232123,10.6274217 20.0120959,11.0603422 20.1709774,11.4438954 C20.3298588,11.8274487 20.6438515,12.1256974 21.0350638,12.2646554 L22.0250838,12.6168364 C22.6105106,12.8246232 23.00167,13.3785255 23.00167,13.9997339 C23.00167,14.6209423 22.6105106,15.1748446 22.0250838,15.3826314 L21.0350638,15.7348124 C20.6438515,15.8737704 20.3298588,16.1720191 20.1709774,16.5555724 C20.0120959,16.9391256 20.0232123,17.3720461 20.2015688,17.7469399 L20.6539257,18.6946982 C20.9219287,19.2558525 20.8071211,19.9250005 20.367394,20.3647276 C19.9276669,20.8044547 19.2585189,20.9192624 18.6973645,20.6512594 L17.748041,20.2004677 C17.3731472,20.0221111 16.9402267,20.0109948 16.5566735,20.1698763 C16.1731202,20.3287577 15.8748715,20.6427504 15.7359135,21.0339627 L15.3837325,22.0239827 C15.1756233,22.6088399 14.6220059,22.9994678 14.0012263,22.9994678 C13.3804467,22.9994678 12.8268293,22.6088399 12.6187202,22.0239827 L12.2665391,21.0339627 C12.127404,20.6426994 11.8290064,20.3287067 11.4453321,20.1698369 C11.0616578,20.0109671 10.6286351,20.0220972 10.253629,20.2004677 L9.30587073,20.6512594 C8.7446872,20.9203194 8.07479926,20.8059063 7.63473092,20.365838 C7.19466259,19.9257696 7.08024945,19.2558817 7.34930952,18.6946982 L7.80010123,17.7453747 C7.97845774,17.3704809 7.98957409,16.9375604 7.83069263,16.5540071 C7.67181118,16.1704539 7.35781846,15.8722052 6.96660615,15.7332471 L5.97658618,15.3810661 C5.39115942,15.1732793 5,14.619377 5,13.9981686 C5,13.3769603 5.39115942,12.8230579 5.97658618,12.6152712 L6.96660615,12.2630902 C7.35740035,12.124078 7.67105878,11.8260915 7.82990186,11.4429292 C7.98874494,11.0597669 7.97791757,10.6272622 7.80010123,10.2525279 L7.34930952,9.30320437 C7.08024945,8.74202085 7.19466259,8.0721329 7.63473092,7.63206456 C8.07479926,7.19199623 8.7446872,7.07758309 9.30587073,7.34664317 L10.2551942,7.79743487 C10.6298363,7.97533367 11.0622628,7.98639209 11.445508,7.82787471 C11.8287532,7.66935733 12.1270239,7.35606892 12.2665391,6.96550504 L12.6187202,5.97548507 C12.8268293,5.39062793 13.3804467,5 14.0012263,5 C14.6220059,5 15.1756233,5.39062793 15.3837325,5.97548507 L15.7359135,6.96550504 C15.8748715,7.35671735 16.1731202,7.67071008 16.5566735,7.82959153 C16.9402267,7.98847298 17.3731472,7.97735664 17.748041,7.79900012 L18.6973645,7.34664317 C19.2585189,7.07864018 19.9276669,7.19344783 20.367394,7.63317492 C20.8071211,8.07290202 20.9219287,8.74204999 20.6539257,9.30320437 L20.2015688,10.2525279 Z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14.000835" cy="13.9997339" r="3.52181017" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
@@ -78,6 +78,54 @@ const VOLVIEW_MARK_SVG = `<svg class="${style.headerViewerBtnIconVolview}" viewB
 
 // OHIF 4-pane grid mark (from OHIFLogo toolbar icon).
 const OHIF_MARK_SVG = `<svg class="${style.headerViewerBtnIcon}" width="16" height="16" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g fill="currentColor" fill-rule="nonzero" stroke="currentColor" stroke-width="0.25"><path d="M20.874737,0 L14.2607623,0 C13.3583609,0 12.6268201,0.731540857 12.6268201,1.63394224 L12.6268201,8.24791696 C12.6268201,9.15031834 13.3583609,9.88185919 14.2607623,9.88185919 L20.874737,9.88185919 C21.7771384,9.88185919 22.5086793,9.15031834 22.5086793,8.24791696 L22.5086793,1.63394224 C22.5086793,0.731540857 21.7771384,0 20.874737,0 Z M14.2607623,0.653576894 L20.874737,0.653576894 C21.4161779,0.653576894 21.8551024,1.09250141 21.8551024,1.63394224 L21.8551024,8.24791696 C21.8551024,8.78935779 21.4161779,9.2282823 20.874737,9.2282823 L14.2607623,9.2282823 C13.7193215,9.2282823 13.280397,8.78935779 13.280397,8.24791696 L13.280397,1.63394224 C13.280397,1.09250141 13.7193215,0.653576894 14.2607623,0.653576894 Z"/><path d="M8.24791696,0 L1.63394224,0 C0.731540857,0 0,0.731540857 0,1.63394224 L0,8.24791696 C0,9.15031834 0.731540857,9.88185919 1.63394224,9.88185919 L8.24791696,9.88185919 C9.15031834,9.88185919 9.88185919,9.15031834 9.88185919,8.24791696 L9.88185919,1.63394224 C9.88185919,0.731540857 9.15031834,0 8.24791696,0 Z M1.63394224,0.653576894 L8.24791696,0.653576894 C8.78935779,0.653576894 9.2282823,1.09250141 9.2282823,1.63394224 L9.2282823,8.24791696 C9.2282823,8.78935779 8.78935779,9.2282823 8.24791696,9.2282823 L1.63394224,9.2282823 C1.09250141,9.2282823 0.653576894,8.78935779 0.653576894,8.24791696 L0.653576894,1.63394224 C0.653576894,1.09250141 1.09250141,0.653576894 1.63394224,0.653576894 Z"/><path d="M20.874737,12.6268201 L14.2607623,12.6268201 C13.3583609,12.6268201 12.6268201,13.3583609 12.6268201,14.2607623 L12.6268201,20.874737 C12.6268201,21.7771384 13.3583609,22.5086793 14.2607623,22.5086793 L20.874737,22.5086793 C21.7771384,22.5086793 22.5086793,21.7771384 22.5086793,20.874737 L22.5086793,14.2607623 C22.5086793,13.3583609 21.7771384,12.6268201 20.874737,12.6268201 Z M14.2607623,13.280397 L20.874737,13.280397 C21.4161779,13.280397 21.8551024,13.7193215 21.8551024,14.2607623 L21.8551024,20.874737 C21.8551024,21.4161779 21.4161779,21.8551024 20.874737,21.8551024 L14.2607623,21.8551024 C13.7193215,21.8551024 13.280397,21.4161779 13.280397,20.874737 L13.280397,14.2607623 C13.280397,13.7193215 13.7193215,13.280397 14.2607623,13.280397 Z"/><path d="M8.24791696,12.6268201 L1.63394224,12.6268201 C0.731540857,12.6268201 0,13.3583609 0,14.2607623 L0,20.874737 C0,21.7771384 0.731540857,22.5086793 1.63394224,22.5086793 L8.24791696,22.5086793 C9.15031834,22.5086793 9.88185919,21.7771384 9.88185919,20.874737 L9.88185919,14.2607623 C9.88185919,13.3583609 9.15031834,12.6268201 8.24791696,12.6268201 Z M1.63394224,13.280397 L8.24791696,13.280397 C8.78935779,13.280397 9.2282823,13.7193215 9.2282823,14.2607623 L9.2282823,20.874737 C9.2282823,21.4161779 8.78935779,21.8551024 8.24791696,21.8551024 L1.63394224,21.8551024 C1.09250141,21.8551024 0.653576894,21.4161779 0.653576894,20.874737 L0.653576894,14.2607623 C0.653576894,13.7193215 1.09250141,13.280397 1.63394224,13.280397 Z"/></g></svg>`;
+
+// NIH IDC portal favicon (same asset as portal.imaging.datacommons.cancer.gov).
+const IDC_PORTAL_FAVICON_URL =
+  'https://storage.googleapis.com/idc-prod-web-static-files/static/img/favicon.ico';
+const IDC_MARK_IMG = `<img class="${style.headerViewerBtnIconIdc}" src="${IDC_PORTAL_FAVICON_URL}" width="16" height="16" alt="" aria-hidden="true" />`;
+
+// Official 3D Slicer mark (IDC portal static assets).
+const SLICER_MARK_URL =
+  'https://storage.googleapis.com/idc-prod-web-static-files/static/img/3D-Slicer-Mark.svg';
+const SLICER_MARK_IMG = `<img class="${style.headerViewerBtnIconSlicer}" src="${SLICER_MARK_URL}" width="16" height="16" alt="" aria-hidden="true" />`;
+
+const VTK_JS_FAVICON_FALLBACK =
+  'https://kitware.github.io/vtk-js/icon/favicon-32x32.png';
+
+function resolveCastWorklistFaviconHref() {
+  try {
+    const { pathname } = window.location;
+    const worklistRoot = pathname.match(/^(.*\/worklist-client\/)/);
+    if (worklistRoot) {
+      return `${worklistRoot[1]}favicon.svg`;
+    }
+    if (pathname.includes('/examples/')) {
+      return new URL('../../favicon.svg', window.location.href).pathname;
+    }
+  } catch (_err) {
+    // Use CDN fallback below.
+  }
+  return VTK_JS_FAVICON_FALLBACK;
+}
+
+function applyCastWorklistFavicon() {
+  const head = document.head;
+  if (!head) {
+    return;
+  }
+  const href = resolveCastWorklistFaviconHref();
+  const isSvg = href.endsWith('.svg');
+  head
+    .querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')
+    .forEach((node) => {
+      node.remove();
+    });
+  const link = document.createElement('link');
+  link.rel = 'icon';
+  link.type = isSvg ? 'image/svg+xml' : 'image/png';
+  link.href = href;
+  head.appendChild(link);
+}
 
 const CAST_THEME_STORAGE_KEY = 'castExample.theme';
 const CAST_THEME_DARK = 'dark';
@@ -105,6 +153,7 @@ const DEFAULT_SUBSCRIBE_EVENTS =
   'imagingstudy-open,imagingstudy-close,status-request,subscription-removed';
 const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}"]`;
 const DEFAULT_GET_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
+const IMAGE_DISPLAY_ACTOR_KEYWORD = 'ID';
 const DEFAULT_TARGET_ACTOR_KEYWORD = '*';
 const DEFAULT_TARGET_PRODUCT = '*';
 const TARGET_PRODUCT_PRESETS = ['*', 'VOLVIEW', 'OHIF', 'AIBRAIN'];
@@ -119,9 +168,37 @@ const WORKLIST_ORG_IDC = 'idc';
 const WORKLIST_ORG_IDC_LUNG = 'idc-lung-screen';
 const WORKLIST_ORG_IDC_LUNG_US = 'idc-lung-us';
 const WORKLIST_ORG_HUB = 'hub';
+const WORKLIST_ORG_IDC_CUSTOM_PREFIX = 'idc-custom-';
+
+const IDC_CLAUDE_PRODUCT_NAME = 'IDCCLAUDE';
+const IDC_CLAUDE_DATA_TYPE = 'IDC-CLAUDE';
+const IDC_CLAUDE_MAX_STUDIES = 20;
+const IDC_CLAUDE_REQUEST_TIMEOUT_SECONDS = 180;
+const IDC_CLAUDE_ADD_STUDY_TIMEOUT_SECONDS = 120;
+const IDC_CLAUDE_ACTION_SEARCH = 'search';
+const IDC_CLAUDE_ACTION_ADD_STUDY = 'addStudy';
+const IDC_CLAUDE_SEARCH_PROGRESS_MS = 9000;
+const IDC_CLAUDE_SEARCH_PROGRESS_MESSAGES = [
+  'Starting IDC search — usually 1–3 minutes. First run may also refresh the local IDC index.',
+  'Asking Claude to draft DuckDB SQL from your natural-language query…',
+  'Querying IDC metadata on the Slicer IDCCLAUDE server.',
+  'Still working — narrow collection + modality prompts finish faster.',
+  'Hang tight — the hub waits up to 3 minutes for Claude and idc-index.',
+  'Almost there — matching studies will appear below when filtering finishes.',
+];
+const IDC_CLAUDE_ADD_STUDY_PROGRESS_MS = 7000;
+const IDC_CLAUDE_ADD_STUDY_PROGRESS_MESSAGES = [
+  'Fetching public DICOM URLs for this series — often under a minute.',
+  'Resolving S3 locations via idc-index — large series can take 1–2 minutes.',
+  'Still downloading URL list — you can add other studies after this finishes.',
+];
+const IDC_CLAUDE_DEFAULT_PROMPT = '3 US series from collection cmb_lca';
+const IDC_CLAUDE_DEFAULT_ORG_LABEL = 'US smoke test';
+const IDC_CUSTOM_WORKLISTS_STORAGE_KEY = 'castExample.idcCustomWorklists';
+const WORKLIST_URL_PARAM = 'worklist';
 
 const WORKLIST_ORGANIZATION_OPTIONS = [
-  { value: '', label: 'All organizations' },
+  { value: '', label: 'All' },
   { value: WORKLIST_ORG_HUB, label: 'Hub samples' },
   { value: WORKLIST_ORG_VOLVIEW, label: 'VolView samples' },
   { value: WORKLIST_ORG_IDC, label: 'Imaging Data Commons' },
@@ -146,13 +223,48 @@ const EXAMPLE_PAGE_TITLE_SUB = 'vtk.js IO module cast example';
 const CAST_SLICER_CAST_INTERFACE_DOCS_URL =
   'https://github.com/mbellehumeur/SlicerCastInterface/';
 
-const CAST_ABOUT_BODY_HTML = `Imaging worklist client example built on vtk.js CastClient. Browse sample studies, open multiple VolView, OHIF instances. Try the global scene view display. Use resource servers and conferencing. Documentation for the 3D Slicer Cast Interface Extension is here: <a class="${style.castAboutLink}" href="${CAST_SLICER_CAST_INTERFACE_DOCS_URL}" target="_blank" rel="noopener noreferrer">${CAST_SLICER_CAST_INTERFACE_DOCS_URL}</a>`;
+const CAST_ABOUT_BODY_HTML = `Browse sample studies and open the same exam in multiple VolView and OHIF viewers. Use Open Scene Views to mirror layouts across products. Connect to resource servers for AI results and open Conferencing for multi-participant workflows.<br><br>For the hub, resource servers, and 3D Slicer integration, see the <a class="${style.castAboutLink}" href="${CAST_SLICER_CAST_INTERFACE_DOCS_URL}" target="_blank" rel="noopener noreferrer">3D Slicer Cast Interface Extension documentation</a>.`;
 
 const CAST_ABOUT_DISCLAIMER_HTML = `<div class="${style.castAboutDisclaimer}">
   <p class="${style.castAboutDisclaimerHeading}"><strong>Standards and trademarks</strong></p>
-  <p>DICOM® is the registered trademark of the National Electrical Manufacturers Association (NEMA) for its standards publications relating to digital imaging and communications in medicine. FHIR® and related HL7 marks are registered trademarks of Health Level Seven International (HL7). IHE® is a registered trademark of HIMSS.</p>
-  <p>The Cast Interface (including its hub, clients, and documentation) references ideas, workflows, and vocabulary drawn from these standards—such as DICOM objects and metadata, FHIR and FHIRcast-style context and events, and IHE actor roles (for example, Image Display and Evidence Creator)—solely to describe interoperability behavior.</p>
+  <p>DICOM® is the registered trademark of the National Electrical Manufacturers Association (NEMA) for its standards publications relating to digital imaging and communications in medicine. FHIR® and related HL7 marks are registered trademarks of Health Level Seven International (HL7). IHE® is a registered trademark of HIMSS. VolView® is a trademark of Kitware, Inc. OHIF® is a trademark of the Open Health Imaging Foundation. Imaging Data Commons® is a trademark of the National Cancer Institute.</p>
+  <p>The Cast Interface (including its hub, clients, and documentation) references ideas, workflows, and vocabulary drawn from these standards—such as DICOM objects and metadata, FHIR and FHIRcast-style context and events, and IHE actor roles (for example, Image Display and Evidence Creator)—and product names such as VolView, OHIF, and Imaging Data Commons solely to describe interoperability behavior.</p>
   <p><strong>Cast Interface is not part of these standards.</strong> It is not published by NEMA, HL7, or HIMSS, and is not an IHE Integration Profile, a FHIR implementation guide, or a DICOM conformance statement. Use of standard names and terms does not imply endorsement, certification, or official status. All other product and company names are trademarks of their respective owners.</p>
+</div>`;
+
+const CAST_IDC_PORTAL_URL = 'https://portal.imaging.datacommons.cancer.gov/';
+const CAST_KITWARE_DATA_URL = 'https://data.kitware.com/';
+
+const CAST_ABOUT_SAMPLE_DATA_ACK_HTML = `<div class="${style.castAboutSampleAck}">
+  <p class="${style.castAboutDisclaimerHeading}"><strong>Sample data acknowledgement</strong></p>
+  <p>Worklist demo studies are provided courtesy of the <a class="${style.castAboutLink}" href="${CAST_IDC_PORTAL_URL}" target="_blank" rel="noopener noreferrer">Imaging Data Commons</a> (National Cancer Institute) and the <a class="${style.castAboutLink}" href="${CAST_KITWARE_DATA_URL}" target="_blank" rel="noopener noreferrer">Kitware sample data repository</a>. IDC entries are loaded from public IDC collections; VolView sample entries mirror datasets hosted on Kitware’s data portal. The cast example does not redistribute these studies; it links to or loads them from their original sources.</p>
+</div>`;
+
+const CAST_TOTALSEG_CT_PAPER_URL = 'https://arxiv.org/abs/2208.05868';
+const CAST_TOTALSEG_MRI_PAPER_URL = 'https://arxiv.org/abs/2405.19492';
+const CAST_NNUNET_PAPER_URL = 'https://arxiv.org/abs/1809.10486';
+const CAST_IDC_SKILL_URL =
+  'https://github.com/ImagingDataCommons/imaging-data-commons-skill';
+const CAST_IDC_INDEX_URL = 'https://github.com/ImagingDataCommons/idc-index';
+const CAST_IDC_PAPER_URL = 'https://doi.org/10.1148/rg.230180';
+
+const CAST_ABOUT_RESOURCE_SERVERS_ACK_HTML = `<div class="${style.castAboutSampleAck}">
+  <p class="${style.castAboutDisclaimerHeading}"><strong>Resource servers acknowledgement</strong></p>
+  <p><strong>TotalSegmentator</strong> was created by the Department of Research and Analysis at University Hospital Basel. If you use it, please cite our Radiology: Artificial Intelligence paper (<a class="${style.castAboutLink}" href="${CAST_TOTALSEG_CT_PAPER_URL}" target="_blank" rel="noopener noreferrer">free preprint</a>). If you use it for MR images, please cite the TotalSegmentator MRI <em>Radiology</em> paper (<a class="${style.castAboutLink}" href="${CAST_TOTALSEG_MRI_PAPER_URL}" target="_blank" rel="noopener noreferrer">free preprint</a>).</p>
+  <p><strong>nnU-Net</strong> — TotalSegmentator is heavily based on nnU-Net;  (<a class="${style.castAboutLink}" href="${CAST_NNUNET_PAPER_URL}" target="_blank" rel="noopener noreferrer">preprint</a>).</p>
+  <p><strong>IDC Claude</strong> — builds custom worklists from natural-language queries against the <a class="${style.castAboutLink}" href="${CAST_IDC_PORTAL_URL}" target="_blank" rel="noopener noreferrer">Imaging Data Commons</a> (National Cancer Institute) using Anthropic Claude. Query guidance follows the <a class="${style.castAboutLink}" href="${CAST_IDC_SKILL_URL}" target="_blank" rel="noopener noreferrer">IDC skill</a>.</p>
+  <p><strong>idc-index</strong> — official <a class="${style.castAboutLink}" href="${CAST_IDC_INDEX_URL}" target="_blank" rel="noopener noreferrer">Imaging Data Commons</a> Python package for local DuckDB SQL against IDC metadata and DICOM series download URLs; used by the IDC Claude resource server. If you use it in research, cite Fedorov A, et al., <em>Radiographics</em> (<a class="${style.castAboutLink}" href="${CAST_IDC_PAPER_URL}" target="_blank" rel="noopener noreferrer">2023</a>).</p>
+</div>`;
+
+const CAST_VOLVIEW_URL = 'https://github.com/Kitware/VolView';
+const CAST_OHIF_URL = 'https://ohif.org/';
+const CAST_SLICER_URL = 'https://www.slicer.org/';
+
+const CAST_ABOUT_IMAGE_DISPLAYS_ACK_HTML = `<div class="${style.castAboutSampleAck}">
+  <p class="${style.castAboutDisclaimerHeading}"><strong>Image displays acknowledgement</strong></p>
+  <p><strong>VolView</strong> — open-source web viewer from <a class="${style.castAboutLink}" href="${CAST_VOLVIEW_URL}" target="_blank" rel="noopener noreferrer">Kitware, Inc.</a></p>
+  <p><strong>OHIF</strong> — open-source zero-footprint viewer from the <a class="${style.castAboutLink}" href="${CAST_OHIF_URL}" target="_blank" rel="noopener noreferrer">Open Health Imaging Foundation</a>.</p>
+  <p><strong>3D Slicer</strong> — open-source platform for medical image computing from the <a class="${style.castAboutLink}" href="${CAST_SLICER_URL}" target="_blank" rel="noopener noreferrer">3D Slicer community</a>.</p>
 </div>`;
 
 const HANGING_PROTOCOL_TRAINING_INFO_TEXT =
@@ -166,7 +278,7 @@ const FHIRCAST_V3_COMING_SOON_MESSAGE =
 
 const TITLE_BY_CAST_STANDARD = {
   [CAST_STANDARD_CAST]: 'Imaging Worklist',
-  [CAST_STANDARD_FHIRCAST_V3]: 'Worklist with FHIRcast interface',
+  [CAST_STANDARD_FHIRCAST_V3]: 'Worklist with Cast interface',
 };
 
 function titleMainForCastStandard(standard) {
@@ -507,8 +619,252 @@ async function fetchHubSampleStudies(hubEndpoint) {
   }
 }
 
+function flattenIdcCustomWorklistStudies(state) {
+  const lists = Array.isArray(state.idcCustomWorklists)
+    ? state.idcCustomWorklists
+    : [];
+  const studies = [];
+  lists.forEach((entry) => {
+    const org = String(entry?.organization || '').trim();
+    const rows = Array.isArray(entry?.studies) ? entry.studies : [];
+    rows.forEach((study) => {
+      studies.push({ ...study, organization: org || study.organization });
+    });
+  });
+  return studies;
+}
+
 function getWorklistStudies(state) {
-  return [...WORKLIST_BUILTIN_STUDIES, ...(state.hubSampleStudies || [])];
+  return [
+    ...WORKLIST_BUILTIN_STUDIES,
+    ...(state.hubSampleStudies || []),
+    ...flattenIdcCustomWorklistStudies(state),
+  ];
+}
+
+function stateDefaultTopic(el) {
+  return (
+    new URLSearchParams(window.location.search).get('topic') ||
+    el.topic?.value?.trim() ||
+    ''
+  );
+}
+
+function idcCustomWorklistsStorageKey(el) {
+  const hubEndpoint =
+    el.hubEndpoint?.value?.trim() ||
+    HUB_DEFINITIONS[el.hubSelect?.value || 'local']?.hubEndpoint ||
+    '';
+  const origin = hubOriginFromEndpoint(hubEndpoint) || window.location.origin;
+  const topic = el.topic?.value?.trim() || stateDefaultTopic(el);
+  return `${IDC_CUSTOM_WORKLISTS_STORAGE_KEY}:${origin}:${topic}`;
+}
+
+function loadIdcCustomWorklistsFromSession(el) {
+  try {
+    const raw = sessionStorage.getItem(idcCustomWorklistsStorageKey(el));
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveIdcCustomWorklistsToSession(el, state) {
+  try {
+    sessionStorage.setItem(
+      idcCustomWorklistsStorageKey(el),
+      JSON.stringify(state.idcCustomWorklists || [])
+    );
+  } catch (err) {
+    console.warn('[vtkCastClient] idc custom worklists save failed', err);
+  }
+}
+
+function worklistOrganizationLabels(state) {
+  const labels = { ...WORKLIST_ORG_LABELS };
+  const lists = Array.isArray(state.idcCustomWorklists)
+    ? state.idcCustomWorklists
+    : [];
+  lists.forEach((entry) => {
+    const org = String(entry?.organization || '').trim();
+    if (!org) {
+      return;
+    }
+    labels[org] = String(entry?.organizationLabel || '').trim() || org;
+  });
+  return labels;
+}
+
+function readWorklistOrganizationFromUrl() {
+  const raw = new URLSearchParams(window.location.search).get(
+    WORKLIST_URL_PARAM
+  );
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+function listWorklistOrganizationValues(state) {
+  const values = WORKLIST_ORGANIZATION_OPTIONS.map((option) => option.value);
+  const lists = Array.isArray(state.idcCustomWorklists)
+    ? state.idcCustomWorklists
+    : [];
+  lists.forEach((entry) => {
+    const org = String(entry?.organization || '').trim();
+    if (org && !values.includes(org)) {
+      values.push(org);
+    }
+  });
+  return values;
+}
+
+/** Map `?worklist=` to organization id; `null` when param is absent or invalid. */
+function resolveWorklistOrganizationFromUrl(state) {
+  const requested = readWorklistOrganizationFromUrl();
+  if (!requested) {
+    return null;
+  }
+  const normalized = requested.toLowerCase();
+  if (normalized === 'all' || normalized === '*') {
+    return '';
+  }
+  const values = listWorklistOrganizationValues(state);
+  const exact = values.find((value) => value === requested);
+  if (exact !== undefined) {
+    return exact;
+  }
+  const caseInsensitive = values.find(
+    (value) => value.toLowerCase() === normalized
+  );
+  if (caseInsensitive !== undefined) {
+    return caseInsensitive;
+  }
+  const labels = worklistOrganizationLabels(state);
+  const byLabel = Object.entries(labels).find(
+    ([, label]) => label.toLowerCase() === normalized
+  );
+  if (byLabel) {
+    return byLabel[0];
+  }
+  return undefined;
+}
+
+function refreshWorklistOrganizationSelect(el, state) {
+  if (!el.worklistOrganizationSelect) {
+    return;
+  }
+  let current = el.worklistOrganizationSelect.value;
+  const fromUrl = resolveWorklistOrganizationFromUrl(state);
+  if (
+    fromUrl !== null &&
+    fromUrl !== undefined &&
+    !state.worklistOrganizationUserSelected &&
+    !state.worklistUrlSelectionApplied
+  ) {
+    current = fromUrl;
+    state.worklistUrlSelectionApplied = true;
+  }
+  const labels = worklistOrganizationLabels(state);
+  el.worklistOrganizationSelect.replaceChildren();
+  WORKLIST_ORGANIZATION_OPTIONS.forEach((option, index) => {
+    const node = document.createElement('option');
+    node.value = option.value;
+    node.textContent = option.label;
+    if (index === 0 && !current) {
+      node.selected = true;
+    }
+    el.worklistOrganizationSelect.append(node);
+  });
+  const lists = Array.isArray(state.idcCustomWorklists)
+    ? state.idcCustomWorklists
+    : [];
+  lists.forEach((entry) => {
+    const org = String(entry?.organization || '').trim();
+    if (!org) {
+      return;
+    }
+    const node = document.createElement('option');
+    node.value = org;
+    node.textContent = labels[org] || org;
+    el.worklistOrganizationSelect.append(node);
+  });
+  if (
+    current &&
+    [...el.worklistOrganizationSelect.options].some((o) => o.value === current)
+  ) {
+    el.worklistOrganizationSelect.value = current;
+  } else if (readWorklistOrganizationFromUrl()) {
+    console.warn(
+      '[vtkCastClient] unknown worklist URL param:',
+      readWorklistOrganizationFromUrl()
+    );
+  }
+}
+
+function formatIdcClaudeRequestFailure(envelope) {
+  if (envelope.timedOut) {
+    return (
+      'Cast hub timed out before IDCCLAUDE finished (needs ~1–3 minutes). ' +
+      'In 3D Slicer: Hub tab → Stop → Start hub, then reconnect IDCCLAUDE.'
+    );
+  }
+  const missing = Array.isArray(envelope.missing) ? envelope.missing : [];
+  if (missing.length) {
+    return `No response from IDCCLAUDE (missing: ${missing.join(
+      ', '
+    )}). Connect the IDCCLAUDE resource server in Slicer.`;
+  }
+  return 'No IDCCLAUDE resource server responded';
+}
+
+function parseIdcClaudeCollatedResponse(resultData) {
+  const envelope =
+    resultData && typeof resultData === 'object' ? resultData : {};
+  const responses = Array.isArray(envelope.responses) ? envelope.responses : [];
+  if (!responses.length) {
+    return { error: formatIdcClaudeRequestFailure(envelope) };
+  }
+  const data = responses[0]?.data;
+  if (!data || typeof data !== 'object') {
+    return { error: 'Empty idc-claude-response payload' };
+  }
+  if (data.error) {
+    const sql = typeof data.sql === 'string' ? data.sql.trim() : '';
+    return { error: String(data.error), sql };
+  }
+  const studies = Array.isArray(data.studies) ? data.studies : [];
+  const sql = typeof data.sql === 'string' ? data.sql.trim() : '';
+  if (!studies.length) {
+    return { error: 'IDC query returned no studies', sql };
+  }
+  return { data, studies, sql };
+}
+
+function parseIdcClaudeAddStudyResponse(resultData) {
+  const envelope =
+    resultData && typeof resultData === 'object' ? resultData : {};
+  const responses = Array.isArray(envelope.responses) ? envelope.responses : [];
+  if (!responses.length) {
+    return { error: formatIdcClaudeRequestFailure(envelope) };
+  }
+  const data = responses[0]?.data;
+  if (!data || typeof data !== 'object') {
+    return { error: 'Empty idc-claude-response payload' };
+  }
+  if (data.error) {
+    return { error: String(data.error) };
+  }
+  const study = data.study;
+  if (!study || typeof study !== 'object') {
+    return { error: 'IDC add-study response missing study payload' };
+  }
+  const files = Array.isArray(study.files) ? study.files : [];
+  if (!files.length) {
+    return { error: 'IDC add-study response missing file URLs' };
+  }
+  return { data, study };
 }
 
 async function fetchHubStartedAt(hubEndpoint) {
@@ -972,10 +1328,15 @@ function findWorklistSample(sampleId, state) {
   return getWorklistStudies(state).find((entry) => entry.id === sampleId);
 }
 
-function worklistOrganizationLabel(sample) {
-  return (
-    WORKLIST_ORG_LABELS[sample?.organization] || sample?.organization || '—'
-  );
+function worklistOrganizationLabel(sample, state) {
+  const org = sample?.organization;
+  if (state) {
+    const labels = worklistOrganizationLabels(state);
+    if (labels[org]) {
+      return labels[org];
+    }
+  }
+  return WORKLIST_ORG_LABELS[org] || org || '—';
 }
 
 function filterWorklistStudiesByOrganization(organization, state) {
@@ -1104,7 +1465,10 @@ function worklistSampleFormatLabel(sample) {
   if (
     sample?.organization === WORKLIST_ORG_IDC ||
     sample?.organization === WORKLIST_ORG_IDC_LUNG ||
-    sample?.organization === WORKLIST_ORG_IDC_LUNG_US
+    sample?.organization === WORKLIST_ORG_IDC_LUNG_US ||
+    String(sample?.organization || '').startsWith(
+      WORKLIST_ORG_IDC_CUSTOM_PREFIX
+    )
   ) {
     return WORKLIST_FORMAT_DICOM;
   }
@@ -1191,6 +1555,46 @@ function handleWorklistRowBtnClick(el, state, sampleId, action) {
   });
 }
 
+function worklistSampleDownloadFiles(sample) {
+  return worklistSampleFiles(sample).filter((file) =>
+    String(file?.url || '').trim()
+  );
+}
+
+function worklistSampleDownloadTitle(sample) {
+  const files = worklistSampleDownloadFiles(sample);
+  if (!files.length) {
+    return '';
+  }
+  const fileName = String(files[0].fileName || '').trim();
+  if (files.length === 1) {
+    return fileName ? `Download ${fileName}` : 'Download file';
+  }
+  return fileName
+    ? `Download ${fileName} (first of ${files.length} files)`
+    : `Download first of ${files.length} files`;
+}
+
+function handleWorklistSampleDownload(sample) {
+  const files = worklistSampleDownloadFiles(sample);
+  if (!files.length) {
+    return;
+  }
+  const file = files[0];
+  const url = String(file.url).trim();
+  const fileName = String(file.fileName || '').trim();
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.target = '_blank';
+  anchor.rel = 'noopener noreferrer';
+  if (fileName) {
+    anchor.download = fileName;
+  }
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
 function worklistSampleSizeLabel(sample) {
   if (sample && sample.size) {
     return String(sample.size);
@@ -1244,7 +1648,7 @@ function renderWorklistStudyList(panelEl, studies, ariaLabel, el, state) {
     style.worklistEntryFormat,
     style.worklistEntrySize,
   ];
-  ['Organization', 'Study', 'Description', 'Format', 'Size'].forEach(
+  ['Worklist', 'Study', 'Description', 'Format', 'Size'].forEach(
     (label, idx) => {
       const cell = document.createElement('div');
       cell.className = headerClassByColumn[idx] || style.worklistEntryDesc;
@@ -1268,7 +1672,7 @@ function renderWorklistStudyList(panelEl, studies, ariaLabel, el, state) {
 
     const org = document.createElement('div');
     org.className = style.worklistEntryOrg;
-    org.textContent = worklistOrganizationLabel(sample);
+    org.textContent = worklistOrganizationLabel(sample, state);
 
     const title = document.createElement('div');
     title.className = style.worklistEntryTitle;
@@ -1284,7 +1688,26 @@ function renderWorklistStudyList(panelEl, studies, ariaLabel, el, state) {
 
     const size = document.createElement('div');
     size.className = style.worklistEntrySize;
-    size.textContent = worklistSampleSizeLabel(sample);
+
+    const sizeLabel = document.createElement('span');
+    sizeLabel.className = style.worklistEntrySizeLabel;
+    sizeLabel.textContent = worklistSampleSizeLabel(sample);
+    size.append(sizeLabel);
+
+    const downloadFiles = worklistSampleDownloadFiles(sample);
+    if (downloadFiles.length) {
+      const downloadBtn = document.createElement('button');
+      downloadBtn.type = 'button';
+      downloadBtn.className = style.worklistDownloadBtn;
+      downloadBtn.innerHTML = WORKLIST_DOWNLOAD_ICON_SVG;
+      downloadBtn.title = worklistSampleDownloadTitle(sample);
+      downloadBtn.setAttribute('aria-label', downloadBtn.title);
+      downloadBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        handleWorklistSampleDownload(sample);
+      });
+      size.append(downloadBtn);
+    }
 
     const actionBtn = document.createElement('button');
     actionBtn.type = 'button';
@@ -1335,9 +1758,10 @@ function renderWorklistPanel(panelEl, organizationFilter, el, state) {
     return;
   }
 
+  const orgLabels = worklistOrganizationLabels(state);
   const ariaLabel = organizationFilter
     ? `Worklist studies (${
-        WORKLIST_ORG_LABELS[organizationFilter] || organizationFilter
+        orgLabels[organizationFilter] || organizationFilter
       })`
     : 'Worklist studies (all organizations)';
   renderWorklistStudyList(panelEl, studies, ariaLabel, el, state);
@@ -1385,11 +1809,11 @@ function buildPageHtml() {
     style.castHeaderStatusSlash
   }" aria-hidden="true"></span></span></div></button><div id="castHeaderStatusMenu" class="${
     style.castHeaderMenu
-  }" role="menu" hidden><button type="button" id="castHeaderStatusOpenHub" class="${
+  }" role="menu" hidden><button type="button" id="castHeaderStatusStartConference" class="${
     style.castHeaderMenuItem
-  }" role="menuitem">Open Hub</button><button type="button" id="castHeaderStatusStartConference" class="${
+  }" role="menuitem">Conferencing</button><button type="button" id="castHeaderStatusOpenHub" class="${
     style.castHeaderMenuItem
-  }" role="menuitem">Conferencing</button></div></div><div class="${
+  }" role="menuitem">Hub</button></div></div><div class="${
     style.castHeaderMenuWrap
   }"><button type="button" id="castHeaderMenuBtn" class="${
     style.castHeaderMenuBtn
@@ -1417,12 +1841,12 @@ function buildPageHtml() {
   }">
     <div class="${style.worklistSectionHeader}">
       <div class="${style.worklistSectionHeaderLead}">
-        <h2>Organization</h2>
+        <h2>Worklist</h2>
         <div class="${style.worklistOrganizationControls}">
           <select
             id="worklistOrganizationSelect"
             class="${style.worklistOrganizationSelect}"
-            aria-label="Organization filter"
+            aria-label="Worklist filter"
           >
             ${WORKLIST_ORGANIZATION_OPTIONS.map(
               (option, index) =>
@@ -1431,6 +1855,14 @@ function buildPageHtml() {
                 }>${option.label}</option>`
             ).join('')}
           </select>
+          <button
+            type="button"
+            id="idcClaudeBuildBtn"
+            class="${style.headerViewerBtn}"
+            title="Open IDC Claude — natural-language IDC worklist"
+          >${IDC_MARK_IMG}<span class="${
+    style.headerViewerBtnLabel
+  }">Open IDC Claude</span></button>
         </div>
       </div>
       <div class="${style.worklistSceneviewActions}">
@@ -1453,10 +1885,16 @@ function buildPageHtml() {
         </div>
         <button type="button" id="openSceneviewsBtn" class="${
           style.headerViewerBtn
-        }" disabled>Open Scene Views</button>
+        }" disabled>${SLICER_MARK_IMG}<span class="${
+    style.headerViewerBtnLabel
+  }">Open Scene Views</span></button>
       </div>
     </div>
     <div id="worklistPanel" class="${style.worklistPanel}"></div>
+    <p class="${style.worklistProvenanceNote}">
+      <span class="${style.worklistProvenanceStar}" aria-hidden="true">*</span>
+      <em>See About box for worklist data provenance.</em>
+    </p>
   </div>
   <details id="castHubSection" class="${style.castHubDetails} ${
     style.gridFullWidth
@@ -1613,17 +2051,99 @@ function buildPageHtml() {
   <div id="castAboutOverlay" class="${style.castAboutOverlay}" hidden>
     <div class="${
       style.castAboutDialog
-    }" role="dialog" aria-modal="true" aria-labelledby="castAboutTitle">
+    }" role="dialog" aria-modal="true" aria-labelledby="castAboutTitle" tabindex="-1">
       <h2 id="castAboutTitle" class="${
         style.castAboutTitle
       }">${titleMainForCastStandard(CAST_STANDARD_DEFAULT)}</h2>
       <p class="${style.castAboutSubtitle}">${EXAMPLE_PAGE_TITLE_SUB}</p>
       <p class="${style.castAboutBody}">${CAST_ABOUT_BODY_HTML}</p>
+      ${CAST_ABOUT_SAMPLE_DATA_ACK_HTML}
+      ${CAST_ABOUT_RESOURCE_SERVERS_ACK_HTML}
+      ${CAST_ABOUT_IMAGE_DISPLAYS_ACK_HTML}
       ${CAST_ABOUT_DISCLAIMER_HTML}
       <div class="${style.castAboutActions}">
         <button type="button" id="castAboutCloseBtn" class="${
           style.headerViewerBtn
         }">Close</button>
+      </div>
+    </div>
+  </div>
+  <div id="idcClaudeOverlay" class="${style.castAboutOverlay}" hidden>
+    <div
+      class="${style.castAboutDialog}"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="idcClaudeDialogTitle"
+    >
+      <h2 id="idcClaudeDialogTitle" class="${style.castAboutTitle}">
+        Build IDC worklist
+      </h2>
+      <p class="${style.castAboutBody}">
+        Enter a natural-language query for NCI Imaging Data Commons (IDC).
+        Search returns matching studies without download URLs; add each study
+        to the worklist when you are ready to fetch its DICOM files.
+      </p>
+      <label class="${style.idcClaudeFieldLabel}" for="idcClaudePrompt">
+        IDC query
+      </label>
+      <textarea
+        id="idcClaudePrompt"
+        class="${style.idcClaudePrompt}"
+        rows="4"
+        placeholder="Natural-language IDC query (collection + Modality + LIMIT finish faster)"
+      ></textarea>
+      <label class="${style.idcClaudeFieldLabel}" for="idcClaudeOrgLabel">
+        Worklist label (optional)
+      </label>
+      <input
+        type="text"
+        id="idcClaudeOrgLabel"
+        class="${style.idcClaudeOrgLabel}"
+        placeholder="e.g. US smoke test"
+      />
+      <div id="idcClaudeStatusRow" class="${style.idcClaudeStatusRow}">
+        <span
+          id="idcClaudeStatusSpinner"
+          class="${style.idcClaudeStatusSpinner}"
+          hidden
+          aria-hidden="true"
+        ></span>
+        <p id="idcClaudeStatus" class="${
+          style.idcClaudeStatus
+        }" aria-live="polite"></p>
+      </div>
+      <p id="idcClaudeCitation" class="${style.idcClaudeCitation}"></p>
+      <div id="idcClaudeSqlSection" class="${style.idcClaudeSqlSection}" hidden>
+        <button
+          type="button"
+          id="idcClaudeToggleSqlBtn"
+          class="${style.idcClaudeToggleSqlBtn}"
+          aria-expanded="false"
+          aria-controls="idcClaudeSqlPanel"
+          hidden
+        >Show IDC index query</button>
+        <pre id="idcClaudeSqlPanel" class="${
+          style.idcClaudeSqlPanel
+        }" hidden></pre>
+      </div>
+      <div id="idcClaudeResultsSection" class="${
+        style.idcClaudeResultsSection
+      }" hidden>
+        <p class="${style.idcClaudeFieldLabel}">Matching studies</p>
+        <div id="idcClaudeResults" class="${style.idcClaudeResults}"></div>
+      </div>
+      <div class="${style.idcClaudeActions}">
+        <p id="idcClaudeAvailability" class="${
+          style.idcClaudeAvailability
+        }" aria-live="polite"></p>
+        <div class="${style.idcClaudeActionButtons}">
+          <button type="button" id="idcClaudeCancelBtn" class="${
+            style.headerViewerBtn
+          }">Close</button>
+          <button type="button" id="idcClaudeBuildConfirmBtn" class="${
+            style.headerViewerBtn
+          }">Search</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1784,12 +2304,75 @@ function statusHubNameMeta(el) {
   return selected ? String(selected.textContent || '').trim() : '';
 }
 
-function castHeaderStatusIconStyle(status) {
+const CAST_CONFERENCE_POLL_MS = 30_000;
+
+function isCastConferenceParticipant(topic, subscriberName, conference) {
+  const normalizedTopic = String(topic || '').trim();
+  const normalizedSubscriber = String(subscriberName || '').trim();
+  const host = String(conference?.user ?? '').trim();
+  const attendeeTopics = Array.isArray(conference?.topics)
+    ? conference.topics.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+
+  if (normalizedTopic) {
+    if (normalizedTopic === host || attendeeTopics.includes(normalizedTopic)) {
+      return true;
+    }
+  }
+  if (normalizedSubscriber && normalizedSubscriber === host) {
+    return true;
+  }
+  return false;
+}
+
+function findActiveCastConference(topic, subscriberName, conferences) {
+  return (
+    conferences.find((conference) =>
+      isCastConferenceParticipant(topic, subscriberName, conference)
+    ) || null
+  );
+}
+
+async function fetchCastConferences(hubEndpoint) {
+  const origin = hubOriginFromEndpoint(hubEndpoint);
+  if (!origin) {
+    return [];
+  }
+  const apiUrl = new URL('/api/hub/conference', origin).href;
+  try {
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+      return [];
+    }
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+async function resolveCastConferenceState(el, state) {
+  const hubEndpoint = String(el.hubEndpoint?.value || '').trim();
+  const session = state?.client?.getSessionConfig?.();
+  const topic = String(el.topic?.value?.trim() || session?.topic || '').trim();
+  const subscriberName = String(
+    el.subscriberName?.value?.trim() || session?.subscriberName || ''
+  ).trim();
+  const conferences = await fetchCastConferences(hubEndpoint);
+  const match = findActiveCastConference(topic, subscriberName, conferences);
+  return {
+    active: Boolean(match),
+    title: String(match?.title ?? '').trim(),
+  };
+}
+
+function castHeaderStatusIconStyle(status, conferenceActive) {
   if (status === 'connected') {
     return {
       colorClass: style.castHeaderStatusConnected,
       showSlash: false,
       pulse: false,
+      conferencePulse: Boolean(conferenceActive),
     };
   }
   if (status === 'connecting' || status === 'token-ready') {
@@ -1797,6 +2380,7 @@ function castHeaderStatusIconStyle(status) {
       colorClass: style.castHeaderStatusConnecting,
       showSlash: false,
       pulse: true,
+      conferencePulse: false,
     };
   }
   if (status === 'error' || status === 'disconnected') {
@@ -1804,12 +2388,14 @@ function castHeaderStatusIconStyle(status) {
       colorClass: style.castHeaderStatusError,
       showSlash: true,
       pulse: false,
+      conferencePulse: false,
     };
   }
   return {
     colorClass: style.castHeaderStatusIdle,
     showSlash: true,
     pulse: false,
+    conferencePulse: false,
   };
 }
 
@@ -1834,6 +2420,13 @@ function castHeaderStatusTooltipLines(el, state, status, detailText) {
   } else if (detailText) {
     lines.push(detailText);
   }
+  if (state?.conferenceActive) {
+    lines.push(
+      state.conferenceTitle
+        ? `Conference: ${state.conferenceTitle}`
+        : 'Conference active'
+    );
+  }
   return lines.join('\n');
 }
 
@@ -1843,11 +2436,16 @@ function updateCastHeaderStatus(el, state) {
   }
   const status = state.castHeaderStatus || 'disconnected';
   const detailText = state.castHeaderDetailText || '';
-  const { colorClass, showSlash, pulse } = castHeaderStatusIconStyle(status);
+  const { colorClass, showSlash, pulse, conferencePulse } =
+    castHeaderStatusIconStyle(status, state.conferenceActive);
 
   el.castHeaderStatus.classList.remove(...CAST_HEADER_STATUS_COLOR_CLASSES);
   el.castHeaderStatus.classList.add(colorClass);
   el.castHeaderStatus.classList.toggle(style.castHeaderStatusPulse, pulse);
+  el.castHeaderStatus.classList.toggle(
+    style.castHeaderStatusConferencePulse,
+    conferencePulse
+  );
   el.castHeaderStatus.title = castHeaderStatusTooltipLines(
     el,
     state,
@@ -1864,6 +2462,47 @@ function setConnection(el, state, status, text) {
   state.castHeaderStatus = status;
   state.castHeaderDetailText = text;
   updateCastHeaderStatus(el, state);
+}
+
+function setConferenceActive(el, state, active, title = '') {
+  state.conferenceActive = active;
+  state.conferenceTitle = active ? String(title || '').trim() : '';
+  updateCastHeaderStatus(el, state);
+}
+
+function stopConferencePoll(state) {
+  if (state.conferencePollTimer != null) {
+    clearInterval(state.conferencePollTimer);
+    state.conferencePollTimer = null;
+  }
+}
+
+async function syncConferenceActive(el, state) {
+  if (state.wsState !== 'connected') {
+    setConferenceActive(el, state, false);
+    return;
+  }
+  const { active, title } = await resolveCastConferenceState(el, state);
+  setConferenceActive(el, state, active, title);
+}
+
+function startConferencePoll(el, state) {
+  stopConferencePoll(state);
+  syncConferenceActive(el, state).catch(() => {});
+  state.conferencePollTimer = setInterval(() => {
+    syncConferenceActive(el, state).catch(() => {});
+  }, CAST_CONFERENCE_POLL_MS);
+}
+
+function handleConferenceStart(el, state, message) {
+  const event = message?.event;
+  const context = event?.context;
+  const title =
+    context && typeof context === 'object' && !Array.isArray(context)
+      ? String(context.title ?? '').trim()
+      : '';
+  setConferenceActive(el, state, true, title);
+  syncConferenceActive(el, state).catch(() => {});
 }
 
 function readStoredCastTheme() {
@@ -1962,7 +2601,11 @@ function openCastAboutDialog(el) {
     );
   }
   el.castAboutOverlay.hidden = false;
-  el.castAboutCloseBtn?.focus();
+  const dialog = el.castAboutOverlay.firstElementChild;
+  if (dialog instanceof HTMLElement) {
+    dialog.scrollTop = 0;
+    dialog.focus({ preventScroll: true });
+  }
 }
 
 function closeCastAboutDialog(el) {
@@ -1970,6 +2613,210 @@ function closeCastAboutDialog(el) {
     return;
   }
   el.castAboutOverlay.hidden = true;
+}
+
+function setIdcClaudeModalStatus(el, text, { busy = false } = {}) {
+  if (el.idcClaudeStatus) {
+    el.idcClaudeStatus.textContent = text || '';
+    el.idcClaudeStatus.classList.toggle(style.idcClaudeStatusBusy, busy);
+  }
+  if (el.idcClaudeStatusSpinner) {
+    el.idcClaudeStatusSpinner.hidden = !busy;
+  }
+  if (el.idcClaudeStatusRow) {
+    el.idcClaudeStatusRow.setAttribute('aria-busy', busy ? 'true' : 'false');
+  }
+}
+
+function stopIdcClaudeProgress(state) {
+  if (state.idcClaudeProgressTimer) {
+    clearInterval(state.idcClaudeProgressTimer);
+    state.idcClaudeProgressTimer = null;
+  }
+}
+
+function startIdcClaudeProgress(el, state, messages, intervalMs) {
+  stopIdcClaudeProgress(state);
+  const lines = Array.isArray(messages) ? messages.filter(Boolean) : [];
+  if (!lines.length) {
+    return;
+  }
+  let index = 0;
+  setIdcClaudeModalStatus(el, lines[0], { busy: true });
+  if (lines.length === 1) {
+    return;
+  }
+  state.idcClaudeProgressTimer = setInterval(() => {
+    index = (index + 1) % lines.length;
+    setIdcClaudeModalStatus(el, lines[index], { busy: true });
+  }, intervalMs);
+}
+
+function startIdcClaudeSearchProgress(el, state) {
+  startIdcClaudeProgress(
+    el,
+    state,
+    IDC_CLAUDE_SEARCH_PROGRESS_MESSAGES,
+    IDC_CLAUDE_SEARCH_PROGRESS_MS
+  );
+}
+
+function startIdcClaudeAddStudyProgress(el, state) {
+  startIdcClaudeProgress(
+    el,
+    state,
+    IDC_CLAUDE_ADD_STUDY_PROGRESS_MESSAGES,
+    IDC_CLAUDE_ADD_STUDY_PROGRESS_MS
+  );
+}
+
+function syncIdcClaudeSqlUi(el, state) {
+  const sql = String(
+    state.idcClaudePendingResults?.sql || state.idcClaudeLastSearchSql || ''
+  ).trim();
+  if (
+    !el.idcClaudeSqlSection ||
+    !el.idcClaudeToggleSqlBtn ||
+    !el.idcClaudeSqlPanel
+  ) {
+    return;
+  }
+  if (!sql) {
+    el.idcClaudeSqlSection.hidden = true;
+    el.idcClaudeToggleSqlBtn.hidden = true;
+    el.idcClaudeSqlPanel.hidden = true;
+    el.idcClaudeSqlPanel.textContent = '';
+    el.idcClaudeToggleSqlBtn.setAttribute('aria-expanded', 'false');
+    state.idcClaudeSqlVisible = false;
+    return;
+  }
+
+  el.idcClaudeSqlSection.hidden = false;
+  el.idcClaudeToggleSqlBtn.hidden = false;
+  el.idcClaudeSqlPanel.textContent = sql;
+  const visible = Boolean(state.idcClaudeSqlVisible);
+  el.idcClaudeSqlPanel.hidden = !visible;
+  el.idcClaudeToggleSqlBtn.textContent = visible
+    ? 'Hide IDC index query'
+    : 'Show IDC index query';
+  el.idcClaudeToggleSqlBtn.setAttribute(
+    'aria-expanded',
+    visible ? 'true' : 'false'
+  );
+}
+
+function clearIdcClaudeSearchResults(el, state) {
+  stopIdcClaudeProgress(state);
+  state.idcClaudePendingResults = null;
+  state.idcClaudeLastSearchSql = '';
+  state.idcClaudeSqlVisible = false;
+  state.idcClaudeAddedStudyIds = new Set();
+  state.idcClaudeAddingStudyIds = new Set();
+  if (el.idcClaudeResults) {
+    el.idcClaudeResults.replaceChildren();
+  }
+  if (el.idcClaudeResultsSection) {
+    el.idcClaudeResultsSection.hidden = true;
+  }
+  syncIdcClaudeSqlUi(el, state);
+}
+
+function ensureIdcCustomWorklistEntry(state, meta) {
+  if (!Array.isArray(state.idcCustomWorklists)) {
+    state.idcCustomWorklists = [];
+  }
+  const org = String(meta.organization || '').trim();
+  if (!org) {
+    return null;
+  }
+  let entry = state.idcCustomWorklists.find(
+    (item) => item.organization === org
+  );
+  if (!entry) {
+    entry = {
+      organization: org,
+      organizationLabel: String(meta.organizationLabel || '').trim() || org,
+      prompt: meta.prompt || '',
+      sql: meta.sql || '',
+      citation: meta.citation || '',
+      studies: [],
+      createdAt: new Date().toISOString(),
+    };
+    state.idcCustomWorklists.push(entry);
+  } else {
+    if (meta.organizationLabel) {
+      entry.organizationLabel = String(meta.organizationLabel).trim();
+    }
+    if (meta.prompt) {
+      entry.prompt = meta.prompt;
+    }
+    if (meta.sql) {
+      entry.sql = meta.sql;
+    }
+    if (meta.citation) {
+      entry.citation = meta.citation;
+    }
+  }
+  return entry;
+}
+
+function idcClaudeDialogAvailabilityText(state) {
+  if (state.idcClaudeJobRunning) {
+    return 'IDCCLAUDE is running a query. Wait for it to finish before searching again.';
+  }
+  if (state.idcClaudeAvailable) {
+    return 'IDCCLAUDE resource server is connected.';
+  }
+  return 'No IDC Claude resource server available right now';
+}
+
+function idcClaudeCanBuildWorklist(state) {
+  return (
+    state.wsState === 'connected' &&
+    Boolean(state.idcClaudeAvailable) &&
+    !state.idcClaudeJobRunning &&
+    !state.idcClaudeBuildBusy
+  );
+}
+
+function syncIdcClaudeDialogAvailability(el, state) {
+  if (el.idcClaudeAvailability) {
+    el.idcClaudeAvailability.textContent =
+      idcClaudeDialogAvailabilityText(state);
+  }
+  if (el.idcClaudeBuildConfirmBtn) {
+    el.idcClaudeBuildConfirmBtn.disabled = !idcClaudeCanBuildWorklist(state);
+  }
+}
+
+function openIdcClaudeDialog(el, state) {
+  if (!el.idcClaudeOverlay) {
+    return;
+  }
+  setIdcClaudeModalStatus(el, '');
+  clearIdcClaudeSearchResults(el, state);
+  if (el.idcClaudeCitation) {
+    el.idcClaudeCitation.textContent = '';
+  }
+  syncIdcClaudeDialogAvailability(el, state);
+  if (el.idcClaudePrompt && !el.idcClaudePrompt.value.trim()) {
+    el.idcClaudePrompt.value = IDC_CLAUDE_DEFAULT_PROMPT;
+  }
+  if (el.idcClaudeOrgLabel && !el.idcClaudeOrgLabel.value.trim()) {
+    el.idcClaudeOrgLabel.value = IDC_CLAUDE_DEFAULT_ORG_LABEL;
+  }
+  el.idcClaudeOverlay.hidden = false;
+  el.idcClaudePrompt?.focus();
+}
+
+function closeIdcClaudeDialog(el, state) {
+  if (!el.idcClaudeOverlay) {
+    return;
+  }
+  if (state) {
+    stopIdcClaudeProgress(state);
+  }
+  el.idcClaudeOverlay.hidden = true;
 }
 
 function wireCastHeaderMenu(el, root) {
@@ -2035,10 +2882,30 @@ function wireCastHeaderMenu(el, root) {
         closeCastAboutDialog(el);
         return;
       }
+      if (el.idcClaudeOverlay && !el.idcClaudeOverlay.hidden) {
+        closeIdcClaudeDialog(el);
+        return;
+      }
       closeCastHeaderMenu(el);
       closeCastHeaderStatusMenu(el);
     }
   });
+}
+
+function getCastConferencePopupFeatures() {
+  const popupWidth = 380;
+  const popupHeight = 288;
+  const top = Math.max(0, Math.floor((window.screen.height - popupHeight) / 2));
+  const left = Math.max(0, Math.floor((window.screen.width - popupWidth) / 2));
+  return [
+    'popup',
+    `width=${popupWidth}`,
+    `height=${popupHeight}`,
+    `left=${left}`,
+    `top=${top}`,
+    'noopener',
+    'noreferrer',
+  ].join(',');
 }
 
 function getCastViewerPopupFeatures(viewerKind) {
@@ -2107,7 +2974,7 @@ function openCastConferenceClient(el) {
   window.open(
     url.toString(),
     'castConferenceClientWindow',
-    getCastViewerPopupFeatures()
+    getCastConferencePopupFeatures()
   );
 }
 
@@ -2478,7 +3345,7 @@ async function captureWorklistThumbnailPng(
 
 function buildStatusRequestArgs(
   el,
-  { targetActor = 'ID', targetProductName } = {}
+  { targetActor = '*', targetProductName } = {}
 ) {
   const requestArgs = {
     'subscriber.name': el.getSubscriber.value.trim(),
@@ -2538,6 +3405,591 @@ function parseSceneviewCollatedResponses(resultData) {
     .filter(Boolean);
 }
 
+function updateWorklistImageDisplayLabel(el, subscribers) {
+  if (!el.worklistImageDisplayLabel) {
+    return;
+  }
+  if (!subscribers || subscribers.size === 0) {
+    if (el.worklistImageDisplayLabel.hidden) {
+      return;
+    }
+    el.worklistImageDisplayLabel.textContent = '';
+    el.worklistImageDisplayLabel.hidden = true;
+    el.worklistImageDisplayLabel.title = '';
+    return;
+  }
+  const sorted = [...subscribers].sort();
+  const title = sorted.join(', ');
+  const text = `Image Displays: ${title}`;
+  if (
+    el.worklistImageDisplayLabel.textContent === text &&
+    el.worklistImageDisplayLabel.title === title &&
+    !el.worklistImageDisplayLabel.hidden
+  ) {
+    return;
+  }
+  el.worklistImageDisplayLabel.title = title;
+  el.worklistImageDisplayLabel.textContent = text;
+  el.worklistImageDisplayLabel.hidden = false;
+}
+
+function updateIdcClaudeBuildBtn(el, state) {
+  if (!el.idcClaudeBuildBtn) {
+    return;
+  }
+  el.idcClaudeBuildBtn.disabled = Boolean(state.idcClaudeBuildBusy);
+  el.idcClaudeBuildBtn.title =
+    'Open IDC Claude — natural-language IDC worklist';
+  syncIdcClaudeDialogAvailability(el, state);
+}
+
+function clearResourceServerStatus(state) {
+  state.idcClaudeAvailable = false;
+  state.idcClaudeJobRunning = false;
+  state.lastWideStatusPollAt = 0;
+}
+
+function updateOpenSceneviewsButton(el, state) {
+  if (!el.openSceneviewsBtn) {
+    return;
+  }
+  const wsConnected = state.wsState === 'connected';
+  const hasDisplay = Boolean(state.imageDisplaySubscribers?.size);
+  const enabled = hasDisplay ? wsConnected : true;
+  el.openSceneviewsBtn.disabled = !enabled;
+  const names = hasDisplay
+    ? [...state.imageDisplaySubscribers].sort().join(', ')
+    : '';
+  if (!hasDisplay) {
+    el.openSceneviewsBtn.title =
+      'Open worklist scene layout (no image display connected)';
+    return;
+  }
+  el.openSceneviewsBtn.title = wsConnected
+    ? `Open Scene Views for ${names}`
+    : 'Subscribe to the hub first';
+}
+
+function clearImageDisplayRequesters(state) {
+  state.imageDisplaySubscribers = new Set();
+}
+
+function refreshImageDisplayConnectionStatus(el, state) {
+  updateWorklistImageDisplayLabel(el, state.imageDisplaySubscribers);
+  updateOpenSceneviewsButton(el, state);
+}
+
+function collatedResponsesFromRequestResult(resultData) {
+  if (!resultData || typeof resultData !== 'object') {
+    return [];
+  }
+  const responses = resultData.responses;
+  return Array.isArray(responses) ? responses : [];
+}
+
+function normalizeStatusProductToken(name) {
+  return String(name || '')
+    .trim()
+    .toUpperCase()
+    .replace(/-/g, '_');
+}
+
+function statusItemValue(items, key) {
+  if (!Array.isArray(items)) {
+    return undefined;
+  }
+  const needle = String(key || '')
+    .trim()
+    .toLowerCase();
+  const match = items.find(
+    (entry) =>
+      entry &&
+      typeof entry === 'object' &&
+      String(entry.key ?? '')
+        .trim()
+        .toLowerCase() === needle
+  );
+  if (!match) {
+    return undefined;
+  }
+  const value = match.value;
+  return typeof value === 'string' ? value.trim() : undefined;
+}
+
+function isStatusPayloadOnline(data) {
+  if (!data || typeof data !== 'object' || data.source !== 'status') {
+    return false;
+  }
+  const availability = statusItemValue(data.items, 'availability');
+  if (availability) {
+    return availability.toLowerCase() === 'online';
+  }
+  return Array.isArray(data.items) && data.items.length > 0;
+}
+
+function productNameFromStatusResponseItem(item) {
+  const fromEnvelope = String(item?.productName ?? '').trim();
+  if (fromEnvelope) {
+    return fromEnvelope;
+  }
+  const data = item?.data;
+  if (data && typeof data === 'object') {
+    const fromPayload = String(data.product ?? '').trim();
+    if (fromPayload) {
+      return fromPayload;
+    }
+  }
+  return '';
+}
+
+function isIdcClaudeProduct(name) {
+  return normalizeStatusProductToken(name) === 'IDCCLAUDE';
+}
+
+function idcClaudeAvailableFromStatusResponses(responses) {
+  return responses.some((item) => {
+    if (!isIdcClaudeProduct(productNameFromStatusResponseItem(item))) {
+      return false;
+    }
+    if (sceneviewPayloadFromStatusData(item?.data)) {
+      return false;
+    }
+    return isStatusPayloadOnline(item?.data);
+  });
+}
+
+function idcClaudeJobRunningFromStatusResponses(responses) {
+  return responses.some((item) => {
+    if (!isIdcClaudeProduct(productNameFromStatusResponseItem(item))) {
+      return false;
+    }
+    const job = statusItemValue(item?.data?.items, 'job');
+    return Boolean(job && job.toLowerCase() === 'running');
+  });
+}
+
+function syncImageDisplaysFromStatusPoll(
+  state,
+  resultData,
+  { replace = true } = {}
+) {
+  const entries = parseSceneviewCollatedResponses(resultData);
+  if (replace) {
+    state.imageDisplaySubscribers = new Set();
+  } else if (!state.imageDisplaySubscribers) {
+    state.imageDisplaySubscribers = new Set();
+  }
+  entries.forEach((entry) => {
+    const name = String(entry.subscriber || '').trim();
+    if (name) {
+      state.imageDisplaySubscribers.add(name);
+    }
+  });
+}
+
+function applyWideStatusPollResults(el, state, resultData) {
+  const responses = collatedResponsesFromRequestResult(resultData);
+  syncImageDisplaysFromStatusPoll(state, resultData, { replace: true });
+  state.idcClaudeAvailable = idcClaudeAvailableFromStatusResponses(responses);
+  state.idcClaudeJobRunning = idcClaudeJobRunningFromStatusResponses(responses);
+  refreshImageDisplayConnectionStatus(el, state);
+  updateIdcClaudeBuildBtn(el, state);
+}
+
+async function runWideStatusPoll(el, state) {
+  if (!state.client?.request || state.wsState !== 'connected') {
+    return;
+  }
+  if (state.wideStatusPollBusy) {
+    return;
+  }
+  const now = Date.now();
+  if (state.lastWideStatusPollAt && now - state.lastWideStatusPollAt < 1000) {
+    return;
+  }
+  state.wideStatusPollBusy = true;
+  try {
+    const result = await state.client.request(buildStatusRequestArgs(el));
+    state.lastWideStatusPollAt = Date.now();
+    if (!result.ok || !result.data) {
+      state.idcClaudeAvailable = false;
+      state.idcClaudeJobRunning = false;
+      refreshImageDisplayConnectionStatus(el, state);
+      updateIdcClaudeBuildBtn(el, state);
+      return;
+    }
+    applyWideStatusPollResults(el, state, result.data);
+  } catch (err) {
+    console.warn('[vtkCastClient] wide STATUS poll failed', err);
+    state.idcClaudeAvailable = false;
+    state.idcClaudeJobRunning = false;
+    updateIdcClaudeBuildBtn(el, state);
+  } finally {
+    state.wideStatusPollBusy = false;
+  }
+}
+
+function renderIdcClaudeSearchResults(el, state) {
+  if (!el.idcClaudeResults || !el.idcClaudeResultsSection) {
+    return;
+  }
+  const pending = state.idcClaudePendingResults;
+  const studies = Array.isArray(pending?.studies) ? pending.studies : [];
+  el.idcClaudeResults.replaceChildren();
+  if (!studies.length) {
+    el.idcClaudeResultsSection.hidden = true;
+    return;
+  }
+
+  el.idcClaudeResultsSection.hidden = false;
+  const addedIds = state.idcClaudeAddedStudyIds || new Set();
+  const addingIds = state.idcClaudeAddingStudyIds || new Set();
+
+  studies.forEach((study) => {
+    const row = document.createElement('div');
+    row.className = style.idcClaudeResultRow;
+
+    const text = document.createElement('div');
+    text.className = style.idcClaudeResultText;
+    const title = document.createElement('div');
+    title.className = style.idcClaudeResultTitle;
+    title.textContent = study.name || study.id || 'IDC study';
+    const desc = document.createElement('div');
+    desc.className = style.idcClaudeResultDesc;
+    desc.textContent = study.description || '';
+    const meta = document.createElement('div');
+    meta.className = style.idcClaudeResultMeta;
+    meta.textContent = study.size || '';
+    text.append(title, desc, meta);
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = style.idcClaudeAddBtn;
+    addBtn.dataset.studyId = study.id;
+    const studyId = String(study.id || '').trim();
+    if (addedIds.has(studyId)) {
+      addBtn.textContent = 'Added';
+      addBtn.disabled = true;
+    } else if (addingIds.has(studyId)) {
+      addBtn.textContent = 'Adding…';
+      addBtn.disabled = true;
+    } else {
+      addBtn.textContent = 'Add to worklist';
+      addBtn.addEventListener('click', () => {
+        // eslint-disable-next-line no-use-before-define -- defined below
+        addIdcClaudeStudyToWorklist(el, state, studyId);
+      });
+    }
+
+    row.append(text, addBtn);
+    el.idcClaudeResults.append(row);
+  });
+}
+
+async function addIdcClaudeStudyToWorklist(el, state, studyId) {
+  const pending = state.idcClaudePendingResults;
+  if (!pending) {
+    setIdcClaudeModalStatus(el, 'Search for studies first.');
+    return;
+  }
+  if (!state.client?.request || state.wsState !== 'connected') {
+    setIdcClaudeModalStatus(el, 'Connect to the Cast hub first.');
+    return;
+  }
+  if (!state.idcClaudeAvailable) {
+    setIdcClaudeModalStatus(
+      el,
+      'IDCCLAUDE is not connected to the hub — see the message below.'
+    );
+    return;
+  }
+  const studyIdText = String(studyId || '').trim();
+  const study = (pending.studies || []).find(
+    (entry) => String(entry.id || '').trim() === studyIdText
+  );
+  if (!study) {
+    setIdcClaudeModalStatus(el, 'Unknown IDC study selection.');
+    return;
+  }
+  if (!state.idcClaudeAddedStudyIds) {
+    state.idcClaudeAddedStudyIds = new Set();
+  }
+  if (!state.idcClaudeAddingStudyIds) {
+    state.idcClaudeAddingStudyIds = new Set();
+  }
+  if (
+    state.idcClaudeAddedStudyIds.has(studyIdText) ||
+    state.idcClaudeAddingStudyIds.has(studyIdText)
+  ) {
+    return;
+  }
+
+  state.idcClaudeAddingStudyIds.add(studyIdText);
+  renderIdcClaudeSearchResults(el, state);
+  startIdcClaudeAddStudyProgress(el, state);
+
+  try {
+    const result = await state.client.request({
+      'subscriber.name': el.getSubscriber.value.trim(),
+      event: {
+        'hub.event': requestEventFor(IDC_CLAUDE_DATA_TYPE),
+        'hub.topic': el.topic.value.trim(),
+        context: {
+          dataType: IDC_CLAUDE_DATA_TYPE,
+          action: IDC_CLAUDE_ACTION_ADD_STUDY,
+          organization: pending.organization,
+          study,
+          timeoutSeconds: IDC_CLAUDE_ADD_STUDY_TIMEOUT_SECONDS,
+        },
+      },
+      'subscriber.actor': DEFAULT_GET_ACTOR_KEYWORD,
+      'target.product.name': IDC_CLAUDE_PRODUCT_NAME,
+    });
+    stopIdcClaudeProgress(state);
+    const envelope =
+      result.data && typeof result.data === 'object' ? result.data : {};
+    if (!result.ok || envelope.timedOut) {
+      let detail;
+      if (envelope.timedOut) {
+        detail = formatIdcClaudeRequestFailure(envelope);
+      } else if (typeof result.data === 'string') {
+        detail = result.data;
+      } else {
+        detail =
+          envelope.error ||
+          JSON.stringify(redactSceneviewPayloadForLog(result.data), null, 2);
+      }
+      setIdcClaudeModalStatus(el, detail);
+      addMessage(el, state, 'err', 'IDC Claude', detail);
+      return;
+    }
+    const parsed = parseIdcClaudeAddStudyResponse(result.data);
+    if (parsed.error) {
+      setIdcClaudeModalStatus(el, parsed.error);
+      addMessage(el, state, 'err', 'IDC Claude', parsed.error);
+      return;
+    }
+    const org = String(
+      parsed.data.organization || pending.organization || ''
+    ).trim();
+    const worklistStudy = {
+      ...parsed.study,
+      organization: org,
+    };
+    const entry = ensureIdcCustomWorklistEntry(state, pending);
+    if (!entry) {
+      setIdcClaudeModalStatus(el, 'Worklist organization is missing.');
+      return;
+    }
+    entry.studies = Array.isArray(entry.studies) ? entry.studies : [];
+    const existingIndex = entry.studies.findIndex(
+      (item) => String(item.id || '').trim() === studyIdText
+    );
+    if (existingIndex >= 0) {
+      entry.studies[existingIndex] = worklistStudy;
+    } else {
+      entry.studies.push(worklistStudy);
+    }
+    state.idcClaudeAddedStudyIds.add(studyIdText);
+    saveIdcCustomWorklistsToSession(el, state);
+    refreshWorklistOrganizationSelect(el, state);
+    el.worklistOrganizationSelect.value = org;
+    renderWorklistPanel(el.worklistPanel, org, el, state);
+    updateWorklistContextControls(el, state);
+    setIdcClaudeModalStatus(
+      el,
+      `Added ${worklistStudy.name || studyIdText} to "${
+        worklistOrganizationLabels(state)[org] || org
+      }".`
+    );
+    addMessage(el, state, 'received', 'IDC Claude', {
+      action: IDC_CLAUDE_ACTION_ADD_STUDY,
+      study: studyIdText,
+      organization: org,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    setIdcClaudeModalStatus(el, msg);
+    addMessage(el, state, 'err', 'IDC Claude', msg);
+  } finally {
+    stopIdcClaudeProgress(state);
+    state.idcClaudeAddingStudyIds.delete(studyIdText);
+    renderIdcClaudeSearchResults(el, state);
+    runWideStatusPoll(el, state).catch((err) => {
+      console.warn(
+        '[vtkCastClient] wide STATUS poll after IDC Claude add failed',
+        err
+      );
+    });
+  }
+}
+
+function idcClaudeMaxStudiesForPrompt(prompt) {
+  const match = String(prompt || '').match(/\bLIMIT\s+(\d+)\b/i);
+  if (match) {
+    const parsed = parseInt(match[1], 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.min(parsed, IDC_CLAUDE_MAX_STUDIES);
+    }
+  }
+  return IDC_CLAUDE_MAX_STUDIES;
+}
+
+async function searchIdcClaudeStudiesFromPrompt(el, state) {
+  if (!state.client?.request || state.wsState !== 'connected') {
+    setIdcClaudeModalStatus(el, 'Connect to the Cast hub first.');
+    return;
+  }
+  if (!state.idcClaudeAvailable) {
+    setIdcClaudeModalStatus(
+      el,
+      'IDCCLAUDE is not connected to the hub — see the message below.'
+    );
+    return;
+  }
+  if (state.idcClaudeJobRunning) {
+    setIdcClaudeModalStatus(
+      el,
+      'IDCCLAUDE is busy — wait for the current query.'
+    );
+    return;
+  }
+  if (state.idcClaudeBuildBusy) {
+    return;
+  }
+  const prompt = el.idcClaudePrompt?.value?.trim() || '';
+  if (!prompt) {
+    setIdcClaudeModalStatus(el, 'Enter a natural-language IDC query.');
+    return;
+  }
+  const organizationLabel = el.idcClaudeOrgLabel?.value?.trim() || '';
+  state.idcClaudeBuildBusy = true;
+  clearIdcClaudeSearchResults(el, state);
+  startIdcClaudeSearchProgress(el, state);
+  if (el.idcClaudeBuildConfirmBtn) {
+    el.idcClaudeBuildConfirmBtn.disabled = true;
+  }
+  try {
+    const result = await state.client.request({
+      'subscriber.name': el.getSubscriber.value.trim(),
+      event: {
+        'hub.event': requestEventFor(IDC_CLAUDE_DATA_TYPE),
+        'hub.topic': el.topic.value.trim(),
+        context: {
+          dataType: IDC_CLAUDE_DATA_TYPE,
+          action: IDC_CLAUDE_ACTION_SEARCH,
+          prompt,
+          maxStudies: idcClaudeMaxStudiesForPrompt(prompt),
+          organizationLabel: organizationLabel || undefined,
+          timeoutSeconds: IDC_CLAUDE_REQUEST_TIMEOUT_SECONDS,
+        },
+      },
+      'subscriber.actor': DEFAULT_GET_ACTOR_KEYWORD,
+      'target.product.name': IDC_CLAUDE_PRODUCT_NAME,
+    });
+    stopIdcClaudeProgress(state);
+    const envelope =
+      result.data && typeof result.data === 'object' ? result.data : {};
+    if (!result.ok || envelope.timedOut) {
+      let detail;
+      if (envelope.timedOut) {
+        detail = formatIdcClaudeRequestFailure(envelope);
+      } else if (typeof result.data === 'string') {
+        detail = result.data;
+      } else {
+        detail =
+          envelope.error ||
+          JSON.stringify(redactSceneviewPayloadForLog(result.data), null, 2);
+      }
+      setIdcClaudeModalStatus(el, detail);
+      addMessage(el, state, 'err', 'IDC Claude', detail);
+      return;
+    }
+    const parsed = parseIdcClaudeCollatedResponse(result.data);
+    if (parsed.error) {
+      state.idcClaudeLastSearchSql = parsed.sql || '';
+      state.idcClaudeSqlVisible = false;
+      syncIdcClaudeSqlUi(el, state);
+      setIdcClaudeModalStatus(el, parsed.error);
+      addMessage(el, state, 'err', 'IDC Claude', parsed.error);
+      return;
+    }
+    const { data, studies } = parsed;
+    const org = String(data.organization || '').trim();
+    if (!org) {
+      setIdcClaudeModalStatus(el, 'Response missing organization id.');
+      return;
+    }
+    state.idcClaudePendingResults = {
+      organization: org,
+      organizationLabel:
+        String(data.organizationLabel || '').trim() ||
+        organizationLabel ||
+        prompt,
+      prompt,
+      sql: data.sql,
+      citation: data.citation,
+      studies: studies.map((study) => ({ ...study, organization: org })),
+    };
+    state.idcClaudeLastSearchSql = String(data.sql || '').trim();
+    state.idcClaudeSqlVisible = false;
+    state.idcClaudeAddedStudyIds = new Set();
+    state.idcClaudeAddingStudyIds = new Set();
+    ensureIdcCustomWorklistEntry(state, state.idcClaudePendingResults);
+    saveIdcCustomWorklistsToSession(el, state);
+    refreshWorklistOrganizationSelect(el, state);
+    renderIdcClaudeSearchResults(el, state);
+    syncIdcClaudeSqlUi(el, state);
+    if (el.idcClaudeCitation && data.citation) {
+      el.idcClaudeCitation.textContent = data.citation;
+    }
+    setIdcClaudeModalStatus(
+      el,
+      `Found ${studies.length} studies. Add each to the worklist when ready.`
+    );
+    addMessage(el, state, 'received', 'IDC Claude', {
+      organization: org,
+      studies: studies.length,
+      action: IDC_CLAUDE_ACTION_SEARCH,
+    });
+    runWideStatusPoll(el, state).catch((err) => {
+      console.warn(
+        '[vtkCastClient] wide STATUS poll after IDC Claude search failed',
+        err
+      );
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    setIdcClaudeModalStatus(el, msg);
+    addMessage(el, state, 'err', 'IDC Claude', msg);
+  } finally {
+    stopIdcClaudeProgress(state);
+    state.idcClaudeBuildBusy = false;
+    updateIdcClaudeBuildBtn(el, state);
+  }
+}
+
+function wireIdcClaudeDialog(el, state) {
+  el.idcClaudeBuildBtn?.addEventListener('click', () => {
+    openIdcClaudeDialog(el, state);
+  });
+  el.idcClaudeCancelBtn?.addEventListener('click', () => {
+    closeIdcClaudeDialog(el);
+  });
+  el.idcClaudeBuildConfirmBtn?.addEventListener('click', () => {
+    searchIdcClaudeStudiesFromPrompt(el, state);
+  });
+  el.idcClaudeToggleSqlBtn?.addEventListener('click', () => {
+    state.idcClaudeSqlVisible = !state.idcClaudeSqlVisible;
+    syncIdcClaudeSqlUi(el, state);
+  });
+  el.idcClaudeOverlay?.addEventListener('click', (event) => {
+    if (event.target === el.idcClaudeOverlay) {
+      closeIdcClaudeDialog(el);
+    }
+  });
+}
+
 function screenRectFromPayload(obj) {
   if (!obj || typeof obj !== 'object') {
     return null;
@@ -2560,11 +4012,23 @@ function windowRectFromPayload(win) {
   if (!win || typeof win !== 'object') {
     return null;
   }
+  const width = Number(win.outerWidth);
+  const height = Number(win.outerHeight);
+  const frameLeft = Number(win.frameLeft);
+  const frameTop = Number(win.frameTop);
+  if (
+    Number.isFinite(frameLeft) &&
+    Number.isFinite(frameTop) &&
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0
+  ) {
+    return { left: frameLeft, top: frameTop, width, height };
+  }
   // Chromium: screenX/screenY are the viewport (client) top-left on screen.
   const viewportLeft = Number(win.screenX);
   const viewportTop = Number(win.screenY);
-  const width = Number(win.outerWidth);
-  const height = Number(win.outerHeight);
   const innerW = Number(win.innerWidth) || width;
   const innerH = Number(win.innerHeight) || height;
   if (
@@ -2771,22 +4235,29 @@ function windowContentRectFromPayload(win) {
   };
 }
 
+function clampInsetsPercent(inset) {
+  const left = Math.max(0, Math.min(100, inset.left));
+  const top = Math.max(0, Math.min(100, inset.top));
+  const width = Math.max(0, Math.min(100 - left, inset.width));
+  const height = Math.max(0, Math.min(100 - top, inset.height));
+  if (width <= 0 || height <= 0) {
+    return { left: 0, top: 0, width: 100, height: 100 };
+  }
+  return { left, top, width, height };
+}
+
 function windowClientInsetsPercent(win) {
   const outer = windowRectFromPayload(win);
-  if (!outer || !win || typeof win !== 'object') {
+  const client = windowContentRectFromPayload(win);
+  if (!outer || !client || outer.width <= 0 || outer.height <= 0) {
     return null;
   }
-  const innerW = Number(win.innerWidth) || outer.width;
-  const innerH = Number(win.innerHeight) || outer.height;
-  if (outer.width <= 0 || outer.height <= 0) {
-    return null;
-  }
-  return {
-    left: ((outer.width - innerW) / 2 / outer.width) * 100,
-    top: ((outer.height - innerH) / outer.height) * 100,
-    width: (innerW / outer.width) * 100,
-    height: (innerH / outer.height) * 100,
-  };
+  return clampInsetsPercent({
+    left: ((client.left - outer.left) / outer.width) * 100,
+    top: ((client.top - outer.top) / outer.height) * 100,
+    width: (client.width / outer.width) * 100,
+    height: (client.height / outer.height) * 100,
+  });
 }
 
 function sceneviewClientAreaStyle(win) {
@@ -2799,17 +4270,6 @@ function sceneviewClientAreaStyle(win) {
 
 const SCENEVIEW_WINDOW_SHELL_STYLE =
   'position:absolute;left:0;top:0;width:100%;height:100%;box-sizing:border-box;overflow:hidden';
-
-function clampInsetsPercent(inset) {
-  const left = Math.max(0, Math.min(100, inset.left));
-  const top = Math.max(0, Math.min(100, inset.top));
-  const width = Math.max(0, Math.min(100 - left, inset.width));
-  const height = Math.max(0, Math.min(100 - top, inset.height));
-  if (width <= 0 || height <= 0) {
-    return { left: 0, top: 0, width: 100, height: 100 };
-  }
-  return { left, top, width, height };
-}
 
 /** Layout grid bounds as % of the diagram outer window frame. */
 function layoutGridInsetsPercent(win, layoutScreenRect) {
@@ -2853,6 +4313,62 @@ function getSceneviewMonitorDiagramBounds() {
     minTop: 0,
     width: Math.max(1, screenW),
     height: Math.max(1, screenH),
+  };
+}
+
+const SCENEVIEW_DIAGRAM_BOUNDS_MARGIN = 64;
+
+function unionScreenRects(rects) {
+  if (!rects.length) {
+    return null;
+  }
+  let minLeft = Infinity;
+  let minTop = Infinity;
+  let maxRight = -Infinity;
+  let maxBottom = -Infinity;
+  rects.forEach((r) => {
+    minLeft = Math.min(minLeft, r.left);
+    minTop = Math.min(minTop, r.top);
+    maxRight = Math.max(maxRight, r.left + r.width);
+    maxBottom = Math.max(maxBottom, r.top + r.height);
+  });
+  return {
+    left: minLeft,
+    top: minTop,
+    width: Math.max(1, maxRight - minLeft),
+    height: Math.max(1, maxBottom - minTop),
+  };
+}
+
+function collectSceneviewDiagramWindowRects(worklistWindow, sceneviewEntries) {
+  const rects = [];
+  const worklistRect = sceneviewWindowRectForDiagram(worklistWindow);
+  if (worklistRect) {
+    rects.push(worklistRect);
+  }
+  (Array.isArray(sceneviewEntries) ? sceneviewEntries : []).forEach((entry) => {
+    const winRect = sceneviewWindowRectForDiagram(entry?.data?.window);
+    if (winRect) {
+      rects.push(winRect);
+    }
+  });
+  return rects;
+}
+
+/** Bounds that contain all participants (worklist + image displays) with margin. */
+function getSceneviewDiagramBounds(worklistWindow, sceneviewEntries) {
+  const union = unionScreenRects(
+    collectSceneviewDiagramWindowRects(worklistWindow, sceneviewEntries)
+  );
+  if (!union) {
+    return getSceneviewMonitorDiagramBounds();
+  }
+  const margin = SCENEVIEW_DIAGRAM_BOUNDS_MARGIN;
+  return {
+    minLeft: union.left - margin,
+    minTop: union.top - margin,
+    width: Math.max(union.width + margin * 2, 320),
+    height: Math.max(union.height + margin * 2, 240),
   };
 }
 
@@ -2925,28 +4441,6 @@ function resolveSceneviewLayoutPopupMetrics(bounds, worklistWindow) {
     popupHeight,
     left,
     top,
-  };
-}
-
-function unionScreenRects(rects) {
-  if (!rects.length) {
-    return null;
-  }
-  let minLeft = Infinity;
-  let minTop = Infinity;
-  let maxRight = -Infinity;
-  let maxBottom = -Infinity;
-  rects.forEach((r) => {
-    minLeft = Math.min(minLeft, r.left);
-    minTop = Math.min(minTop, r.top);
-    maxRight = Math.max(maxRight, r.left + r.width);
-    maxBottom = Math.max(maxBottom, r.top + r.height);
-  });
-  return {
-    left: minLeft,
-    top: minTop,
-    width: Math.max(1, maxRight - minLeft),
-    height: Math.max(1, maxBottom - minTop),
   };
 }
 
@@ -3530,10 +5024,30 @@ function buildSceneviewLayoutPageHtml(
   .svBelowSection { margin-top: 4px; }
   .svBelowSection h2 { margin: 0 0 10px; font-size: 1rem; font-weight: 600; color: #ddd; }
   .svBelowPanel { border: 1px solid #333; border-radius: 8px; background: #0a0a12; padding: 12px 14px; }
-  .svSubscriberRoot { margin: 0 0 10px; }
+  .svSubscriberRoot {
+    margin: 0 0 8px;
+    padding: 8px 12px;
+    border: 1px solid #2e3448;
+    border-radius: 6px;
+    background: #161622;
+  }
+  .svSubscriberRoot:nth-child(even) { background: #1c1c2a; }
+  .svSubscriberRoot[open] {
+    background: #1e2434;
+    border-color: #3a4560;
+  }
   .svSubscriberRoot:last-child { margin-bottom: 0; }
-  .svSubscriberSummary { cursor: pointer; font-weight: 700; color: #e8e8e8; }
-  .svSubscriberBody { margin: 4px 0 0 0.4em; padding: 0; }
+  .svSubscriberSummary {
+    cursor: pointer;
+    font-weight: 400;
+    color: #e4e8f4;
+    list-style-position: outside;
+  }
+  .svSubscriberBody {
+    margin: 8px 0 0;
+    padding: 8px 0 0 10px;
+    border-top: 1px solid #2a3040;
+  }
   .svDetailsNode { margin: 2px 0 4px 0; }
   .svDetailsNode > summary { cursor: pointer; color: #b8d4ff; list-style-position: outside; }
   .svDetailsBody { margin: 2px 0 4px 0.8em; padding: 0; }
@@ -3585,7 +5099,7 @@ function openSceneviewLayoutPopup(
   sceneviewEntries,
   worklistMeta
 ) {
-  const bounds = getSceneviewMonitorDiagramBounds();
+  const bounds = getSceneviewDiagramBounds(worklistWindow, sceneviewEntries);
   const metrics = resolveSceneviewLayoutPopupMetrics(bounds, worklistWindow);
   const features = [
     'popup',
@@ -3711,34 +5225,6 @@ async function openSceneviewLayoutWorklistOnly(el, state) {
   }
 }
 
-function updateWorklistImageDisplayLabel(el, subscribers) {
-  if (!el.worklistImageDisplayLabel) {
-    return;
-  }
-  if (!subscribers || subscribers.size === 0) {
-    if (el.worklistImageDisplayLabel.hidden) {
-      return;
-    }
-    el.worklistImageDisplayLabel.textContent = '';
-    el.worklistImageDisplayLabel.hidden = true;
-    el.worklistImageDisplayLabel.title = '';
-    return;
-  }
-  const sorted = [...subscribers].sort();
-  const title = sorted.join(', ');
-  const text = `Image Displays: ${title}`;
-  if (
-    el.worklistImageDisplayLabel.textContent === text &&
-    el.worklistImageDisplayLabel.title === title &&
-    !el.worklistImageDisplayLabel.hidden
-  ) {
-    return;
-  }
-  el.worklistImageDisplayLabel.title = title;
-  el.worklistImageDisplayLabel.textContent = text;
-  el.worklistImageDisplayLabel.hidden = false;
-}
-
 function openSceneviewLayoutForConnectedDisplays(el, state) {
   if (!state.imageDisplaySubscribers?.size) {
     openSceneviewLayoutWorklistOnly(el, state).catch((err) => {
@@ -3751,39 +5237,13 @@ function openSceneviewLayoutForConnectedDisplays(el, state) {
   });
 }
 
-function updateOpenSceneviewsButton(el, state) {
-  if (!el.openSceneviewsBtn) {
-    return;
-  }
-  const wsConnected = state.wsState === 'connected';
-  const hasDisplay = Boolean(state.imageDisplaySubscribers?.size);
-  const enabled = hasDisplay ? wsConnected : true;
-  el.openSceneviewsBtn.disabled = !enabled;
-  const names = hasDisplay
-    ? [...state.imageDisplaySubscribers].sort().join(', ')
-    : '';
-  if (!hasDisplay) {
-    el.openSceneviewsBtn.title =
-      'Open worklist scene layout (no image display connected)';
-    return;
-  }
-  el.openSceneviewsBtn.title = wsConnected
-    ? `Open Scene Views for ${names}`
-    : 'Subscribe to the hub first';
-}
-
-function clearImageDisplayRequesters(state) {
-  state.imageDisplaySubscribers = new Set();
-}
-
-function refreshImageDisplayConnectionStatus(el, state) {
-  updateWorklistImageDisplayLabel(el, state.imageDisplaySubscribers);
-  updateOpenSceneviewsButton(el, state);
-}
-
 function updateStatusForIncomingContextRequest(el, state, message) {
   const subscriber = contextRequestSubscriber(message);
   if (!subscriber) {
+    return;
+  }
+  const requesterActors = extractActorKeywords(message?.['subscriber.actor']);
+  if (!requesterActors.includes(IMAGE_DISPLAY_ACTOR_KEYWORD)) {
     return;
   }
   if (!state.imageDisplaySubscribers) {
@@ -3999,19 +5459,31 @@ function applyWebsocketStatus(el, state, wsState) {
     case 'connected':
       setConnection(el, state, 'connected', 'Websocket connected');
       updateOpenSceneviewsButton(el, state);
+      startConferencePoll(el, state);
+      runWideStatusPoll(el, state).catch((err) => {
+        console.warn('[vtkCastClient] wide STATUS poll failed', err);
+      });
       break;
     case 'error':
+      stopConferencePoll(state);
+      setConferenceActive(el, state, false);
       clearImageDisplayRequesters(state);
+      clearResourceServerStatus(state);
       setConnection(el, state, 'error', 'Websocket error');
       updateWorklistImageDisplayLabel(el, null);
       updateOpenSceneviewsButton(el, state);
+      updateIdcClaudeBuildBtn(el, state);
       break;
     case 'disconnected':
     default:
+      stopConferencePoll(state);
+      setConferenceActive(el, state, false);
       clearImageDisplayRequesters(state);
+      clearResourceServerStatus(state);
       setConnection(el, state, 'disconnected', 'Websocket disconnected');
       updateWorklistImageDisplayLabel(el, null);
       updateOpenSceneviewsButton(el, state);
+      updateIdcClaudeBuildBtn(el, state);
       break;
   }
 }
@@ -4056,6 +5528,7 @@ function buildSessionConfig(el) {
 function ensureClient(el, state, recreate = false) {
   if (!state.client || recreate) {
     if (state.client) {
+      stopConferencePoll(state);
       state.client.delete();
     }
     state.client = vtkCastClient.newInstance({
@@ -4067,6 +5540,13 @@ function ensureClient(el, state, recreate = false) {
     state.client.onMessage((message) => {
       handleSubscriptionRemoved(el, state, message);
       handleIncomingGetRequest(el, state, message);
+      const event = message?.event;
+      const hubEvent = String(event?.['hub.event'] || '')
+        .trim()
+        .toLowerCase();
+      if (hubEvent === 'conference-start') {
+        handleConferenceStart(el, state, message);
+      }
       addMessage(
         el,
         state,
@@ -4223,6 +5703,9 @@ async function handleSubscribe(el, state) {
   if (result === 202) {
     addMessage(el, state, 'sent', 'Subscribe', {
       topic: el.topic.value.trim(),
+    });
+    runWideStatusPoll(el, state).catch((err) => {
+      console.warn('[vtkCastClient] wide STATUS poll failed', err);
     });
     return true;
   }
@@ -4591,6 +6074,7 @@ async function handleCastRequest(el, state) {
 }
 
 async function boot() {
+  applyCastWorklistFavicon();
   document.documentElement.classList.add(style.castExampleHtml);
   document.body.classList.add(style.castExampleBody);
   /* Inline + important so black wins when embedded (e.g. viewer shell overrides body). */
@@ -4674,6 +6158,22 @@ async function boot() {
     getResponseData: byId('getResponseData'),
     worklistContextDisplay: byId('worklistContextDisplay'),
     worklistOrganizationSelect: byId('worklistOrganizationSelect'),
+    idcClaudeBuildBtn: byId('idcClaudeBuildBtn'),
+    idcClaudeOverlay: byId('idcClaudeOverlay'),
+    idcClaudeAvailability: byId('idcClaudeAvailability'),
+    idcClaudePrompt: byId('idcClaudePrompt'),
+    idcClaudeOrgLabel: byId('idcClaudeOrgLabel'),
+    idcClaudeStatusRow: byId('idcClaudeStatusRow'),
+    idcClaudeStatusSpinner: byId('idcClaudeStatusSpinner'),
+    idcClaudeStatus: byId('idcClaudeStatus'),
+    idcClaudeCitation: byId('idcClaudeCitation'),
+    idcClaudeSqlSection: byId('idcClaudeSqlSection'),
+    idcClaudeToggleSqlBtn: byId('idcClaudeToggleSqlBtn'),
+    idcClaudeSqlPanel: byId('idcClaudeSqlPanel'),
+    idcClaudeResultsSection: byId('idcClaudeResultsSection'),
+    idcClaudeResults: byId('idcClaudeResults'),
+    idcClaudeCancelBtn: byId('idcClaudeCancelBtn'),
+    idcClaudeBuildConfirmBtn: byId('idcClaudeBuildConfirmBtn'),
     worklistImageDisplayLabel: byId('worklistImageDisplayLabel'),
     worklistPanel: byId('worklistPanel'),
     castStandardSelect: document.getElementById('castStandardSelect'),
@@ -4692,9 +6192,25 @@ async function boot() {
     imageDisplaySubscribers: new Set(),
     castHeaderStatus: 'disconnected',
     castHeaderDetailText: 'Not connected',
+    conferenceActive: false,
+    conferenceTitle: '',
+    conferencePollTimer: null,
     wsState: 'disconnected',
     openWorklistSampleId: null,
     hubSampleStudies: [],
+    idcCustomWorklists: [],
+    idcClaudeBuildBusy: false,
+    idcClaudeAvailable: false,
+    idcClaudeJobRunning: false,
+    idcClaudePendingResults: null,
+    idcClaudeLastSearchSql: '',
+    idcClaudeSqlVisible: false,
+    idcClaudeAddedStudyIds: new Set(),
+    idcClaudeAddingStudyIds: new Set(),
+    worklistUrlSelectionApplied: false,
+    worklistOrganizationUserSelected: false,
+    wideStatusPollBusy: false,
+    lastWideStatusPollAt: 0,
     sceneviewLayoutBusy: false,
     lastAuthCode: '',
     lastAuthUserName: getStoredCastUserName(),
@@ -4702,10 +6218,14 @@ async function boot() {
       new URLSearchParams(window.location.search).get('topic') || '',
   };
 
+  state.idcCustomWorklists = loadIdcCustomWorklistsFromSession(el);
+  refreshWorklistOrganizationSelect(el, state);
+
   updateWorklistContextDisplay(el, state);
 
   wireCastHeaderMenu(el, root);
   wireCastHeaderStatusMenu(el, state);
+  wireIdcClaudeDialog(el, state);
 
   applyCastStandardToPage(el, selectedCastStandard(el));
   el.castStandardSelect?.addEventListener('change', () => {
@@ -4713,6 +6233,7 @@ async function boot() {
   });
 
   el.worklistOrganizationSelect.addEventListener('change', () => {
+    state.worklistOrganizationUserSelected = true;
     renderWorklistPanel(
       el.worklistPanel,
       el.worklistOrganizationSelect.value,
@@ -4729,6 +6250,7 @@ async function boot() {
   );
   updateWorklistContextControls(el, state);
   updateOpenSceneviewsButton(el, state);
+  updateIdcClaudeBuildBtn(el, state);
 
   fillActorPresetSelect(el.publishActorPreset);
   fillTargetActorPresetSelect(el.publishTargetActorPreset);
