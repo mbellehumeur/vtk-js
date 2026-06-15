@@ -59,6 +59,7 @@ import vtkCastClient, {
   selectFirstMatchingHubKey,
 } from 'vtk.js/Sources/IO/Core/CastClient';
 import html2canvas from 'html2canvas';
+import { zipSync } from 'fflate';
 import { isRequestEvent, requestEventFor } from '../eventNames';
 import idcPortalDemoSeries2 from './idc-data/idc-portal-demo-series-2.json';
 import idcLungScreenManifest from './idc-data/idc-lung-screen-manifest.json';
@@ -69,6 +70,8 @@ import style from './CastClient.module.css';
 const CAST_RADIO_ICON_SVG = `<svg class="${style.castHeaderStatusSvg}" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>`;
 
 const WORKLIST_DOWNLOAD_ICON_SVG = `<svg class="${style.worklistDownloadIcon}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
+
+const WORKLIST_DOWNLOAD_FETCH_CONCURRENCY = 8;
 
 // Same gear icon as OHIF ViewerHeader (Icons.GearSettings).
 const CAST_SETTINGS_ICON_SVG = `<svg class="${style.castHeaderMenuBtnIcon}" width="20" height="20" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M20.2015688,10.2525279 C20.0232123,10.6274217 20.0120959,11.0603422 20.1709774,11.4438954 C20.3298588,11.8274487 20.6438515,12.1256974 21.0350638,12.2646554 L22.0250838,12.6168364 C22.6105106,12.8246232 23.00167,13.3785255 23.00167,13.9997339 C23.00167,14.6209423 22.6105106,15.1748446 22.0250838,15.3826314 L21.0350638,15.7348124 C20.6438515,15.8737704 20.3298588,16.1720191 20.1709774,16.5555724 C20.0120959,16.9391256 20.0232123,17.3720461 20.2015688,17.7469399 L20.6539257,18.6946982 C20.9219287,19.2558525 20.8071211,19.9250005 20.367394,20.3647276 C19.9276669,20.8044547 19.2585189,20.9192624 18.6973645,20.6512594 L17.748041,20.2004677 C17.3731472,20.0221111 16.9402267,20.0109948 16.5566735,20.1698763 C16.1731202,20.3287577 15.8748715,20.6427504 15.7359135,21.0339627 L15.3837325,22.0239827 C15.1756233,22.6088399 14.6220059,22.9994678 14.0012263,22.9994678 C13.3804467,22.9994678 12.8268293,22.6088399 12.6187202,22.0239827 L12.2665391,21.0339627 C12.127404,20.6426994 11.8290064,20.3287067 11.4453321,20.1698369 C11.0616578,20.0109671 10.6286351,20.0220972 10.253629,20.2004677 L9.30587073,20.6512594 C8.7446872,20.9203194 8.07479926,20.8059063 7.63473092,20.365838 C7.19466259,19.9257696 7.08024945,19.2558817 7.34930952,18.6946982 L7.80010123,17.7453747 C7.97845774,17.3704809 7.98957409,16.9375604 7.83069263,16.5540071 C7.67181118,16.1704539 7.35781846,15.8722052 6.96660615,15.7332471 L5.97658618,15.3810661 C5.39115942,15.1732793 5,14.619377 5,13.9981686 C5,13.3769603 5.39115942,12.8230579 5.97658618,12.6152712 L6.96660615,12.2630902 C7.35740035,12.124078 7.67105878,11.8260915 7.82990186,11.4429292 C7.98874494,11.0597669 7.97791757,10.6272622 7.80010123,10.2525279 L7.34930952,9.30320437 C7.08024945,8.74202085 7.19466259,8.0721329 7.63473092,7.63206456 C8.07479926,7.19199623 8.7446872,7.07758309 9.30587073,7.34664317 L10.2551942,7.79743487 C10.6298363,7.97533367 11.0622628,7.98639209 11.445508,7.82787471 C11.8287532,7.66935733 12.1270239,7.35606892 12.2665391,6.96550504 L12.6187202,5.97548507 C12.8268293,5.39062793 13.3804467,5 14.0012263,5 C14.6220059,5 15.1756233,5.39062793 15.3837325,5.97548507 L15.7359135,6.96550504 C15.8748715,7.35671735 16.1731202,7.67071008 16.5566735,7.82959153 C16.9402267,7.98847298 17.3731472,7.97735664 17.748041,7.79900012 L18.6973645,7.34664317 C19.2585189,7.07864018 19.9276669,7.19344783 20.367394,7.63317492 C20.8071211,8.07290202 20.9219287,8.74204999 20.6539257,9.30320437 L20.2015688,10.2525279 Z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14.000835" cy="13.9997339" r="3.52181017" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -539,6 +542,10 @@ const VOLVIEW_VIEWER_HUB_PATH = '/volview-client/';
 /** OHIF: viewer route on hub root SPA (`/viewer`); same in local dev. */
 const OHIF_VIEWER_URL_LOCAL = 'http://localhost:3000/viewer/';
 const OHIF_VIEWER_HUB_PATH = '/viewer/';
+
+const CAST_VIEWER_OPEN_TITLE_DISABLED = 'Subscribe to the hub first';
+const CAST_VIEWER_OPEN_TITLE_OHIF = 'Open an OHIF viewer instance';
+const CAST_VIEWER_OPEN_TITLE_VOLVIEW = 'Open a VolView viewer instance';
 
 function hubOriginFromEndpoint(hubEndpoint) {
   const trimmed = String(hubEndpoint || '').trim();
@@ -1561,28 +1568,49 @@ function worklistSampleDownloadFiles(sample) {
   );
 }
 
+function worklistDownloadFileLabel(file) {
+  const name = String(file?.fileName || '').trim();
+  if (name) {
+    return name;
+  }
+  const url = String(file?.url || '').trim();
+  const slash = url.lastIndexOf('/');
+  return slash >= 0 ? url.slice(slash + 1) : 'file';
+}
+
+function worklistDownloadZipName(sample) {
+  const base = String(sample?.id || sample?.name || 'study')
+    .trim()
+    .replace(/[^\w.-]+/g, '_');
+  return base.toLowerCase().endsWith('.zip') ? base : `${base}.zip`;
+}
+
 function worklistSampleDownloadTitle(sample) {
   const files = worklistSampleDownloadFiles(sample);
   if (!files.length) {
     return '';
   }
-  const fileName = String(files[0].fileName || '').trim();
   if (files.length === 1) {
+    const fileName = worklistDownloadFileLabel(files[0]);
     return fileName ? `Download ${fileName}` : 'Download file';
   }
-  return fileName
-    ? `Download ${fileName} (first of ${files.length} files)`
-    : `Download first of ${files.length} files`;
+  const zipName = worklistDownloadZipName(sample);
+  return `Download all ${files.length} files as ${zipName}`;
 }
 
-function handleWorklistSampleDownload(sample) {
-  const files = worklistSampleDownloadFiles(sample);
-  if (!files.length) {
+function setWorklistDownloadBtnBusy(downloadBtn, sample, busy) {
+  if (!downloadBtn) {
     return;
   }
-  const file = files[0];
+  downloadBtn.disabled = busy;
+  const title = busy ? 'Downloading…' : worklistSampleDownloadTitle(sample);
+  downloadBtn.title = title;
+  downloadBtn.setAttribute('aria-label', title);
+}
+
+function triggerWorklistAnchorDownload(file) {
   const url = String(file.url).trim();
-  const fileName = String(file.fileName || '').trim();
+  const fileName = worklistDownloadFileLabel(file);
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.target = '_blank';
@@ -1593,6 +1621,88 @@ function handleWorklistSampleDownload(sample) {
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
+}
+
+function triggerWorklistBlobDownload(blob, fileName) {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+function worklistDownloadFileBatches(files, batchSize) {
+  const batches = [];
+  for (let i = 0; i < files.length; i += batchSize) {
+    batches.push(files.slice(i, i + batchSize));
+  }
+  return batches;
+}
+
+async function fetchWorklistFilesForZip(files) {
+  const zipEntries = {};
+  const batches = worklistDownloadFileBatches(
+    files,
+    WORKLIST_DOWNLOAD_FETCH_CONCURRENCY
+  );
+  await batches.reduce(async (previousBatch, batch) => {
+    await previousBatch;
+    const results = await Promise.all(
+      batch.map(async (file) => {
+        const url = String(file.url).trim();
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(
+            `HTTP ${response.status} for ${worklistDownloadFileLabel(file)}`
+          );
+        }
+        return {
+          name: worklistDownloadFileLabel(file),
+          bytes: new Uint8Array(await response.arrayBuffer()),
+        };
+      })
+    );
+    results.forEach(({ name, bytes }) => {
+      zipEntries[name] = bytes;
+    });
+  }, Promise.resolve());
+  return zipEntries;
+}
+
+async function handleWorklistSampleDownload(el, state, sample, downloadBtn) {
+  const files = worklistSampleDownloadFiles(sample);
+  if (!files.length || downloadBtn?.disabled) {
+    return;
+  }
+  setWorklistDownloadBtnBusy(downloadBtn, sample, true);
+  try {
+    if (files.length === 1) {
+      triggerWorklistAnchorDownload(files[0]);
+      return;
+    }
+    const zipEntries = await fetchWorklistFilesForZip(files);
+    const blob = new Blob([zipSync(zipEntries)], {
+      type: 'application/zip',
+    });
+    triggerWorklistBlobDownload(blob, worklistDownloadZipName(sample));
+    addMessage(el, state, 'received', 'Download', {
+      study: sample.name || sample.id,
+      fileCount: files.length,
+      zipName: worklistDownloadZipName(sample),
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : String(error || 'Download failed');
+    console.error('[vtkCastClient] worklist download failed', error);
+    addMessage(el, state, 'err', 'Download', message);
+  } finally {
+    setWorklistDownloadBtnBusy(downloadBtn, sample, false);
+  }
 }
 
 function worklistSampleSizeLabel(sample) {
@@ -1704,7 +1814,11 @@ function renderWorklistStudyList(panelEl, studies, ariaLabel, el, state) {
       downloadBtn.setAttribute('aria-label', downloadBtn.title);
       downloadBtn.addEventListener('click', (event) => {
         event.stopPropagation();
-        handleWorklistSampleDownload(sample);
+        handleWorklistSampleDownload(el, state, sample, downloadBtn).catch(
+          (err) => {
+            console.error('[vtkCastClient] worklist download failed', err);
+          }
+        );
       });
       size.append(downloadBtn);
     }
@@ -1859,10 +1973,10 @@ function buildPageHtml() {
             type="button"
             id="idcClaudeBuildBtn"
             class="${style.headerViewerBtn}"
-            title="Open IDC Claude — natural-language IDC worklist"
+            title="IDC Claude — natural-language IDC worklist"
           >${IDC_MARK_IMG}<span class="${
     style.headerViewerBtnLabel
-  }">Open IDC Claude</span></button>
+  }">IDC Claude</span></button>
         </div>
       </div>
       <div class="${style.worklistSceneviewActions}">
@@ -1872,22 +1986,32 @@ function buildPageHtml() {
           hidden
         ></span>
         <div class="${style.castHeaderViewerButtons}">
-          <button type="button" id="openVolViewBtn" class="${
-            style.headerViewerBtn
-          }" disabled>${VOLVIEW_MARK_SVG}<span class="${
+          <button
+            type="button"
+            id="openOhifBtn"
+            class="${style.headerViewerBtn}"
+            title="${CAST_VIEWER_OPEN_TITLE_DISABLED}"
+            disabled
+          >${OHIF_MARK_SVG}<span class="${
     style.headerViewerBtnLabel
-  }">Open VolView</span></button>
-          <button type="button" id="openOhifBtn" class="${
-            style.headerViewerBtn
-          }" disabled>${OHIF_MARK_SVG}<span class="${
+  }">OHIF</span></button>
+          <button
+            type="button"
+            id="openVolViewBtn"
+            class="${style.headerViewerBtn}"
+            title="${CAST_VIEWER_OPEN_TITLE_DISABLED}"
+            disabled
+          >${VOLVIEW_MARK_SVG}<span class="${
     style.headerViewerBtnLabel
-  }">Open OHIF</span></button>
+  }">VolView</span></button>
         </div>
         <button type="button" id="openSceneviewsBtn" class="${
           style.headerViewerBtn
-        }" disabled>${SLICER_MARK_IMG}<span class="${
+        } ${
+    style.worklistSceneviewsBtn
+  }" disabled>${SLICER_MARK_IMG}<span class="${
     style.headerViewerBtnLabel
-  }">Open Scene Views</span></button>
+  }">Scene Views</span></button>
       </div>
     </div>
     <div id="worklistPanel" class="${style.worklistPanel}"></div>
@@ -2147,6 +2271,90 @@ function buildPageHtml() {
       </div>
     </div>
   </div>
+  <div id="castConferenceOverlay" class="${style.castAboutOverlay}" hidden>
+    <div
+      class="${style.castConferenceDialog}"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="castConferenceTitle"
+      tabindex="-1"
+    >
+      <h2 id="castConferenceTitle" class="${
+        style.castAboutTitle
+      }">Conferencing</h2>
+      <p id="castConferenceStatus" class="${
+        style.castConferenceStatus
+      }" role="alert" hidden></p>
+      <div id="castConferenceCreateSection">
+        <div class="${style.castConferenceField}">
+          <label class="${
+            style.castConferenceFieldLabel
+          }" for="castConferenceTitleSelect">
+            Conference title
+          </label>
+          <select id="castConferenceTitleSelect" class="${
+            style.castConferenceSelect
+          }">
+            <option value="">Select a conference title</option>
+            <option value="Test conference">Test conference</option>
+            <option value="US annotations" selected>US annotations</option>
+            <option value="Tumor Board">Tumor Board</option>
+            <option value="Case discussion">Case discussion</option>
+            <option value="Pedicle screw">Pedicle screw</option>
+            <option value="other">Other…</option>
+          </select>
+        </div>
+        <div id="castConferenceCustomTitleGroup" class="${
+          style.castConferenceField
+        }" hidden>
+          <label class="${
+            style.castConferenceFieldLabel
+          }" for="castConferenceCustomTitle">
+            Custom title
+          </label>
+          <input
+            type="text"
+            id="castConferenceCustomTitle"
+            class="${style.castConferenceInput}"
+            placeholder="Enter conference title"
+          />
+        </div>
+        <div class="${style.castConferenceField}">
+          <span class="${style.castConferenceFieldLabel}">Users</span>
+          <div id="castConferenceTopicsList" class="${
+            style.castConferenceTopicsPanel
+          }">
+            <p class="${style.castConferenceMuted}">Loading users…</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          id="castConferenceCreateBtn"
+          class="${style.headerViewerBtn} ${style.castConferencePrimaryBtn}"
+        >
+          Create conference
+        </button>
+      </div>
+      <div id="castConferenceManageSection" hidden>
+        <div class="${style.castConferenceFieldLabel}">Manage conference</div>
+        <div id="castConferenceInfo" class="${style.castConferenceInfo}"></div>
+        <button
+          type="button"
+          id="castConferenceExitBtn"
+          class="${style.headerViewerBtn} ${style.castConferencePrimaryBtn}"
+        >
+          Leave conference
+        </button>
+      </div>
+      <div class="${style.castAboutActions}">
+        <button type="button" id="castConferenceCloseBtn" class="${
+          style.headerViewerBtn
+        }">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
   </div>`;
 }
 
@@ -2305,11 +2513,31 @@ function statusHubNameMeta(el) {
 }
 
 const CAST_CONFERENCE_POLL_MS = 30_000;
+const CAST_CONFERENCE_EXIT_ACK_MS = 1200;
+
+function conferenceHostTopic(conference) {
+  if (!conference) {
+    return '';
+  }
+  return String(conference.hostTopic || conference.user || '').trim();
+}
+
+function isCastConferenceHost(topic, conference) {
+  const host = conferenceHostTopic(conference);
+  const normalizedTopic = String(topic || '').trim();
+  if (!normalizedTopic || !host) {
+    return false;
+  }
+  return (
+    normalizedTopic === host ||
+    normalizedTopic.toLowerCase() === host.toLowerCase()
+  );
+}
 
 function isCastConferenceParticipant(topic, subscriberName, conference) {
   const normalizedTopic = String(topic || '').trim();
   const normalizedSubscriber = String(subscriberName || '').trim();
-  const host = String(conference?.user ?? '').trim();
+  const host = conferenceHostTopic(conference);
   const attendeeTopics = Array.isArray(conference?.topics)
     ? conference.topics.map((value) => String(value).trim()).filter(Boolean)
     : [];
@@ -2323,6 +2551,22 @@ function isCastConferenceParticipant(topic, subscriberName, conference) {
     return true;
   }
   return false;
+}
+
+function normalizeConferenceParticipants(raw) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const seen = new Set();
+  const out = [];
+  raw.forEach((entry) => {
+    const name = String(entry ?? '').trim();
+    if (name && !seen.has(name)) {
+      seen.add(name);
+      out.push(name);
+    }
+  });
+  return out;
 }
 
 function findActiveCastConference(topic, subscriberName, conferences) {
@@ -2363,6 +2607,7 @@ async function resolveCastConferenceState(el, state) {
   return {
     active: Boolean(match),
     title: String(match?.title ?? '').trim(),
+    participants: normalizeConferenceParticipants(match?.participants),
   };
 }
 
@@ -2426,6 +2671,12 @@ function castHeaderStatusTooltipLines(el, state, status, detailText) {
         ? `Conference: ${state.conferenceTitle}`
         : 'Conference active'
     );
+    const participants = Array.isArray(state.conferenceParticipants)
+      ? state.conferenceParticipants
+      : [];
+    if (participants.length) {
+      lines.push(`Participants: ${participants.join(', ')}`);
+    }
   }
   return lines.join('\n');
 }
@@ -2464,9 +2715,17 @@ function setConnection(el, state, status, text) {
   updateCastHeaderStatus(el, state);
 }
 
-function setConferenceActive(el, state, active, title = '') {
+function setConferenceActive(el, state, active, participants, title = '') {
   state.conferenceActive = active;
-  state.conferenceTitle = active ? String(title || '').trim() : '';
+  if (!active) {
+    state.conferenceTitle = '';
+    state.conferenceParticipants = [];
+  } else {
+    state.conferenceTitle = String(title || '').trim();
+    if (participants !== undefined) {
+      state.conferenceParticipants = participants;
+    }
+  }
   updateCastHeaderStatus(el, state);
 }
 
@@ -2482,8 +2741,11 @@ async function syncConferenceActive(el, state) {
     setConferenceActive(el, state, false);
     return;
   }
-  const { active, title } = await resolveCastConferenceState(el, state);
-  setConferenceActive(el, state, active, title);
+  const { active, title, participants } = await resolveCastConferenceState(
+    el,
+    state
+  );
+  setConferenceActive(el, state, active, participants, title);
 }
 
 function startConferencePoll(el, state) {
@@ -2501,8 +2763,425 @@ function handleConferenceStart(el, state, message) {
     context && typeof context === 'object' && !Array.isArray(context)
       ? String(context.title ?? '').trim()
       : '';
-  setConferenceActive(el, state, true, title);
+  const participants = normalizeConferenceParticipants(
+    context && typeof context === 'object' && !Array.isArray(context)
+      ? context.participants
+      : undefined
+  );
+  setConferenceActive(el, state, true, participants, title);
   syncConferenceActive(el, state).catch(() => {});
+}
+
+function handleConferenceEnd(el, state, message) {
+  const event = message?.event;
+  const context = event?.context;
+  const leaveTopic =
+    context && typeof context === 'object' && !Array.isArray(context)
+      ? String(context.leaveTopic ?? '').trim()
+      : '';
+  const session = state?.client?.getSessionConfig?.();
+  const topic = String(el.topic?.value?.trim() || session?.topic || '').trim();
+  if (!leaveTopic || !topic || leaveTopic === topic) {
+    setConferenceActive(el, state, false);
+  }
+  syncConferenceActive(el, state).catch(() => {});
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function conferenceSessionTopic(el, state) {
+  const session = state?.client?.getSessionConfig?.();
+  return String(el.topic?.value?.trim() || session?.topic || '').trim();
+}
+
+function conferenceSessionSubscriber(el, state) {
+  const session = state?.client?.getSessionConfig?.();
+  return String(
+    el.subscriberName?.value?.trim() || session?.subscriberName || ''
+  ).trim();
+}
+
+async function fetchCastConferenceTopics(hubEndpoint) {
+  const origin = hubOriginFromEndpoint(hubEndpoint);
+  if (!origin) {
+    return [];
+  }
+  const apiUrl = new URL('/api/hub/conference-topics', origin).href;
+  try {
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+      return [];
+    }
+    const data = await response.json();
+    if (!Array.isArray(data)) {
+      return [];
+    }
+    return data
+      .map((entry) => String(entry).trim())
+      .filter((topic) => topic && topic !== '*');
+  } catch {
+    return [];
+  }
+}
+
+async function createCastConference(hubEndpoint, hostTopic, title, topics) {
+  const origin = hubOriginFromEndpoint(hubEndpoint);
+  if (!origin) {
+    throw new Error('Invalid hub endpoint');
+  }
+  const apiUrl = new URL('/api/hub/conference', origin).href;
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      hostTopic: String(hostTopic || '').trim(),
+      title: String(title || '').trim(),
+      topics,
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `HTTP ${response.status}`);
+  }
+}
+
+async function deleteCastConference(hubEndpoint, hostTopic, leaveTopic) {
+  const origin = hubOriginFromEndpoint(hubEndpoint);
+  if (!origin) {
+    throw new Error('Invalid hub endpoint');
+  }
+  const apiUrl = new URL('/api/hub/conference', origin).href;
+  const body = { hostTopic: String(hostTopic || '').trim() };
+  const leave = String(leaveTopic || '').trim();
+  if (leave) {
+    body.leaveTopic = leave;
+  }
+  const response = await fetch(apiUrl, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `HTTP ${response.status}`);
+  }
+}
+
+function setCastConferenceDialogStatus(el, kind, message) {
+  const node = el.castConferenceStatus;
+  if (!node) {
+    return;
+  }
+  const text = String(message || '').trim();
+  if (!text) {
+    node.hidden = true;
+    node.textContent = '';
+    node.classList.remove(
+      style.castConferenceStatusSuccess,
+      style.castConferenceStatusError
+    );
+    return;
+  }
+  node.hidden = false;
+  node.textContent = text;
+  node.classList.toggle(style.castConferenceStatusSuccess, kind === 'success');
+  node.classList.toggle(style.castConferenceStatusError, kind === 'error');
+}
+
+function getCastConferenceDialogTitle(el) {
+  const preset = String(el.castConferenceTitleSelect?.value || '').trim();
+  if (preset === 'other') {
+    return String(el.castConferenceCustomTitle?.value || '').trim();
+  }
+  return preset;
+}
+
+function getCastConferenceDialogSelectedTopics(el) {
+  if (!el.castConferenceTopicsList) {
+    return [];
+  }
+  const checkboxes = el.castConferenceTopicsList.querySelectorAll(
+    'input[type="checkbox"][name="castConferenceTopic"]:checked'
+  );
+  return Array.from(checkboxes)
+    .map((input) => String(input.value || '').trim())
+    .filter(Boolean);
+}
+
+function renderCastConferenceDialogTopics(el, topics, sessionTopic) {
+  const panel = el.castConferenceTopicsList;
+  if (!panel) {
+    return;
+  }
+  panel.replaceChildren();
+  if (!topics.length) {
+    const empty = document.createElement('p');
+    empty.className = style.castConferenceMuted;
+    empty.textContent = 'No users available';
+    panel.appendChild(empty);
+    return;
+  }
+  topics.forEach((topic) => {
+    const row = document.createElement('label');
+    row.className = style.castConferenceTopicRow;
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.name = 'castConferenceTopic';
+    input.value = topic;
+    const normalizedSession = String(sessionTopic || '').trim();
+    if (
+      normalizedSession &&
+      (topic === normalizedSession ||
+        topic.toLowerCase() === normalizedSession.toLowerCase())
+    ) {
+      input.checked = true;
+    }
+    const text = document.createElement('span');
+    text.textContent = topic;
+    row.appendChild(input);
+    row.appendChild(text);
+    panel.appendChild(row);
+  });
+}
+
+function updateCastConferenceDialogSections(el, state, conferences) {
+  const sessionTopic = conferenceSessionTopic(el, state);
+  const match = findActiveCastConference(
+    sessionTopic,
+    conferenceSessionSubscriber(el, state),
+    conferences
+  );
+  const createSection = el.castConferenceCreateSection;
+  const manageSection = el.castConferenceManageSection;
+  if (createSection) {
+    createSection.hidden = Boolean(match);
+  }
+  if (manageSection) {
+    manageSection.hidden = !match;
+  }
+  if (match && el.castConferenceInfo) {
+    const topics = Array.isArray(match.topics)
+      ? match.topics.join(', ')
+      : 'None';
+    const host = conferenceHostTopic(match) || 'N/A';
+    el.castConferenceInfo.innerHTML = `<div><strong>Title:</strong> ${escapeHtml(
+      match.title || 'N/A'
+    )}</div><div><strong>Host topic:</strong> ${escapeHtml(
+      host
+    )}</div><div><strong>Users:</strong> ${escapeHtml(topics || 'None')}</div>`;
+  }
+  if (el.castConferenceExitBtn) {
+    const hostAction = match
+      ? isCastConferenceHost(sessionTopic, match)
+      : false;
+    el.castConferenceExitBtn.textContent = hostAction
+      ? 'End conference'
+      : 'Leave conference';
+  }
+}
+
+async function refreshCastConferenceDialog(el, state) {
+  const hubEndpoint = String(el.hubEndpoint?.value || '').trim();
+  const sessionTopic = conferenceSessionTopic(el, state);
+  if (!hubEndpoint || state.wsState !== 'connected') {
+    renderCastConferenceDialogTopics(el, [], sessionTopic);
+    updateCastConferenceDialogSections(el, state, []);
+    return;
+  }
+  const [topics, conferences] = await Promise.all([
+    fetchCastConferenceTopics(hubEndpoint),
+    fetchCastConferences(hubEndpoint),
+  ]);
+  const match = findActiveCastConference(
+    sessionTopic,
+    conferenceSessionSubscriber(el, state),
+    conferences
+  );
+  if (!match) {
+    renderCastConferenceDialogTopics(el, topics, sessionTopic);
+  }
+  updateCastConferenceDialogSections(el, state, conferences);
+  await syncConferenceActive(el, state);
+}
+
+function openCastConferenceDialog(el, state) {
+  if (!el.castConferenceOverlay) {
+    return;
+  }
+  setCastConferenceDialogStatus(el, '', '');
+  if (el.castConferenceTitleSelect) {
+    el.castConferenceTitleSelect.value = 'US annotations';
+  }
+  if (el.castConferenceCustomTitle) {
+    el.castConferenceCustomTitle.value = '';
+  }
+  if (el.castConferenceCustomTitleGroup) {
+    el.castConferenceCustomTitleGroup.hidden = true;
+  }
+  el.castConferenceOverlay.hidden = false;
+  const dialog = el.castConferenceOverlay.firstElementChild;
+  if (dialog instanceof HTMLElement) {
+    dialog.focus({ preventScroll: true });
+  }
+  refreshCastConferenceDialog(el, state).catch(() => {});
+}
+
+function closeCastConferenceDialog(el) {
+  if (!el.castConferenceOverlay) {
+    return;
+  }
+  el.castConferenceOverlay.hidden = true;
+  setCastConferenceDialogStatus(el, '', '');
+}
+
+async function handleCastConferenceDialogCreate(el, state) {
+  const hubEndpoint = String(el.hubEndpoint?.value || '').trim();
+  const sessionTopic = conferenceSessionTopic(el, state);
+  const title = getCastConferenceDialogTitle(el);
+  const selectedTopics = getCastConferenceDialogSelectedTopics(el);
+  const createBtn = el.castConferenceCreateBtn;
+
+  if (state.wsState !== 'connected') {
+    setCastConferenceDialogStatus(
+      el,
+      'error',
+      'Connect to the Cast hub first.'
+    );
+    return;
+  }
+  if (!sessionTopic) {
+    setCastConferenceDialogStatus(
+      el,
+      'error',
+      'Cast topic is required to host a conference.'
+    );
+    return;
+  }
+  if (!title) {
+    setCastConferenceDialogStatus(el, 'error', 'Conference title is required.');
+    return;
+  }
+  if (!selectedTopics.length) {
+    setCastConferenceDialogStatus(
+      el,
+      'error',
+      'Select at least one attendee topic.'
+    );
+    return;
+  }
+
+  if (createBtn) {
+    createBtn.disabled = true;
+    createBtn.textContent = 'Creating…';
+  }
+  setCastConferenceDialogStatus(el, '', '');
+  try {
+    await createCastConference(
+      hubEndpoint,
+      sessionTopic,
+      title,
+      selectedTopics
+    );
+    setCastConferenceDialogStatus(el, 'success', 'Conference created.');
+    await refreshCastConferenceDialog(el, state);
+  } catch (error) {
+    setCastConferenceDialogStatus(
+      el,
+      'error',
+      error instanceof Error ? error.message : 'Failed to create conference.'
+    );
+  } finally {
+    if (createBtn) {
+      createBtn.disabled = false;
+      createBtn.textContent = 'Create conference';
+    }
+  }
+}
+
+async function handleCastConferenceDialogExit(el, state) {
+  const hubEndpoint = String(el.hubEndpoint?.value || '').trim();
+  const sessionTopic = conferenceSessionTopic(el, state);
+  const conferences = await fetchCastConferences(hubEndpoint);
+  const match = findActiveCastConference(
+    sessionTopic,
+    conferenceSessionSubscriber(el, state),
+    conferences
+  );
+  if (!match) {
+    await refreshCastConferenceDialog(el, state);
+    return;
+  }
+  const hostTopic = conferenceHostTopic(match);
+  const hostAction = isCastConferenceHost(sessionTopic, match);
+
+  const exitBtn = el.castConferenceExitBtn;
+  if (exitBtn) {
+    exitBtn.disabled = true;
+    exitBtn.textContent = hostAction ? 'Ending…' : 'Leaving…';
+  }
+  setCastConferenceDialogStatus(el, '', '');
+  try {
+    await deleteCastConference(
+      hubEndpoint,
+      hostTopic,
+      hostAction ? undefined : sessionTopic
+    );
+    await syncConferenceActive(el, state);
+    setCastConferenceDialogStatus(
+      el,
+      'success',
+      hostAction ? 'Conference ended.' : 'Left conference.'
+    );
+    await new Promise((resolve) => {
+      setTimeout(resolve, CAST_CONFERENCE_EXIT_ACK_MS);
+    });
+    closeCastConferenceDialog(el);
+  } catch (error) {
+    setCastConferenceDialogStatus(
+      el,
+      'error',
+      error instanceof Error ? error.message : 'Failed to update conference.'
+    );
+  } finally {
+    if (exitBtn) {
+      exitBtn.disabled = false;
+      exitBtn.textContent = hostAction ? 'End conference' : 'Leave conference';
+    }
+  }
+}
+
+function wireCastConferenceDialog(el, state) {
+  el.castConferenceTitleSelect?.addEventListener('change', () => {
+    const showOther =
+      String(el.castConferenceTitleSelect?.value || '') === 'other';
+    if (el.castConferenceCustomTitleGroup) {
+      el.castConferenceCustomTitleGroup.hidden = !showOther;
+    }
+  });
+  el.castConferenceCreateBtn?.addEventListener('click', () => {
+    handleCastConferenceDialogCreate(el, state).catch(() => {});
+  });
+  el.castConferenceExitBtn?.addEventListener('click', () => {
+    handleCastConferenceDialogExit(el, state).catch(() => {});
+  });
+  el.castConferenceCloseBtn?.addEventListener('click', () => {
+    closeCastConferenceDialog(el);
+  });
+  el.castConferenceOverlay?.addEventListener('click', (event) => {
+    if (event.target === el.castConferenceOverlay) {
+      closeCastConferenceDialog(el);
+    }
+  });
+}
+
+function openCastConferenceClient(el, state) {
+  openCastConferenceDialog(el, state);
 }
 
 function readStoredCastTheme() {
@@ -2878,6 +3557,10 @@ function wireCastHeaderMenu(el, root) {
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
+      if (el.castConferenceOverlay && !el.castConferenceOverlay.hidden) {
+        closeCastConferenceDialog(el);
+        return;
+      }
       if (el.castAboutOverlay && !el.castAboutOverlay.hidden) {
         closeCastAboutDialog(el);
         return;
@@ -2890,22 +3573,6 @@ function wireCastHeaderMenu(el, root) {
       closeCastHeaderStatusMenu(el);
     }
   });
-}
-
-function getCastConferencePopupFeatures() {
-  const popupWidth = 380;
-  const popupHeight = 288;
-  const top = Math.max(0, Math.floor((window.screen.height - popupHeight) / 2));
-  const left = Math.max(0, Math.floor((window.screen.width - popupWidth) / 2));
-  return [
-    'popup',
-    `width=${popupWidth}`,
-    `height=${popupHeight}`,
-    `left=${left}`,
-    `top=${top}`,
-    'noopener',
-    'noreferrer',
-  ].join(',');
 }
 
 function getCastViewerPopupFeatures(viewerKind) {
@@ -2960,24 +3627,6 @@ function openHubAdminPortal(el) {
   window.open(url, 'castAdminPortalWindow', getCastViewerPopupFeatures());
 }
 
-function openCastConferenceClient(el) {
-  const hubUrl = new URL(el.hubEndpoint.value.trim());
-  const url = new URL('/api/hub/conference-client', hubUrl.origin);
-  const subscriberName = el.subscriberName?.value?.trim();
-  const topic = el.topic?.value?.trim();
-  if (subscriberName) {
-    url.searchParams.set('subscriberName', subscriberName);
-  }
-  if (topic) {
-    url.searchParams.set('topic', topic);
-  }
-  window.open(
-    url.toString(),
-    'castConferenceClientWindow',
-    getCastConferencePopupFeatures()
-  );
-}
-
 function wireCastHeaderStatusMenu(el, state) {
   if (!el.castHeaderStatusBtn || !el.castHeaderStatusMenu) {
     return;
@@ -3004,7 +3653,7 @@ function wireCastHeaderStatusMenu(el, state) {
   el.castHeaderStatusStartConference?.addEventListener('click', () => {
     closeCastHeaderStatusMenu(el);
     try {
-      openCastConferenceClient(el);
+      openCastConferenceClient(el, state);
     } catch (err) {
       addMessage(el, state, 'err', 'Conference', 'Invalid hub_endpoint URL');
     }
@@ -3032,19 +3681,19 @@ function contextRequestSubscriber(message) {
   return subscriber || null;
 }
 
-const SCENEVIEW_LAYOUT_PAD = 24;
-/** Scene layout popup width vs worklist outer width (match worklist; body scrolls vertically). */
-const SCENEVIEW_LAYOUT_POPUP_WIDTH_RATIO = 1;
-/** Scene layout popup height vs worklist outer height (short panel, body scrolls vertically). */
-const SCENEVIEW_LAYOUT_POPUP_HEIGHT_RATIO = 1.17;
-
-function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+/** Scene layout popup + diagram chrome scale (1 = worklist-sized; 0.6 = 60%). */
+const SCENEVIEW_LAYOUT_UI_SCALE = 0.6;
+const SCENEVIEW_LAYOUT_PAD = Math.round(24 * SCENEVIEW_LAYOUT_UI_SCALE);
+/** Scene layout popup width vs worklist outer width (body scrolls vertically). */
+const SCENEVIEW_LAYOUT_POPUP_WIDTH_RATIO = SCENEVIEW_LAYOUT_UI_SCALE;
+const SCENEVIEW_DIAGRAM_BOUNDS_MARGIN = Math.round(
+  64 * SCENEVIEW_LAYOUT_UI_SCALE
+);
+const SCENEVIEW_LAYOUT_THUMB_MAX_WIDTH = Math.round(
+  480 * SCENEVIEW_LAYOUT_UI_SCALE
+);
+/** Worklist PNG scale inside the scene diagram window (0.7 → +20% → +15%). */
+const SCENEVIEW_WORKLIST_THUMB_SCALE = 0.966;
 
 function getWorklistScreenWindow() {
   return {
@@ -3438,8 +4087,7 @@ function updateIdcClaudeBuildBtn(el, state) {
     return;
   }
   el.idcClaudeBuildBtn.disabled = Boolean(state.idcClaudeBuildBusy);
-  el.idcClaudeBuildBtn.title =
-    'Open IDC Claude — natural-language IDC worklist';
+  el.idcClaudeBuildBtn.title = 'IDC Claude — natural-language IDC worklist';
   syncIdcClaudeDialogAvailability(el, state);
 }
 
@@ -3462,11 +4110,11 @@ function updateOpenSceneviewsButton(el, state) {
     : '';
   if (!hasDisplay) {
     el.openSceneviewsBtn.title =
-      'Open worklist scene layout (no image display connected)';
+      'Worklist scene layout (no image display connected)';
     return;
   }
   el.openSceneviewsBtn.title = wsConnected
-    ? `Open Scene Views for ${names}`
+    ? `Scene Views for ${names}`
     : 'Subscribe to the hub first';
 }
 
@@ -4316,8 +4964,6 @@ function getSceneviewMonitorDiagramBounds() {
   };
 }
 
-const SCENEVIEW_DIAGRAM_BOUNDS_MARGIN = 64;
-
 function unionScreenRects(rects) {
   if (!rects.length) {
     return null;
@@ -4355,20 +5001,37 @@ function collectSceneviewDiagramWindowRects(worklistWindow, sceneviewEntries) {
   return rects;
 }
 
-/** Bounds that contain all participants (worklist + image displays) with margin. */
+/** Bounds for the desktop diagram: full primary monitor, expanded if windows extend past it. */
 function getSceneviewDiagramBounds(worklistWindow, sceneviewEntries) {
+  const monitor = getSceneviewMonitorDiagramBounds();
   const union = unionScreenRects(
     collectSceneviewDiagramWindowRects(worklistWindow, sceneviewEntries)
   );
   if (!union) {
-    return getSceneviewMonitorDiagramBounds();
+    return monitor;
   }
   const margin = SCENEVIEW_DIAGRAM_BOUNDS_MARGIN;
+  const minLeft = Math.min(monitor.minLeft, union.left - margin);
+  const minTop = Math.min(monitor.minTop, union.top - margin);
+  const maxRight = Math.max(
+    monitor.minLeft + monitor.width,
+    union.left + union.width + margin
+  );
+  const maxBottom = Math.max(
+    monitor.minTop + monitor.height,
+    union.top + union.height + margin
+  );
   return {
-    minLeft: union.left - margin,
-    minTop: union.top - margin,
-    width: Math.max(union.width + margin * 2, 320),
-    height: Math.max(union.height + margin * 2, 240),
+    minLeft,
+    minTop,
+    width: Math.max(
+      maxRight - minLeft,
+      Math.round(320 * SCENEVIEW_LAYOUT_UI_SCALE)
+    ),
+    height: Math.max(
+      maxBottom - minTop,
+      Math.round(240 * SCENEVIEW_LAYOUT_UI_SCALE)
+    ),
   };
 }
 
@@ -4381,8 +5044,37 @@ function mapRectToDiagram(rect, bounds, scale, pad) {
   };
 }
 
-function resolveSceneviewLayoutPopupMetrics(bounds, worklistWindow) {
+function estimateSceneviewLayoutContentInnerHeight(
+  canvasH,
+  sceneviewEntryCount
+) {
+  const ui = SCENEVIEW_LAYOUT_UI_SCALE;
+  const bodyPadY = Math.round(40 * ui);
+  const headerBlock = Math.round(52 * ui);
+  const wrapChrome = Math.round((12 * 2 + 16) * ui);
+  const belowSectionChrome = Math.round((4 + 10 + 12 + 14 + 22) * ui);
+  const perDisplay = Math.round(44 * ui);
+  const belowContent =
+    sceneviewEntryCount > 0
+      ? sceneviewEntryCount * perDisplay
+      : Math.round(18 * ui);
+  return (
+    bodyPadY +
+    headerBlock +
+    wrapChrome +
+    canvasH +
+    belowSectionChrome +
+    belowContent
+  );
+}
+
+function resolveSceneviewLayoutPopupMetrics(
+  bounds,
+  worklistWindow,
+  sceneviewEntries = []
+) {
   const pad = SCENEVIEW_LAYOUT_PAD;
+  const uiScale = SCENEVIEW_LAYOUT_UI_SCALE;
   const worklistInnerW = Math.max(
     1,
     Number(worklistWindow?.innerWidth) || window.innerWidth || 800
@@ -4391,34 +5083,39 @@ function resolveSceneviewLayoutPopupMetrics(bounds, worklistWindow) {
     worklistInnerW,
     Number(worklistWindow?.outerWidth) || window.outerWidth || worklistInnerW
   );
-  const worklistOuterH =
-    Number(worklistWindow?.outerHeight) || window.outerHeight || 700;
-  const pageBodyPadX = 48;
-  const svWrapPadX = 24;
-  const popupChromeW = 16;
+  const pageBodyPadX = Math.round(48 * uiScale);
+  const svWrapPadX = Math.round(24 * uiScale);
+  const popupChromeW = Math.round(16 * uiScale);
   const availW = window.screen.availWidth || window.screen.width || 1280;
   const availH = window.screen.availHeight || window.screen.height || 800;
   const popupWidth = Math.max(
-    360,
+    Math.round(360 * uiScale),
     Math.min(
       Math.round(worklistOuterW * SCENEVIEW_LAYOUT_POPUP_WIDTH_RATIO),
       availW - 8
     )
   );
   const diagramContentW = Math.max(
-    200,
+    Math.round(200 * uiScale),
     popupWidth - pageBodyPadX - popupChromeW - svWrapPadX
   );
   const scale = diagramContentW / bounds.width;
   const canvasW = Math.ceil(bounds.width * scale + pad * 2);
   const canvasH = Math.ceil(bounds.height * scale + pad * 2);
   const wrapMaxH = canvasH;
+  const sceneviewEntryCount = (
+    Array.isArray(sceneviewEntries) ? sceneviewEntries : []
+  ).filter(
+    (entry) => entry?.data && windowRectFromPayload(entry.data.window)
+  ).length;
+  const contentInnerH = estimateSceneviewLayoutContentInnerHeight(
+    canvasH,
+    sceneviewEntryCount
+  );
+  const popupChromeH = Math.round(48 * uiScale);
   const popupHeight = Math.min(
-    Math.max(
-      360,
-      Math.round(worklistOuterH * SCENEVIEW_LAYOUT_POPUP_HEIGHT_RATIO)
-    ),
-    availH - 8
+    availH - 8,
+    Math.max(Math.round(200 * uiScale), contentInnerH + popupChromeH)
   );
   const screenX = Number(worklistWindow?.screenX);
   const screenY = Number(worklistWindow?.screenY);
@@ -4958,6 +5655,8 @@ function buildSceneviewLayoutPageHtml(
   bounds,
   metrics
 ) {
+  const px = (value) =>
+    `${Math.max(1, Math.round(value * SCENEVIEW_LAYOUT_UI_SCALE))}px`;
   const diagram = buildSceneviewLayoutDiagramHtml(
     worklistWindow,
     sceneviewEntries,
@@ -4973,62 +5672,110 @@ function buildSceneviewLayoutPageHtml(
 <meta charset="utf-8" />
 <title>Scene layout — Cast worklist</title>
 <style>
-  html { height: 100%; margin: 0; }
-  body { margin: 0; min-height: 100%; padding: 20px 24px; background: #111; color: #eaeaea;
-    font-family: system-ui, sans-serif; font-size: 14px; box-sizing: border-box;
-    overflow-x: hidden; overflow-y: auto; }
-  .svPageHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+  html { margin: 0; font-size: ${px(16)}; }
+  body { margin: 0; padding: ${px(20)} ${px(
+    24
+  )}; background: #111; color: #eaeaea;
+    font-family: system-ui, sans-serif; font-size: 0.875rem; box-sizing: border-box;
+    overflow: visible; }
+  .svPageHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: ${px(
+    16
+  )}; margin-bottom: ${px(8)}; }
   h1 { margin: 0; font-size: 1.25rem; }
-  .svTrainingRepoRow { display: flex; align-items: center; gap: 10px; flex-shrink: 0; max-width: min(420px, 45vw); }
-  .svTrainingRepoLabel { font-size: 11px; font-weight: 400; line-height: 1.35; color: #8a9a8e; }
+  .svTrainingRepoRow { display: flex; align-items: center; gap: ${px(
+    10
+  )}; flex-shrink: 0; max-width: min(${px(420)}, 45vw); }
+  .svTrainingRepoLabel { font-size: ${px(
+    11
+  )}; font-weight: 400; line-height: 1.35; color: #8a9a8e; }
   .svTrainingUploadBtn { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
-    width: 28px; height: 28px; padding: 0; border: 1px solid #3a4a40; border-radius: 6px;
+    width: ${px(28)}; height: ${px(28)}; padding: 0; border: ${px(
+    1
+  )} solid #3a4a40; border-radius: ${px(6)};
     background: transparent; color: #8a9a8e; cursor: pointer; opacity: 0.85; }
   .svTrainingUploadBtn:hover { background: #1a2420; border-color: #4a7c59; color: #a8b8ac; opacity: 1; }
-  .svTrainingUploadBtn svg { width: 15px; height: 15px; display: block; fill: currentColor; }
+  .svTrainingUploadBtn svg { width: ${px(15)}; height: ${px(
+    15
+  )}; display: block; fill: currentColor; }
   .svTrainingDialog[hidden] { display: none !important; }
   .svTrainingDialog { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
   .svTrainingDialogBackdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
-  .svTrainingDialogPanel { position: relative; z-index: 1; max-width: min(440px, 92vw); margin: 16px; padding: 20px 22px;
-    background: #1a1a22; border: 1px solid #4a7c59; border-radius: 8px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); box-sizing: border-box; }
-  .svTrainingDialogMessage { margin: 0 0 12px; font-size: 11px; line-height: 1.4; color: #9a9a9a; font-style: italic; }
-  .svTrainingDialogActions { display: flex; justify-content: flex-end; margin-top: 16px; }
-  .svTrainingDialogOkBtn { padding: 4px 12px; border: 1px solid #4a7c59; border-radius: 4px; background: #1e3a29; color: #d4f0dc;
-    font-size: 11px; font-weight: 600; cursor: pointer; }
+  .svTrainingDialogPanel { position: relative; z-index: 1; max-width: min(${px(
+    440
+  )}, 92vw); margin: ${px(16)}; padding: ${px(20)} ${px(22)};
+    background: #1a1a22; border: ${px(1)} solid #4a7c59; border-radius: ${px(
+    8
+  )}; box-shadow: 0 ${px(8)} ${px(
+    32
+  )} rgba(0, 0, 0, 0.5); box-sizing: border-box; }
+  .svTrainingDialogMessage { margin: 0 0 ${px(12)}; font-size: ${px(
+    11
+  )}; line-height: 1.4; color: #9a9a9a; font-style: italic; }
+  .svTrainingDialogActions { display: flex; justify-content: flex-end; margin-top: ${px(
+    16
+  )}; }
+  .svTrainingDialogOkBtn { padding: ${px(4)} ${px(12)}; border: ${px(
+    1
+  )} solid #4a7c59; border-radius: ${px(
+    4
+  )}; background: #1e3a29; color: #d4f0dc;
+    font-size: ${px(11)}; font-weight: 600; cursor: pointer; }
   .svTrainingDialogOkBtn:hover { background: #265238; border-color: #5a9a6a; }
-  p { margin: 0 0 12px; color: #b8b8b8; }
-  .svWrap { overflow: hidden; border: 1px solid #333; border-radius: 8px; background: #0a0a12; padding: 12px; margin-bottom: 16px; box-sizing: border-box; }
-  .svCanvas { position: relative; margin: 0 auto; box-sizing: border-box; border: 2px solid #3a3a48;
-    box-shadow: inset 0 0 0 1px #1a1a22; background: repeating-linear-gradient(
-    0deg, #1a1a22 0, #1a1a22 20px, #15151c 20px, #15151c 40px
+  p { margin: 0 0 ${px(12)}; color: #b8b8b8; }
+  .svWrap { overflow: hidden; border: ${px(1)} solid #333; border-radius: ${px(
+    8
+  )}; background: #0a0a12; padding: ${px(12)}; margin-bottom: ${px(
+    16
+  )}; box-sizing: border-box; }
+  .svCanvas { position: relative; margin: 0 auto; box-sizing: border-box; border: ${px(
+    3
+  )} solid #7a8498;
+    outline: ${px(1)} solid rgba(200, 210, 228, 0.45); outline-offset: 0;
+    box-shadow: inset 0 0 0 ${px(1)} rgba(0, 0, 0, 0.55);
+    background: repeating-linear-gradient(
+    0deg, #1a1a22 0, #1a1a22 ${px(20)}, #15151c ${px(20)}, #15151c ${px(40)}
   ); }
   .svDisplayWrap { position: absolute; box-sizing: border-box; }
   .svDisplay { position: absolute; left: 0; top: 0; width: 100%; height: 100%; box-sizing: border-box; overflow: hidden; }
   .svWin, .svViewport { box-sizing: border-box; }
-  .svWorklist { border: 2px solid #ffc107; background: rgba(255, 193, 7, 0.12); }
-  .svDisplayId { border: 2px solid #6cb6ff; background: #0a0a12; }
+  .svWorklist { border: ${px(
+    2
+  )} solid #ffc107; background: rgba(255, 193, 7, 0.12); }
+  .svDisplayId { border: ${px(2)} solid #6cb6ff; background: #0a0a12; }
   .svDisplayContent { position: absolute; box-sizing: border-box; overflow: hidden; }
   .svLayoutGrid { position: absolute; box-sizing: border-box; overflow: hidden; }
   .svLayoutFit { position: absolute; inset: 0; box-sizing: border-box; overflow: hidden; }
-  .svDisplayContent .svViewport { position: absolute; border: 1px solid #6cb6ff; background: #000; box-sizing: border-box; overflow: hidden; }
+  .svDisplayContent .svViewport { position: absolute; border: ${px(
+    1
+  )} solid #6cb6ff; background: #000; box-sizing: border-box; overflow: hidden; }
   .svThumbWrap { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
   .svWorklist .svThumbWrap { background: #0a0a12; display: flex; align-items: center; justify-content: center; }
   .svWorklist .svDisplayContent .svThumb { width: 100%; height: 100%; object-fit: contain; object-position: center center;
-    transform: scale(0.7); transform-origin: center center; display: block; background: transparent; }
+    transform: scale(${SCENEVIEW_WORKLIST_THUMB_SCALE}); transform-origin: center center; display: block; background: transparent; }
   .svDisplayId .svViewport .svThumb { width: 100%; height: 100%; object-fit: fill; display: block; background: #000; }
-  .svDisplayLabelAbove { position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: 4px;
+  .svDisplayLabelAbove { position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: ${px(
+    4
+  )};
     text-align: center; pointer-events: none; box-sizing: border-box; }
-  .svDisplayLabelAbove span { display: inline-block; max-width: calc(100% - 4px); padding: 2px 8px; font-size: 11px;
+  .svDisplayLabelAbove span { display: inline-block; max-width: calc(100% - ${px(
+    4
+  )}); padding: ${px(2)} ${px(8)}; font-size: ${px(11)};
     font-weight: 700; line-height: 1.25; color: #fff; text-align: center; word-break: break-word;
-    background: rgba(0, 0, 0, 0.72); border-radius: 4px; text-shadow: 0 1px 2px #000; }
-  .svBelowSection { margin-top: 4px; }
-  .svBelowSection h2 { margin: 0 0 10px; font-size: 1rem; font-weight: 600; color: #ddd; }
-  .svBelowPanel { border: 1px solid #333; border-radius: 8px; background: #0a0a12; padding: 12px 14px; }
+    background: rgba(0, 0, 0, 0.72); border-radius: ${px(
+      4
+    )}; text-shadow: 0 ${px(1)} ${px(2)} #000; }
+  .svBelowSection { margin-top: ${px(4)}; }
+  .svBelowSection h2 { margin: 0 0 ${px(
+    10
+  )}; font-size: 1rem; font-weight: 600; color: #ddd; }
+  .svBelowPanel { border: ${px(1)} solid #333; border-radius: ${px(
+    8
+  )}; background: #0a0a12; padding: ${px(12)} ${px(14)}; }
   .svSubscriberRoot {
-    margin: 0 0 8px;
-    padding: 8px 12px;
-    border: 1px solid #2e3448;
-    border-radius: 6px;
+    margin: 0 0 ${px(8)};
+    padding: ${px(8)} ${px(12)};
+    border: ${px(1)} solid #2e3448;
+    border-radius: ${px(6)};
     background: #161622;
   }
   .svSubscriberRoot:nth-child(even) { background: #1c1c2a; }
@@ -5044,14 +5791,14 @@ function buildSceneviewLayoutPageHtml(
     list-style-position: outside;
   }
   .svSubscriberBody {
-    margin: 8px 0 0;
-    padding: 8px 0 0 10px;
-    border-top: 1px solid #2a3040;
+    margin: ${px(8)} 0 0;
+    padding: ${px(8)} 0 0 ${px(10)};
+    border-top: ${px(1)} solid #2a3040;
   }
-  .svDetailsNode { margin: 2px 0 4px 0; }
+  .svDetailsNode { margin: ${px(2)} 0 ${px(4)} 0; }
   .svDetailsNode > summary { cursor: pointer; color: #b8d4ff; list-style-position: outside; }
-  .svDetailsBody { margin: 2px 0 4px 0.8em; padding: 0; }
-  .svDetailLine { margin: 1px 0; color: #a8a8a8; white-space: pre-wrap; }
+  .svDetailsBody { margin: ${px(2)} 0 ${px(4)} 0.8em; padding: 0; }
+  .svDetailLine { margin: ${px(1)} 0; color: #a8a8a8; white-space: pre-wrap; }
   .svEmpty { color: #888; }
 </style>
 </head>
@@ -5094,13 +5841,66 @@ function applySceneviewLayoutPopupSize(popup, targetWidth, targetHeight) {
   }
 }
 
+function fitSceneviewLayoutPopupToContent(popup) {
+  if (!popup || popup.closed) {
+    return;
+  }
+  const measure = () => {
+    try {
+      const doc = popup.document;
+      const html = doc.documentElement;
+      const body = doc.body;
+      if (!html || !body) {
+        return;
+      }
+      const contentH = Math.ceil(
+        Math.max(
+          html.scrollHeight,
+          html.offsetHeight,
+          body.scrollHeight,
+          body.offsetHeight
+        )
+      );
+      const innerH = popup.innerHeight || contentH;
+      const outerH = popup.outerHeight || innerH;
+      const chromeH = Math.max(0, outerH - innerH);
+      const availH = popup.screen.availHeight || popup.screen.height || 800;
+      const targetOuterH = Math.min(availH - 8, contentH + chromeH);
+      const innerW = popup.innerWidth || popup.outerWidth || 0;
+      const outerW = popup.outerWidth || innerW;
+      const chromeW = Math.max(0, outerW - innerW);
+      const contentW = Math.ceil(
+        Math.max(
+          html.scrollWidth,
+          html.offsetWidth,
+          body.scrollWidth,
+          body.offsetWidth
+        )
+      );
+      const availW = popup.screen.availWidth || popup.screen.width || 1280;
+      const targetOuterW = Math.min(
+        availW - 8,
+        Math.max(outerW, contentW + chromeW)
+      );
+      applySceneviewLayoutPopupSize(popup, targetOuterW, targetOuterH);
+    } catch {
+      // Popup may be inaccessible after navigation/close.
+    }
+  };
+  requestAnimationFrame(() => requestAnimationFrame(measure));
+}
+
 function openSceneviewLayoutPopup(
   worklistWindow,
   sceneviewEntries,
   worklistMeta
 ) {
   const bounds = getSceneviewDiagramBounds(worklistWindow, sceneviewEntries);
-  const metrics = resolveSceneviewLayoutPopupMetrics(bounds, worklistWindow);
+  const metrics = resolveSceneviewLayoutPopupMetrics(
+    bounds,
+    worklistWindow,
+    sceneviewEntries
+  );
   const features = [
     'popup',
     `width=${metrics.popupWidth}`,
@@ -5139,6 +5939,7 @@ function openSceneviewLayoutPopup(
   );
   popup.document.close();
   applySceneviewLayoutPopupSize(popup, metrics.popupWidth, metrics.popupHeight);
+  fitSceneviewLayoutPopupToContent(popup);
   popup.focus();
   return true;
 }
@@ -5163,7 +5964,7 @@ async function openSceneviewLayoutFromStatus(el, state) {
     const worklistWindow = getWorklistScreenWindow();
     // Capture while the worklist UI is visible (layout popup only; not sent on Cast).
     const worklistThumbnail = await captureWorklistThumbnailPng(
-      480,
+      SCENEVIEW_LAYOUT_THUMB_MAX_WIDTH,
       wlSubscriber,
       el
     );
@@ -5209,7 +6010,7 @@ async function openSceneviewLayoutWorklistOnly(el, state) {
     const wlSubscriber = el.getSubscriber.value.trim() || 'Worklist';
     const worklistWindow = getWorklistScreenWindow();
     const worklistThumbnail = await captureWorklistThumbnailPng(
-      480,
+      SCENEVIEW_LAYOUT_THUMB_MAX_WIDTH,
       wlSubscriber,
       el
     );
@@ -5422,6 +6223,14 @@ function setOpenViewerButtonsEnabled(el, enabled) {
   el.openTopicViewerBtn.disabled = disabled;
   el.openVolViewBtn.disabled = disabled;
   el.openOhifBtn.disabled = disabled;
+  const disabledTitle = CAST_VIEWER_OPEN_TITLE_DISABLED;
+  el.openOhifBtn.title = enabled ? CAST_VIEWER_OPEN_TITLE_OHIF : disabledTitle;
+  el.openVolViewBtn.title = enabled
+    ? CAST_VIEWER_OPEN_TITLE_VOLVIEW
+    : disabledTitle;
+  el.openTopicViewerBtn.title = enabled
+    ? 'Open a viewer instance'
+    : disabledTitle;
 }
 
 function setHubAdminPortalButtonsEnabled(el, enabled) {
@@ -5546,6 +6355,8 @@ function ensureClient(el, state, recreate = false) {
         .toLowerCase();
       if (hubEvent === 'conference-start') {
         handleConferenceStart(el, state, message);
+      } else if (hubEvent === 'conference-end') {
+        handleConferenceEnd(el, state, message);
       }
       addMessage(
         el,
@@ -6154,6 +6965,18 @@ async function boot() {
     castAboutOverlay: byId('castAboutOverlay'),
     castAboutTitle: byId('castAboutTitle'),
     castAboutCloseBtn: byId('castAboutCloseBtn'),
+    castConferenceOverlay: byId('castConferenceOverlay'),
+    castConferenceStatus: byId('castConferenceStatus'),
+    castConferenceCreateSection: byId('castConferenceCreateSection'),
+    castConferenceManageSection: byId('castConferenceManageSection'),
+    castConferenceTitleSelect: byId('castConferenceTitleSelect'),
+    castConferenceCustomTitleGroup: byId('castConferenceCustomTitleGroup'),
+    castConferenceCustomTitle: byId('castConferenceCustomTitle'),
+    castConferenceTopicsList: byId('castConferenceTopicsList'),
+    castConferenceCreateBtn: byId('castConferenceCreateBtn'),
+    castConferenceInfo: byId('castConferenceInfo'),
+    castConferenceExitBtn: byId('castConferenceExitBtn'),
+    castConferenceCloseBtn: byId('castConferenceCloseBtn'),
     messageCount: byId('messageCount'),
     getResponseData: byId('getResponseData'),
     worklistContextDisplay: byId('worklistContextDisplay'),
@@ -6194,6 +7017,7 @@ async function boot() {
     castHeaderDetailText: 'Not connected',
     conferenceActive: false,
     conferenceTitle: '',
+    conferenceParticipants: [],
     conferencePollTimer: null,
     wsState: 'disconnected',
     openWorklistSampleId: null,
@@ -6225,6 +7049,7 @@ async function boot() {
 
   wireCastHeaderMenu(el, root);
   wireCastHeaderStatusMenu(el, state);
+  wireCastConferenceDialog(el, state);
   wireIdcClaudeDialog(el, state);
 
   applyCastStandardToPage(el, selectedCastStandard(el));
@@ -6435,7 +7260,7 @@ async function boot() {
 
   el.startConferenceBtn.addEventListener('click', () => {
     try {
-      openCastConferenceClient(el);
+      openCastConferenceClient(el, state);
     } catch (err) {
       addMessage(el, state, 'err', 'Conference', 'Invalid hub_endpoint URL');
     }
