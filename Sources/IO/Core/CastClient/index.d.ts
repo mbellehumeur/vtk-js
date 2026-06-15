@@ -328,6 +328,184 @@ export function buildNiftiUrlImagingStudyOpenContext(params: {
   patientReference?: string;
 }): Array<{ key: string; resource: Record<string, unknown> }>;
 
+export const CAST_ENVELOPE_ANY: string;
+export const CAST_DEFAULT_SUBSCRIBER_ACTOR: string;
+export const CAST_CONFERENCE_POLL_MS: number;
+export const CAST_CONFERENCE_EXIT_ACK_MS: number;
+export const CAST_CONFERENCE_POPUP_SIZE: { width: number; height: number };
+export const CAST_CONFERENCE_TITLE_PRESETS: readonly string[];
+export const TOTAL_SEGMENTATOR_PRODUCT_ALIASES: readonly string[];
+export const BINARY_PLACEHOLDER: string;
+
+export interface CastPublishEnvelopeFields {
+  subscriberName: string;
+  subscriberActor: string;
+  targetActor: string;
+  targetProductName: string;
+}
+
+export interface CastConferenceRecord {
+  hostTopic?: string;
+  user?: string;
+  title?: string;
+  topics?: string[];
+  participants?: string[];
+}
+
+export type ImagingStudyOpenPlan =
+  | {
+      mode: 'dicomweb';
+      studyId: string;
+      studyInstanceUID: string;
+      seriesInstanceUID?: string;
+      dicomwebRoot?: string;
+      ohifMode?: string;
+    }
+  | {
+      mode: 'files';
+      studyId: string;
+      files: CastImagingStudyFileEntry[];
+      ohifMode?: string;
+    }
+  | {
+      mode: 'dicom-url';
+      studyId: string;
+      files: CastImagingStudyFileEntry[];
+      ohifMode?: string;
+    }
+  | {
+      mode: 'idc';
+      studyId: string;
+      studyInstanceUID: string;
+      seriesInstanceUID?: string;
+      sourceBucket: 'aws' | 'gcs';
+      files: CastImagingStudyFileEntry[];
+      ohifMode?: string;
+    };
+
+export const DEFAULT_CAST_PUBLISH_ENVELOPE_FIELDS: CastPublishEnvelopeFields;
+
+export function httpUrlFromHubEndpoint(hubEndpoint: string): URL | null;
+export function resolveCastHubAdminUrl(hubEndpoint: string): string;
+export function resolveCastConferenceClientUrl(
+  hubEndpoint: string,
+  opts?: {
+    topic?: string;
+    subscriberName?: string;
+    theme?: string;
+    mode?: string;
+  }
+): string;
+export function openCastHubPopup(
+  url: string,
+  windowName: string,
+  size?: { width: number; height: number }
+): void;
+export function ensureCastSubscribeEvents(events?: string[]): string[];
+export function normalizeImagingStudyContext(context: unknown): unknown;
+export function resolveImagingStudyOpenPlan(
+  context: unknown
+): ImagingStudyOpenPlan | null;
+export function normalizeStudyUID(value: unknown): string;
+export function extractStudyUIDFromResource(resource: unknown): string;
+export function resolveCastFileMessage(
+  client: vtkCastClient | null | undefined,
+  message: CastMessage
+): Promise<CastMessage>;
+export function castMessageHasPendingFilePayloads(
+  message: CastMessage
+): boolean;
+export function getHubEventLower(
+  event: CastMessage['event'] | undefined
+): string;
+export function getActorKeyword(actor: unknown): string;
+export function getInboundTargetActorKeyword(message: {
+  'target.actor'?: unknown;
+}): string;
+export function extractFilePayloadsForEvent(
+  message: CastMessage,
+  hubEventName: string
+): Array<
+  | { arrayBuffer: ArrayBuffer; fileName?: string; mimeType?: string }
+  | { fileName: string; data: string; mimeType?: string }
+>;
+export function filePayloadToArrayBuffer(
+  payload:
+    | { arrayBuffer: ArrayBuffer }
+    | { data: string }
+): ArrayBuffer | null;
+export function filePayloadToFile(
+  payload: { arrayBuffer?: ArrayBuffer; data?: string; fileName?: string; mimeType?: string },
+  defaultName: string,
+  defaultMime: string
+): File | null;
+export function applyCastPublishEnvelopeFields(
+  message: CastMessage,
+  fields: CastPublishEnvelopeFields
+): void;
+export function normalizeOptionalEnvelopeField(
+  value: string | undefined | null
+): string;
+export function resolveCastPublishEnvelopeFields(
+  fields: Partial<CastPublishEnvelopeFields>,
+  defaults: { subscriberName: string }
+): CastPublishEnvelopeFields;
+export function isTotalSegmentatorProduct(name: string): boolean;
+export function statusItemValue(items: unknown, key: string): string | undefined;
+export function isStatusPayloadOnline(data: unknown): boolean;
+export function productNameFromStatusResponseItem(
+  item: CastRequestResponseItem
+): string;
+export function totalSegmentatorAvailableFromStatusResponses(
+  responses: CastRequestResponseItem[]
+): boolean;
+export function isStatusRequestDataType(value: unknown): boolean;
+export function resolveTargetActorForWire(value: unknown): string | undefined;
+export function resolveTargetProductNameForWire(
+  value: unknown
+): string | undefined;
+export function stringifyForLog(value: unknown): string;
+export function summarizeInboundCastMessage(message: unknown): {
+  label: string;
+  detail: string;
+};
+export function summarizeOutboundCastPublish(message: CastMessage): {
+  label: string;
+  detail: string;
+};
+export function sanitizeCastMessageForDisplay(message: unknown): unknown;
+export function fetchCastConferences(
+  hubEndpoint: string
+): Promise<CastConferenceRecord[]>;
+export function fetchCastConferenceTopics(
+  hubEndpoint: string
+): Promise<string[]>;
+export function createCastConference(
+  hubEndpoint: string,
+  hostTopic: string,
+  title: string,
+  topics: string[]
+): Promise<void>;
+export function deleteCastConference(
+  hubEndpoint: string,
+  hostTopic: string,
+  leaveTopic?: string
+): Promise<void>;
+export function resolveCastConferenceState(
+  hubEndpoint: string,
+  topic: string,
+  subscriberName: string
+): Promise<{ active: boolean; title: string; participants: string[] }>;
+export function conferenceHostTopic(
+  conference: CastConferenceRecord
+): string;
+export function findActiveCastConference(
+  topic: string,
+  subscriberName: string,
+  conferences: CastConferenceRecord[]
+): CastConferenceRecord | null;
+export function normalizeConferenceParticipants(raw: unknown): string[];
+
 /**
  * Cast hub client: OAuth, subscribe, WebSocket bind, publish, and typed
  * request/response (`POST /api/hub/request` fan-out).

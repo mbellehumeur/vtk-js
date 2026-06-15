@@ -51,21 +51,30 @@ import vtkCastClient, {
   buildDicomUrlImagingStudyOpenContext,
   buildFilesImagingStudyOpenContext,
   buildIdcImagingStudyOpenContext,
+  CAST_CONFERENCE_EXIT_ACK_MS,
+  CAST_CONFERENCE_POLL_MS,
   CAST_OPEN_MODE_DICOM_URL,
+  conferenceHostTopic,
+  createCastConference,
+  deleteCastConference,
   extractVolviewSampleId,
+  fetchCastConferences,
+  fetchCastConferenceTopics,
+  findActiveCastConference,
   generateSubscriberName,
+  isCastConferenceHost,
   isHubEndpointInCloud,
   isRequestEvent,
   isRunningInCloud,
+  normalizeConferenceParticipants,
   requestEventFor,
+  resolveCastConferenceState,
+  resolveTargetActorForWire,
+  resolveTargetProductNameForWire,
   selectFirstMatchingHubKey,
 } from 'vtk.js/Sources/IO/Core/CastClient';
 import html2canvas from 'html2canvas';
 import { zipSync } from 'fflate';
-import {
-  resolveTargetActorForWire,
-  resolveTargetProductNameForWire,
-} from '../wireEnvelope';
 import enrichBinaryBatchMessage from './binaryBatchReceive';
 import {
   CAST_STANDARD_CAST,
@@ -252,6 +261,15 @@ const CAST_IDC_SKILL_URL =
   'https://github.com/ImagingDataCommons/imaging-data-commons-skill';
 const CAST_IDC_INDEX_URL = 'https://github.com/ImagingDataCommons/idc-index';
 const CAST_IDC_PAPER_URL = 'https://doi.org/10.1148/rg.230180';
+
+const IDC_CLAUDE_DIALOG_ACK_HTML = `<p class="${style.idcClaudeAck}">
+  Query guidance from the
+  <a class="${style.castAboutLink}" href="${CAST_IDC_SKILL_URL}" target="_blank" rel="noopener noreferrer">IDC Claude skill</a>;
+  local SQL and download URLs via
+  <a class="${style.castAboutLink}" href="${CAST_IDC_INDEX_URL}" target="_blank" rel="noopener noreferrer">idc-index</a>.
+  If you use this in research, cite IDC / <em>Radiographics</em>
+  (<a class="${style.castAboutLink}" href="${CAST_IDC_PAPER_URL}" target="_blank" rel="noopener noreferrer">2023</a>).
+</p>`;
 
 const CAST_ABOUT_RESOURCE_SERVERS_ACK_HTML = `<div class="${style.castAboutSampleAck}">
   <p class="${style.castAboutDisclaimerHeading}"><strong>Resource servers acknowledgement</strong></p>
@@ -2295,6 +2313,7 @@ function buildPageHtml() {
           }">Search</button>
         </div>
       </div>
+      ${IDC_CLAUDE_DIALOG_ACK_HTML}
     </div>
   </div>
   <div id="castConferenceOverlay" class="${style.castAboutOverlay}" hidden>
@@ -2522,103 +2541,14 @@ function statusHubNameMeta(el) {
   return selected ? String(selected.textContent || '').trim() : '';
 }
 
-const CAST_CONFERENCE_POLL_MS = 30_000;
-const CAST_CONFERENCE_EXIT_ACK_MS = 1200;
-
-function conferenceHostTopic(conference) {
-  if (!conference) {
-    return '';
-  }
-  return String(conference.hostTopic || conference.user || '').trim();
-}
-
-function isCastConferenceHost(topic, conference) {
-  const host = conferenceHostTopic(conference);
-  const normalizedTopic = String(topic || '').trim();
-  if (!normalizedTopic || !host) {
-    return false;
-  }
-  return (
-    normalizedTopic === host ||
-    normalizedTopic.toLowerCase() === host.toLowerCase()
-  );
-}
-
-function isCastConferenceParticipant(topic, subscriberName, conference) {
-  const normalizedTopic = String(topic || '').trim();
-  const normalizedSubscriber = String(subscriberName || '').trim();
-  const host = conferenceHostTopic(conference);
-  const attendeeTopics = Array.isArray(conference?.topics)
-    ? conference.topics.map((value) => String(value).trim()).filter(Boolean)
-    : [];
-
-  if (normalizedTopic) {
-    if (normalizedTopic === host || attendeeTopics.includes(normalizedTopic)) {
-      return true;
-    }
-  }
-  if (normalizedSubscriber && normalizedSubscriber === host) {
-    return true;
-  }
-  return false;
-}
-
-function normalizeConferenceParticipants(raw) {
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-  const seen = new Set();
-  const out = [];
-  raw.forEach((entry) => {
-    const name = String(entry ?? '').trim();
-    if (name && !seen.has(name)) {
-      seen.add(name);
-      out.push(name);
-    }
-  });
-  return out;
-}
-
-function findActiveCastConference(topic, subscriberName, conferences) {
-  return (
-    conferences.find((conference) =>
-      isCastConferenceParticipant(topic, subscriberName, conference)
-    ) || null
-  );
-}
-
-async function fetchCastConferences(hubEndpoint) {
-  const origin = hubOriginFromEndpoint(hubEndpoint);
-  if (!origin) {
-    return [];
-  }
-  const apiUrl = new URL('/api/hub/conference', origin).href;
-  try {
-    const response = await fetch(apiUrl);
-    if (!response.ok) {
-      return [];
-    }
-    const data = await response.json();
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
-}
-
-async function resolveCastConferenceState(el, state) {
+async function resolveWorklistConferenceState(el, state) {
   const hubEndpoint = String(el.hubEndpoint?.value || '').trim();
   const session = state?.client?.getSessionConfig?.();
   const topic = String(el.topic?.value?.trim() || session?.topic || '').trim();
   const subscriberName = String(
     el.subscriberName?.value?.trim() || session?.subscriberName || ''
   ).trim();
-  const conferences = await fetchCastConferences(hubEndpoint);
-  const match = findActiveCastConference(topic, subscriberName, conferences);
-  return {
-    active: Boolean(match),
-    title: String(match?.title ?? '').trim(),
-    participants: normalizeConferenceParticipants(match?.participants),
-  };
+  return resolveCastConferenceState(hubEndpoint, topic, subscriberName);
 }
 
 function castHeaderStatusIconStyle(status, conferenceActive) {
@@ -2751,7 +2681,7 @@ async function syncConferenceActive(el, state) {
     setConferenceActive(el, state, false);
     return;
   }
-  const { active, title, participants } = await resolveCastConferenceState(
+  const { active, title, participants } = await resolveWorklistConferenceState(
     el,
     state
   );
@@ -2815,72 +2745,6 @@ function conferenceSessionSubscriber(el, state) {
   return String(
     el.subscriberName?.value?.trim() || session?.subscriberName || ''
   ).trim();
-}
-
-async function fetchCastConferenceTopics(hubEndpoint) {
-  const origin = hubOriginFromEndpoint(hubEndpoint);
-  if (!origin) {
-    return [];
-  }
-  const apiUrl = new URL('/api/hub/conference-topics', origin).href;
-  try {
-    const response = await fetch(apiUrl);
-    if (!response.ok) {
-      return [];
-    }
-    const data = await response.json();
-    if (!Array.isArray(data)) {
-      return [];
-    }
-    return data
-      .map((entry) => String(entry).trim())
-      .filter((topic) => topic && topic !== '*');
-  } catch {
-    return [];
-  }
-}
-
-async function createCastConference(hubEndpoint, hostTopic, title, topics) {
-  const origin = hubOriginFromEndpoint(hubEndpoint);
-  if (!origin) {
-    throw new Error('Invalid hub endpoint');
-  }
-  const apiUrl = new URL('/api/hub/conference', origin).href;
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      hostTopic: String(hostTopic || '').trim(),
-      title: String(title || '').trim(),
-      topics,
-    }),
-  });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || `HTTP ${response.status}`);
-  }
-}
-
-async function deleteCastConference(hubEndpoint, hostTopic, leaveTopic) {
-  const origin = hubOriginFromEndpoint(hubEndpoint);
-  if (!origin) {
-    throw new Error('Invalid hub endpoint');
-  }
-  const apiUrl = new URL('/api/hub/conference', origin).href;
-  const body = { hostTopic: String(hostTopic || '').trim() };
-  const leave = String(leaveTopic || '').trim();
-  if (leave) {
-    body.leaveTopic = leave;
-  }
-  const response = await fetch(apiUrl, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || `HTTP ${response.status}`);
-  }
 }
 
 function setCastConferenceDialogStatus(el, kind, message) {
@@ -5759,10 +5623,10 @@ function buildSceneviewLayoutPageHtml(
   h1 { margin: 0; font-size: 1.25rem; }
   .svTrainingRepoRow { display: flex; align-items: center; gap: ${px(
     10
-  )}; flex-shrink: 0; max-width: min(${px(420)}, 45vw); }
+  )}; flex-shrink: 0; white-space: nowrap; }
   .svTrainingRepoLabel { font-size: ${px(
-    13
-  )}; font-weight: 400; line-height: 1.35; color: #8a9a8e; }
+    16
+  )}; font-weight: 400; line-height: 1.2; color: #8a9a8e; white-space: nowrap; }
   .svTrainingUploadBtn { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
     width: ${px(28)}; height: ${px(28)}; padding: 0; border: ${px(
     1
@@ -5776,7 +5640,7 @@ function buildSceneviewLayoutPageHtml(
   .svTrainingDialog { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
   .svTrainingDialogBackdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
   .svTrainingDialogPanel { position: relative; z-index: 1; max-width: min(${px(
-    440
+    520
   )}, 92vw); margin: ${px(16)}; padding: ${px(20)} ${px(22)};
     background: #1a1a22; border: ${px(1)} solid #4a7c59; border-radius: ${px(
     8
@@ -5784,8 +5648,8 @@ function buildSceneviewLayoutPageHtml(
     32
   )} rgba(0, 0, 0, 0.5); box-sizing: border-box; }
   .svTrainingDialogMessage { margin: 0 0 ${px(12)}; font-size: ${px(
-    11
-  )}; line-height: 1.4; color: #9a9a9a; font-style: italic; }
+    16
+  )}; line-height: 1.45; color: #b8b8b8; font-style: italic; }
   .svTrainingDialogActions { display: flex; justify-content: flex-end; margin-top: ${px(
     16
   )}; }
@@ -5794,7 +5658,7 @@ function buildSceneviewLayoutPageHtml(
   )} solid #4a7c59; border-radius: ${px(
     4
   )}; background: #1e3a29; color: #d4f0dc;
-    font-size: ${px(11)}; font-weight: 600; cursor: pointer; }
+    font-size: ${px(14)}; font-weight: 600; cursor: pointer; }
   .svTrainingDialogOkBtn:hover { background: #265238; border-color: #5a9a6a; }
   p { margin: 0 0 ${px(12)}; color: #b8b8b8; }
   .svWrap { overflow: hidden; border: ${px(1)} solid #333; border-radius: ${px(

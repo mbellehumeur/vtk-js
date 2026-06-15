@@ -907,6 +907,15 @@
   font-style: italic;
 }
 
+.idcClaudeAck {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--cast-border);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--cast-muted-foreground);
+}
+
 .idcClaudeSqlSection {
   margin-top: 10px;
 }

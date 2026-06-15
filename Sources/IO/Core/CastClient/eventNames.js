@@ -61,6 +61,29 @@ export function dataTypeFromEventName(name) {
   return '';
 }
 
+/** Ensures image-display STATUS requests are received when events are listed explicitly. */
+export function ensureCastSubscribeEvents(events) {
+  if (!events?.length) {
+    return ['*'];
+  }
+  if (events.some((entry) => String(entry).trim() === '*')) {
+    return ['*'];
+  }
+  const statusRequest = requestEventFor('STATUS');
+  const normalized = new Set(
+    events.map((entry) => String(entry).trim().toLowerCase()).filter(Boolean)
+  );
+  const extras = [];
+  if (statusRequest && !normalized.has(statusRequest.toLowerCase())) {
+    extras.push(statusRequest);
+    normalized.add(statusRequest.toLowerCase());
+  }
+  if (!normalized.has('status-update')) {
+    extras.push('status-update');
+  }
+  return extras.length ? [...events, ...extras] : [...events];
+}
+
 export default {
   REQUEST_SUFFIX,
   RESPONSE_SUFFIX,
@@ -70,4 +93,5 @@ export default {
   isRequestEvent,
   isResponseEvent,
   dataTypeFromEventName,
+  ensureCastSubscribeEvents,
 };
