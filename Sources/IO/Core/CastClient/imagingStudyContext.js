@@ -329,18 +329,14 @@ export function extractOpenMode(context) {
 }
 
 /**
- * @param {object} params
- * @param {string} params.id
- * @param {Array<{ url: string, fileName?: string, mimeType?: string, role?: string, label?: string }>} params.files
- * @param {string} [params.patientReference]
- * @param {boolean} [params.includeLegacyNiftiIdentifiers]
- * @returns {Array<object>}
+ * Shared builder for file-list ImagingStudy-open contexts (files / dicom-url modes).
  */
-export function buildFilesImagingStudyOpenContext({
+function buildUrlFilesImagingStudyOpenContext({
   id,
   files,
   patientReference,
-  includeLegacyNiftiIdentifiers = true,
+  openMode,
+  includeLegacyNiftiIdentifiers = false,
 }) {
   const studyId = String(id || '').trim() || 'study';
   const normalizedFiles = (Array.isArray(files) ? files : [])
@@ -348,7 +344,7 @@ export function buildFilesImagingStudyOpenContext({
     .filter((entry) => entry !== null);
 
   const identifiers = [
-    { system: CAST_OPEN_MODE, value: CAST_OPEN_MODE_FILES },
+    { system: CAST_OPEN_MODE, value: openMode },
     {
       system: CAST_IDENTIFIER_WORKLIST_SAMPLE_ID,
       value: studyId,
@@ -412,6 +408,29 @@ export function buildFilesImagingStudyOpenContext({
 }
 
 /**
+ * @param {object} params
+ * @param {string} params.id
+ * @param {Array<{ url: string, fileName?: string, mimeType?: string, role?: string, label?: string }>} params.files
+ * @param {string} [params.patientReference]
+ * @param {boolean} [params.includeLegacyNiftiIdentifiers]
+ * @returns {Array<object>}
+ */
+export function buildFilesImagingStudyOpenContext({
+  id,
+  files,
+  patientReference,
+  includeLegacyNiftiIdentifiers = true,
+}) {
+  return buildUrlFilesImagingStudyOpenContext({
+    id,
+    files,
+    patientReference,
+    openMode: CAST_OPEN_MODE_FILES,
+    includeLegacyNiftiIdentifiers,
+  });
+}
+
+/**
  * Remote DICOM file(s) to download for ImagingStudy-open (``open-mode`` = ``dicom-url``).
  * Use for ``.dcm`` or ``.zip`` archives of DICOM instances (not NIfTI / generic volumes).
  *
@@ -426,59 +445,13 @@ export function buildDicomUrlImagingStudyOpenContext({
   files,
   patientReference,
 }) {
-  const studyId = String(id || '').trim() || 'study';
-  const normalizedFiles = (Array.isArray(files) ? files : [])
-    .map((entry) => normalizeFileEntry(entry))
-    .filter((entry) => entry !== null);
-
-  const identifiers = [
-    { system: CAST_OPEN_MODE, value: CAST_OPEN_MODE_DICOM_URL },
-    {
-      system: CAST_IDENTIFIER_WORKLIST_SAMPLE_ID,
-      value: studyId,
-    },
-    {
-      system: CAST_IDENTIFIER_VOLVIEW_SAMPLE_ID,
-      value: studyId,
-    },
-  ];
-
-  const studyResource = {
-    resourceType: 'ImagingStudy',
-    id: studyId,
-    meta: {
-      profile: [CAST_IMAGING_STUDY_OPEN_PROFILE],
-    },
-    identifier: identifiers,
-    status: 'available',
-  };
-  if (patientReference) {
-    studyResource.subject = { reference: String(patientReference).trim() };
-  }
-
-  const context = [
-    {
-      key: 'study',
-      resource: studyResource,
-    },
-  ];
-
-  if (normalizedFiles.length > 0) {
-    context.push({
-      key: 'files',
-      resource: {
-        files: normalizedFiles.map((file) => ({
-          url: file.url,
-          fileName: file.fileName || undefined,
-          mimeType: file.mimeType || undefined,
-          role: file.role || undefined,
-          label: file.label || undefined,
-        })),
-      },
-    });
-  }
-
-  return context;
+  return buildUrlFilesImagingStudyOpenContext({
+    id,
+    files,
+    patientReference,
+    openMode: CAST_OPEN_MODE_DICOM_URL,
+    includeLegacyNiftiIdentifiers: false,
+  });
 }
 
 /**

@@ -89,7 +89,7 @@
   color: var(--cast-foreground);
 }
 
-.fhircastComingSoon {
+.castV3ComingSoon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -99,11 +99,11 @@
   box-sizing: border-box;
 }
 
-.fhircastComingSoon[hidden] {
+.castV3ComingSoon[hidden] {
   display: none !important;
 }
 
-.fhircastComingSoon p {
+.castV3ComingSoon p {
   margin: 0;
   font-size: 1.35rem;
   font-weight: 600;

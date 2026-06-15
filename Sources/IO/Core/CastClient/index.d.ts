@@ -141,24 +141,25 @@ export interface vtkCastClient extends vtkObject {
     castMessage: CastMessage,
     hub?: HubConfig & HubRuntimeState
   ): Promise<Response | null>;
-  /** @deprecated Use ``publishStowBatch`` or ``publish`` (STOW). */
+  /** @deprecated Use ``publishBinaryBatch`` or ``publish`` (binary batch). */
   publishMultipart(
     castMessage: CastMessage,
     fileBytes: ArrayBuffer,
     hub?: HubConfig & HubRuntimeState
   ): Promise<Response | null>;
-  publishStowBatch(
+  publishBinaryBatch(
     castMessage: CastMessage,
     fileBytesList: ArrayBuffer[],
     hub?: HubConfig & HubRuntimeState
   ): Promise<Response | null>;
-  /** @deprecated Use ``publishStowBatch`` or ``publish``. */
+  /** @deprecated Use ``publishBinaryBatch`` or ``publish``. */
   publishNiftiMultipart(
     castMessage: CastMessage,
     fileBytes: ArrayBuffer,
     hub?: HubConfig & HubRuntimeState
   ): Promise<Response | null>;
   fetchPayload(castMessage: CastMessage): Promise<CastMessage>;
+  /** Clones the message, then attaches downloaded bytes to ``context.files[]``. */
   fetchAllPayloads(castMessage: CastMessage): Promise<CastMessage>;
   hasPendingPayload(castMessage: CastMessage): boolean;
   /**
@@ -188,6 +189,35 @@ export function extend(
 export function newInstance(initialValues?: CastClientConfig): vtkCastClient;
 
 export function generateSubscriberName(productName?: string): string;
+
+export const REQUEST_SUFFIX: string;
+export const RESPONSE_SUFFIX: string;
+
+export function requestEventFor(dataType: string): string;
+export function responseEventFor(dataType: string): string;
+export function isRequestEvent(name: string): boolean;
+export function isResponseEvent(name: string): boolean;
+export function dataTypeFromEventName(name: string): string;
+export function normalizeDataType(dataType: string): string;
+
+export interface ParsedCollatedRequestResult {
+  responses: CastRequestResponseItem[];
+  expected: string[];
+  missing: string[];
+  timedOut: boolean;
+  ok: boolean;
+  id: string | null;
+  actor: string | null;
+  productName: string | null;
+}
+
+export function parseCollatedRequestResult(
+  data: unknown
+): ParsedCollatedRequestResult;
+
+export function collatedResponsesFromRequestResult(
+  data: unknown
+): CastRequestResponseItem[];
 
 /** True when the page is served from a public/cloud host (not local dev). */
 export function isRunningInCloud(location?: Location): boolean;
@@ -333,8 +363,8 @@ export function buildNiftiUrlImagingStudyOpenContext(params: {
  *     'subscriber.name': client.getSessionConfig().subscriberName,
  *     event: {
  *       'hub.topic': 'my-topic',
- *       'hub.event': requestEventFor('FHIRcastContext'),
- *       context: { dataType: 'FHIRcastContext' },
+ *       'hub.event': requestEventFor('STATUS'),
+ *       context: { dataType: 'STATUS' },
  *     },
  *     'target.actor': 'WORKLIST_CLIENT',
  *   });
@@ -349,6 +379,16 @@ export declare const vtkCastClient: {
   isHubEndpointInCloud: typeof isHubEndpointInCloud;
   isRunningInCloud: typeof isRunningInCloud;
   selectFirstMatchingHubKey: typeof selectFirstMatchingHubKey;
+  collatedResponsesFromRequestResult: typeof collatedResponsesFromRequestResult;
+  dataTypeFromEventName: typeof dataTypeFromEventName;
+  isRequestEvent: typeof isRequestEvent;
+  isResponseEvent: typeof isResponseEvent;
+  normalizeDataType: typeof normalizeDataType;
+  parseCollatedRequestResult: typeof parseCollatedRequestResult;
+  REQUEST_SUFFIX: typeof REQUEST_SUFFIX;
+  requestEventFor: typeof requestEventFor;
+  responseEventFor: typeof responseEventFor;
+  RESPONSE_SUFFIX: typeof RESPONSE_SUFFIX;
   buildDicomwebImagingStudyOpenContext: typeof buildDicomwebImagingStudyOpenContext;
   buildFilesImagingStudyOpenContext: typeof buildFilesImagingStudyOpenContext;
   buildIdcImagingStudyOpenContext: typeof buildIdcImagingStudyOpenContext;

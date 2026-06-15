@@ -55,12 +55,26 @@ import vtkCastClient, {
   extractVolviewSampleId,
   generateSubscriberName,
   isHubEndpointInCloud,
+  isRequestEvent,
   isRunningInCloud,
+  requestEventFor,
   selectFirstMatchingHubKey,
 } from 'vtk.js/Sources/IO/Core/CastClient';
 import html2canvas from 'html2canvas';
 import { zipSync } from 'fflate';
-import { isRequestEvent, requestEventFor } from '../eventNames';
+import {
+  resolveTargetActorForWire,
+  resolveTargetProductNameForWire,
+} from '../wireEnvelope';
+import enrichBinaryBatchMessage from './binaryBatchReceive';
+import {
+  CAST_STANDARD_CAST,
+  CAST_STANDARD_DEFAULT,
+  CAST_STANDARD_V3_COMING,
+  CAST_V3_COMING_SOON_MESSAGE,
+  isCastV3ComingStandard,
+  titleMainForCastStandard,
+} from './castStandard';
 import idcPortalDemoSeries2 from './idc-data/idc-portal-demo-series-2.json';
 import idcLungScreenManifest from './idc-data/idc-lung-screen-manifest.json';
 import idcLungUsManifest from './idc-data/idc-lung-us-manifest.json';
@@ -161,7 +175,7 @@ const DEFAULT_TARGET_ACTOR_KEYWORD = '*';
 const DEFAULT_TARGET_PRODUCT = '*';
 const TARGET_PRODUCT_PRESETS = ['*', 'VOLVIEW', 'OHIF', 'AIBRAIN'];
 const DICOM_SEND_ACTOR_KEYWORD = 'EC';
-const EMPTY_FHIRCAST_CONTEXT = {
+const EMPTY_CAST_CONTEXT = {
   'context.type': '',
   context: [],
 };
@@ -196,7 +210,7 @@ const IDC_CLAUDE_ADD_STUDY_PROGRESS_MESSAGES = [
   'Still downloading URL list — you can add other studies after this finishes.',
 ];
 const IDC_CLAUDE_DEFAULT_PROMPT = '3 US series from collection cmb_lca';
-const IDC_CLAUDE_DEFAULT_ORG_LABEL = 'US smoke test';
+const IDC_CLAUDE_DEFAULT_ORG_LABEL = 'US annotation meeting';
 const IDC_CUSTOM_WORKLISTS_STORAGE_KEY = 'castExample.idcCustomWorklists';
 const WORKLIST_URL_PARAM = 'worklist';
 
@@ -272,24 +286,6 @@ const CAST_ABOUT_IMAGE_DISPLAYS_ACK_HTML = `<div class="${style.castAboutSampleA
 
 const HANGING_PROTOCOL_TRAINING_INFO_TEXT =
   'Standardized hanging protocol training data could mean personalized protocols without training each product separately: from NA-MIC project week 43.';
-
-const CAST_STANDARD_CAST = 'cast';
-const CAST_STANDARD_FHIRCAST_V3 = 'fhircast-v3';
-const CAST_STANDARD_DEFAULT = CAST_STANDARD_CAST;
-const FHIRCAST_V3_COMING_SOON_MESSAGE =
-  'FHIRcast v3.0 is coming this fall to this client library !';
-
-const TITLE_BY_CAST_STANDARD = {
-  [CAST_STANDARD_CAST]: 'Imaging Worklist',
-  [CAST_STANDARD_FHIRCAST_V3]: 'Worklist with Cast interface',
-};
-
-function titleMainForCastStandard(standard) {
-  return (
-    TITLE_BY_CAST_STANDARD[standard] ||
-    TITLE_BY_CAST_STANDARD[CAST_STANDARD_DEFAULT]
-  );
-}
 
 function selectedCastStandard(el) {
   return el.castStandardSelect?.value || CAST_STANDARD_DEFAULT;
@@ -957,10 +953,6 @@ function headerInstructionsHtml() {
 </ol>`;
 }
 
-function isFhircastV3Standard(standard) {
-  return standard === CAST_STANDARD_FHIRCAST_V3;
-}
-
 function applyCastStandardToHeader(el, standard) {
   const titleMain = titleMainForCastStandard(standard);
   if (el.headerTitleMain) {
@@ -974,12 +966,12 @@ function applyCastStandardToHeader(el, standard) {
 
 function applyCastStandardToPage(el, standard) {
   applyCastStandardToHeader(el, standard);
-  const fhircast = isFhircastV3Standard(standard);
+  const castV3Coming = isCastV3ComingStandard(standard);
   if (el.castMainContent) {
-    el.castMainContent.hidden = fhircast;
+    el.castMainContent.hidden = castV3Coming;
   }
-  if (el.castFhircastComingSoon) {
-    el.castFhircastComingSoon.hidden = !fhircast;
+  if (el.castV3ComingSoon) {
+    el.castV3ComingSoon.hidden = !castV3Coming;
   }
 }
 
@@ -1213,7 +1205,7 @@ function updateWorklistContextDisplay(el, state) {
   updateWorklistContextControls(el, state);
 }
 
-function updateFhircastContextState(el, state, eventType, context) {
+function updateCastContextState(el, state, eventType, context) {
   if (eventType.includes('close')) {
     state.lastImagingStudyOpenContext = [];
     updateWorklistContextDisplay(el, state);
@@ -1255,7 +1247,7 @@ async function publishImagingStudyOpen(el, state, context) {
   try {
     const res = await state.client.publish(payload);
     if (res && res.ok) {
-      updateFhircastContextState(el, state, 'imagingstudy-open', context);
+      updateCastContextState(el, state, 'imagingstudy-open', context);
       addMessage(el, state, 'sent', 'Open study', payload);
       return true;
     }
@@ -1303,7 +1295,7 @@ async function publishImagingStudyClose(el, state) {
   try {
     const res = await state.client.publish(payload);
     if (res && res.ok) {
-      updateFhircastContextState(el, state, 'imagingstudy-close', context);
+      updateCastContextState(el, state, 'imagingstudy-close', context);
       addMessage(el, state, 'sent', 'Close study', payload);
       return true;
     }
@@ -1902,7 +1894,7 @@ function buildPageHtml() {
   <div class="${style.castHeader}"><div class="${style.headerStandardWrap}"><!--
   <label for="castStandardSelect">Example:</label><select id="castStandardSelect" class="${
     style.headerStandardSelect
-  }"><option value="${CAST_STANDARD_FHIRCAST_V3}">FHIRcast v3.0 standard</option><option value="${CAST_STANDARD_CAST}" selected>Cast Interface v1.0</option></select>
+  }"><option value="${CAST_STANDARD_V3_COMING}">Cast v3.0 (coming soon)</option><option value="${CAST_STANDARD_CAST}" selected>Cast Interface v1.0</option></select>
   --></div><div class="${style.headerTitleWrap}"><div class="${
     style.headerTitleStack
   }"><span id="headerTitleMain" class="${
@@ -1944,9 +1936,9 @@ function buildPageHtml() {
   }" role="separator"></div><button type="button" id="castHeaderAboutBtn" class="${
     style.castHeaderMenuItem
   }" role="menuitem">About…</button></div></div></div></div></div>
-  <div id="castFhircastComingSoon" class="${
-    style.fhircastComingSoon
-  }" hidden><p>${FHIRCAST_V3_COMING_SOON_MESSAGE}</p></div>
+  <div id="castV3ComingSoon" class="${
+    style.castV3ComingSoon
+  }" hidden><p>${CAST_V3_COMING_SOON_MESSAGE}</p></div>
   <div id="castMainContent">
   <div class="${style.layout}">
   <div class="${style.controlGrid}">
@@ -2217,13 +2209,13 @@ function buildPageHtml() {
         placeholder="Natural-language IDC query (collection + Modality + LIMIT finish faster)"
       ></textarea>
       <label class="${style.idcClaudeFieldLabel}" for="idcClaudeOrgLabel">
-        Worklist label (optional)
+        Worklist label
       </label>
       <input
         type="text"
         id="idcClaudeOrgLabel"
         class="${style.idcClaudeOrgLabel}"
-        placeholder="e.g. US smoke test"
+        placeholder="e.g. US annotation meeting"
       />
       <div id="idcClaudeStatusRow" class="${style.idcClaudeStatusRow}">
         <span
@@ -2411,14 +2403,6 @@ function fillTargetActorPresetSelect(select, firstOption) {
   });
 }
 
-function resolveTargetActorForWire(selectValue) {
-  const text = String(selectValue || '').trim();
-  if (!text || text === '*') {
-    return undefined;
-  }
-  return text;
-}
-
 function fillTargetProductPresetSelect(select) {
   select.replaceChildren();
   TARGET_PRODUCT_PRESETS.forEach((name) => {
@@ -2430,14 +2414,6 @@ function fillTargetProductPresetSelect(select) {
     }
     select.append(option);
   });
-}
-
-function resolveTargetProductNameForWire(inputValue) {
-  const text = String(inputValue || '').trim();
-  if (!text || text === '*') {
-    return undefined;
-  }
-  return text;
 }
 
 function parseEvents(raw) {
@@ -6093,7 +6069,7 @@ function handleIncomingGetRequest(el, state, message) {
     return false;
   }
 
-  // Respond to status-request with worklist ImagingStudy context (legacy fhircast shape).
+  // Respond to status-request with worklist ImagingStudy context.
   if (context.dataType !== 'STATUS') {
     return false;
   }
@@ -6103,7 +6079,7 @@ function handleIncomingGetRequest(el, state, message) {
         'context.type': 'ImagingStudy',
         context: cloneContextArray(state.lastImagingStudyOpenContext),
       }
-    : EMPTY_FHIRCAST_CONTEXT;
+    : EMPTY_CAST_CONTEXT;
 
   updateStatusForIncomingContextRequest(el, state, message);
 
@@ -6346,24 +6322,32 @@ function ensureClient(el, state, recreate = false) {
       callbackUrl: `${window.location.origin}/castCallback`,
       autoReconnect: true,
     });
-    state.client.onMessage((message) => {
-      handleSubscriptionRemoved(el, state, message);
-      handleIncomingGetRequest(el, state, message);
-      const event = message?.event;
+    state.client.onMessage(async (message) => {
+      let enriched = message;
+      try {
+        enriched = await enrichBinaryBatchMessage(state.client, message);
+      } catch (fetchErr) {
+        const fetchMsg =
+          fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+        addMessage(el, state, 'err', 'Binary batch fetch', fetchMsg);
+      }
+      handleSubscriptionRemoved(el, state, enriched);
+      handleIncomingGetRequest(el, state, enriched);
+      const event = enriched?.event;
       const hubEvent = String(event?.['hub.event'] || '')
         .trim()
         .toLowerCase();
       if (hubEvent === 'conference-start') {
-        handleConferenceStart(el, state, message);
+        handleConferenceStart(el, state, enriched);
       } else if (hubEvent === 'conference-end') {
-        handleConferenceEnd(el, state, message);
+        handleConferenceEnd(el, state, enriched);
       }
       addMessage(
         el,
         state,
         'received',
         'Received',
-        sanitizeCastMessageForDisplay(message)
+        sanitizeCastMessageForDisplay(enriched)
       );
     });
     state.client.onConnectionStateChange((wsState) => {
@@ -6531,7 +6515,7 @@ async function handleSubscribe(el, state) {
 
 /** Hub is already selected; run authenticate → authorize → subscribe on load. */
 async function autoConnectOnLoad(el, state) {
-  if (isFhircastV3Standard(selectedCastStandard(el))) {
+  if (isCastV3ComingStandard(selectedCastStandard(el))) {
     return;
   }
   console.info('[vtkCastClient] auto-connect: authenticate');
@@ -6631,7 +6615,7 @@ async function handlePublish(el, state) {
   try {
     const res = await state.client.publish(payload);
     if (res && res.ok) {
-      updateFhircastContextState(el, state, eventType.toLowerCase(), context);
+      updateCastContextState(el, state, eventType.toLowerCase(), context);
       addMessage(el, state, 'sent', 'Publish', payload);
       return;
     }
@@ -7002,7 +6986,7 @@ async function boot() {
     castStandardSelect: document.getElementById('castStandardSelect'),
     headerTitleMain: byId('headerTitleMain'),
     castMainContent: byId('castMainContent'),
-    castFhircastComingSoon: byId('castFhircastComingSoon'),
+    castV3ComingSoon: byId('castV3ComingSoon'),
   };
 
   const state = {

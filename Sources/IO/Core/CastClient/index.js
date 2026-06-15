@@ -1,36 +1,46 @@
 import macro from 'vtk.js/Sources/macros';
-import { responseEventFor } from './eventNames';
+import { postBinaryBatchPublish } from './binaryBatchPublish';
+import {
+  collatedResponsesFromRequestResult,
+  parseCollatedRequestResult,
+} from './collatedRequest';
+import {
+  isHubEndpointInCloud,
+  isRunningInCloud,
+  selectFirstMatchingHubKey,
+} from './deployment';
+import {
+  dataTypeFromEventName,
+  isRequestEvent,
+  isResponseEvent,
+  normalizeDataType,
+  REQUEST_SUFFIX,
+  requestEventFor,
+  responseEventFor,
+  RESPONSE_SUFFIX,
+} from './eventNames';
+import { buildHubCallbackUrl, buildHubModeFormData } from './hubForms';
 import {
   DEFAULT_PRODUCT_NAME,
   generateMessageId,
   generateSubscriberName,
   productNameToMessageIdPrefix,
 } from './identity';
+import { createPayloadFetchApi } from './payloadFetch';
 import {
   binaryFileNameFromMessage,
-  coerceBinaryPublishToStowFiles,
-  contextFilesFromEvent,
-  extractStowBatchFileBytes,
-  firstPendingPayloadSlot,
-  hasPendingPayload,
-  messageNeedsStowBatchPublish,
-  normalizeStowBatchMessageMetadataOnly,
-  payloadChunkPlan,
+  coerceBinaryPublishToFiles,
+  extractBinaryBatchFileBytes,
+  messageNeedsBinaryBatchPublish,
   toArrayBufferStrict,
 } from './sendNormalize';
 import {
   createHubConfig,
   createHubRuntimeState,
   createSessionConfig,
-  getClientInfoPayload,
   resolveTargetActorForWire,
   resolveTargetProductNameForWire,
 } from './wireEnvelope';
-import {
-  isHubEndpointInCloud,
-  isRunningInCloud,
-  selectFirstMatchingHubKey,
-} from './deployment';
 import {
   buildDicomwebImagingStudyOpenContext,
   buildDicomUrlImagingStudyOpenContext,
@@ -108,23 +118,20 @@ export {
   extractOpenMode,
   extractStudyContextItem,
   extractVolviewSampleId,
+  collatedResponsesFromRequestResult,
+  dataTypeFromEventName,
+  isRequestEvent,
+  isResponseEvent,
+  normalizeDataType,
+  parseCollatedRequestResult,
+  REQUEST_SUFFIX,
+  requestEventFor,
+  responseEventFor,
+  RESPONSE_SUFFIX,
 };
 
 const RECONNECT_INTERVAL_MS = 10000;
 const SUBSCRIBE_TIMEOUT_MS = 5000;
-const HTTP_PAYLOAD_MAX_CONCURRENT = 25;
-
-function normalizeLoopbackUrl(urlString) {
-  try {
-    const parsed = new URL(urlString);
-    if (parsed.hostname.toLowerCase() === 'localhost') {
-      parsed.hostname = '127.0.0.1';
-    }
-    return parsed.toString();
-  } catch (err) {
-    return urlString;
-  }
-}
 
 // ----------------------------------------------------------------------------
 // Object factory
@@ -146,7 +153,6 @@ const DEFAULT_VALUES = {
   reconnectInterval: null,
   onMessageCallback: null,
   onConnectionStateChangeCallback: null,
-  lastSentMessage: null,
 };
 
 function vtkCastClient(publicAPI, model) {
@@ -191,149 +197,10 @@ function vtkCastClient(publicAPI, model) {
     emitConnectionState('disconnected');
   }
 
-  function clearPayloadRefs(entry) {
-    delete entry.binaryTransfer;
-    delete entry.url;
-    delete entry.payloadId;
-    delete entry.payloadIds;
-    delete entry.chunkByteLengths;
-    delete entry.expiresAt;
-  }
-
-  function reassembleFileChunks(chunks, expectedTotal) {
-    const total = chunks.reduce((sum, buf) => sum + buf.byteLength, 0);
-    if (
-      typeof expectedTotal === 'number' &&
-      expectedTotal >= 0 &&
-      total !== expectedTotal
-    ) {
-      throw new Error(
-        `CastClient: payload size mismatch expected=${expectedTotal} received=${total}`
-      );
-    }
-    const out = new Uint8Array(total);
-    let offset = 0;
-    for (let i = 0; i < chunks.length; i++) {
-      out.set(new Uint8Array(chunks[i]), offset);
-      offset += chunks[i].byteLength;
-    }
-    return out.buffer;
-  }
-
-  function attachPayloadToFile(castMessage, fileIndex, buf) {
-    const event = castMessage && castMessage.event;
-    const ctx = event && event.context;
-    const files = ctx && ctx.files;
-    const entry = files && files[fileIndex];
-    if (!entry || typeof entry !== 'object') {
-      return false;
-    }
-    clearPayloadRefs(entry);
-    entry.data = buf;
-    entry.byteLength = buf.byteLength;
-    return true;
-  }
-
-  function buildStowRelatedBody(boundary, jsonText, fileParts) {
-    const enc = new TextEncoder();
-    const crlf = enc.encode('\r\n');
-    const chunks = [];
-    const pushText = (text) => {
-      chunks.push(enc.encode(text));
-    };
-    pushText(
-      `--${boundary}\r\nContent-Type: application/dicom+json\r\n\r\n${jsonText}\r\n`
-    );
-    for (let i = 0; i < fileParts.length; i++) {
-      const part = fileParts[i];
-      const mime =
-        (part && part.mimeType && String(part.mimeType).trim()) ||
-        'application/octet-stream';
-      pushText(`--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`);
-      chunks.push(new Uint8Array(part.buffer));
-      chunks.push(crlf);
-    }
-    pushText(`--${boundary}--\r\n`);
-    return new Blob(chunks);
-  }
-
-  function resolvePayloadUrl(payloadId) {
-    if (!payloadId) {
-      return '';
-    }
-    try {
-      const path = `/api/hub/payloads/${encodeURIComponent(payloadId)}`;
-      return normalizeLoopbackUrl(
-        new URL(path, model.hub.hub_endpoint).toString()
-      );
-    } catch (err) {
-      console.warn('CastClient: invalid payloadId url', payloadId, err);
-      return '';
-    }
-  }
-
-  async function downloadPayloadBytes(payloadId, expectedChunkBytes) {
-    const resolved = resolvePayloadUrl(payloadId);
-    if (!resolved) {
-      throw new Error('CastClient.fetchPayload: missing or invalid payloadId');
-    }
-    const response = await fetch(resolved, {
-      method: 'GET',
-      credentials: 'omit',
-    });
-    if (!response.ok) {
-      throw new Error(
-        `CastClient.fetchPayload: GET ${response.status} ${response.statusText}`
-      );
-    }
-    const buf = await response.arrayBuffer();
-    if (
-      typeof expectedChunkBytes === 'number' &&
-      expectedChunkBytes >= 0 &&
-      buf.byteLength !== expectedChunkBytes
-    ) {
-      throw new Error(
-        `CastClient.fetchPayload: chunk size mismatch payloadId=${payloadId.slice(
-          0,
-          8
-        )} expected=${expectedChunkBytes} received=${buf.byteLength}`
-      );
-    }
-    return buf;
-  }
-
-  async function downloadFilePayloadChunks(entry) {
-    const plan = payloadChunkPlan(entry);
-    if (!plan.payloadIds.length) {
-      throw new Error('CastClient.fetchPayload: no payloadIds on file entry');
-    }
-    const chunks = [];
-    for (
-      let start = 0;
-      start < plan.payloadIds.length;
-      start += HTTP_PAYLOAD_MAX_CONCURRENT
-    ) {
-      const batchIds = plan.payloadIds.slice(
-        start,
-        start + HTTP_PAYLOAD_MAX_CONCURRENT
-      );
-      const batchLens = plan.chunkByteLengths.slice(
-        start,
-        start + HTTP_PAYLOAD_MAX_CONCURRENT
-      );
-      // eslint-disable-next-line no-await-in-loop
-      const batchBufs = await Promise.all(
-        batchIds.map((id, idx) =>
-          downloadPayloadBytes(id, batchLens[idx] ?? null)
-        )
-      );
-      chunks.push(...batchBufs);
-    }
-    return reassembleFileChunks(
-      chunks,
-      typeof entry.byteLength === 'number' ? entry.byteLength : null
-    );
-  }
+  const payloadFetchApi = createPayloadFetchApi(() => ({
+    hubEndpoint: model.hub.hub_endpoint,
+    accessToken: model.hub.token,
+  }));
 
   function processTextMessage(eventData) {
     try {
@@ -585,17 +452,9 @@ function vtkCastClient(publicAPI, model) {
         }
         if (config.topic && typeof config.topic === 'string') {
           if (!model.config.preserveSessionTopicFromToken) {
-            // --------------------------------------------------------------------------
-
-            // --------------------------------------------------------------------------
-
             publicAPI.setTopic(config.topic);
           }
           if (model.config.autoStart) {
-            // --------------------------------------------------------------------------
-
-            // --------------------------------------------------------------------------
-
             publicAPI.subscribe();
           }
         }
@@ -639,49 +498,17 @@ function vtkCastClient(publicAPI, model) {
       return 'error: no token';
     }
 
-    const callbackUrl =
-      model.config.callbackUrl ||
-      (typeof window !== 'undefined'
-        ? `${window.location.origin}/castCallback`
-        : '');
-    const subscribeFormData = new URLSearchParams();
-    subscribeFormData.append('hub.mode', 'subscribe');
-    subscribeFormData.append('hub.channel.type', 'websocket');
-    subscribeFormData.append('hub.callback', callbackUrl);
-    subscribeFormData.append(
-      'hub.events',
-      (model.session.events || []).toString()
+    const callbackUrl = buildHubCallbackUrl(model.config.callbackUrl);
+    const subscribeFormData = buildHubModeFormData(
+      'subscribe',
+      {
+        ...model.session,
+        topic,
+        subscriberName: model.session.subscriberName,
+      },
+      callbackUrl,
+      model.config.productVersion
     );
-    subscribeFormData.append('hub.topic', topic);
-    subscribeFormData.append('hub.lease', String(model.session.lease || 999));
-    subscribeFormData.append(
-      'subscriber.name',
-      model.session.subscriberName || ''
-    );
-    subscribeFormData.append(
-      'subscriber.product.name',
-      model.session.productName || ''
-    );
-    subscribeFormData.append(
-      'subscriber.product.version',
-      model.session.productVersion || model.config.productVersion || ''
-    );
-    const subscribeActors = (model.session.actors || [])
-      .map((actor) => actor.trim())
-      .filter(Boolean);
-    if (subscribeActors.length) {
-      subscribeFormData.append(
-        'subscriber.actors',
-        JSON.stringify(subscribeActors)
-      );
-    }
-    const clientInfo = getClientInfoPayload();
-    if (clientInfo) {
-      subscribeFormData.append(
-        'subscriber.client_info',
-        JSON.stringify(clientInfo)
-      );
-    }
 
     const requestOptions = {
       method: 'POST',
@@ -776,49 +603,13 @@ function vtkCastClient(publicAPI, model) {
     model.hub.subscribed = false;
     model.hub.resubscribeRequested = false;
 
-    const callbackUrl =
-      model.config.callbackUrl ||
-      (typeof window !== 'undefined'
-        ? `${window.location.origin}/castCallback`
-        : '');
-    const unsubscribeFormData = new URLSearchParams();
-    unsubscribeFormData.append('hub.mode', 'unsubscribe');
-    unsubscribeFormData.append('hub.channel.type', 'websocket');
-    unsubscribeFormData.append('hub.callback', callbackUrl);
-    unsubscribeFormData.append(
-      'hub.events',
-      (model.session.events || []).toString()
+    const callbackUrl = buildHubCallbackUrl(model.config.callbackUrl);
+    const unsubscribeFormData = buildHubModeFormData(
+      'unsubscribe',
+      model.session,
+      callbackUrl,
+      model.config.productVersion
     );
-    unsubscribeFormData.append('hub.topic', model.session.topic || '');
-    unsubscribeFormData.append('hub.lease', String(model.session.lease || 999));
-    unsubscribeFormData.append(
-      'subscriber.name',
-      model.session.subscriberName || ''
-    );
-    unsubscribeFormData.append(
-      'subscriber.product.name',
-      model.session.productName || ''
-    );
-    unsubscribeFormData.append(
-      'subscriber.product.version',
-      model.session.productVersion || model.config.productVersion || ''
-    );
-    const unsubscribeActors = (model.session.actors || [])
-      .map((actor) => actor.trim())
-      .filter(Boolean);
-    if (unsubscribeActors.length) {
-      unsubscribeFormData.append(
-        'subscriber.actors',
-        JSON.stringify(unsubscribeActors)
-      );
-    }
-    const clientInfo = getClientInfoPayload();
-    if (clientInfo) {
-      unsubscribeFormData.append(
-        'subscriber.client_info',
-        JSON.stringify(clientInfo)
-      );
-    }
 
     try {
       const response = await fetch(model.hub.hub_endpoint, {
@@ -887,71 +678,18 @@ function vtkCastClient(publicAPI, model) {
 
   // --------------------------------------------------------------------------
 
-  publicAPI.fetchPayload = async (castMessage) => {
-    const event = castMessage && castMessage.event;
-    if (!event || !hasPendingPayload(event)) {
-      return castMessage;
-    }
-    const slot = firstPendingPayloadSlot(event);
-    if (!slot) {
-      return castMessage;
-    }
-    const startedAt =
-      typeof performance !== 'undefined' && performance.now
-        ? performance.now()
-        : Date.now();
-    const entry = event.context.files[slot.index];
-    const buf = await downloadFilePayloadChunks(entry);
-    const enriched = JSON.parse(JSON.stringify(castMessage));
-    const attached = attachPayloadToFile(enriched, slot.index, buf);
-    if (!attached) {
-      throw new Error('CastClient.fetchPayload: no payload slot on message');
-    }
-    const elapsedMs =
-      (typeof performance !== 'undefined' && performance.now
-        ? performance.now()
-        : Date.now()) - startedAt;
-    console.debug(
-      `CastClient: payload fetched fileIndex=${slot.index} ` +
-        `bytes=${buf.byteLength} elapsed=${(elapsedMs / 1000).toFixed(2)}s`
-    );
-    return enriched;
-  };
+  publicAPI.fetchPayload = (castMessage) =>
+    payloadFetchApi.fetchPayload(castMessage);
 
-  publicAPI.fetchAllPayloads = async (castMessage) => {
-    const event = castMessage && castMessage.event;
-    const files = event ? contextFilesFromEvent(event) : [];
-    const pendingIndices = [];
-    for (let i = 0; i < files.length; i++) {
-      const plan = payloadChunkPlan(files[i]);
-      if (plan.payloadIds.length && files[i].data == null) {
-        pendingIndices.push(i);
-      }
-    }
-    if (!pendingIndices.length) {
-      return castMessage;
-    }
-    const msg = castMessage;
-    for (let f = 0; f < pendingIndices.length; f++) {
-      const fileIndex = pendingIndices[f];
-      const entry = msg.event.context.files[fileIndex];
-      // eslint-disable-next-line no-await-in-loop
-      const buf = await downloadFilePayloadChunks(entry);
-      if (!attachPayloadToFile(msg, fileIndex, buf)) {
-        throw new Error('CastClient.fetchAllPayloads: attach failed');
-      }
-    }
-    return msg;
-  };
+  publicAPI.fetchAllPayloads = (castMessage) =>
+    payloadFetchApi.fetchAllPayloads(castMessage);
 
-  publicAPI.hasPendingPayload = (castMessage) => {
-    const event = castMessage && castMessage.event;
-    return Boolean(event && hasPendingPayload(event));
-  };
+  publicAPI.hasPendingPayload = (castMessage) =>
+    payloadFetchApi.hasPendingPayload(castMessage);
 
   // --------------------------------------------------------------------------
 
-  /** @deprecated Use ``publishStowBatch`` or ``publish`` (STOW). */
+  /** @deprecated Use ``publishBinaryBatch`` or ``publish`` (binary batch). */
   publicAPI.publishMultipart = async (
     castMessage,
     fileBytes,
@@ -959,8 +697,8 @@ function vtkCastClient(publicAPI, model) {
   ) => {
     let msg = preparePublishMessage(castMessage, hub);
     const raw = await toArrayBufferStrict(fileBytes);
-    msg = coerceBinaryPublishToStowFiles(msg);
-    let fileBytesList = await extractStowBatchFileBytes(msg);
+    msg = coerceBinaryPublishToFiles(msg);
+    let fileBytesList = await extractBinaryBatchFileBytes(msg);
     if (!fileBytesList.length) {
       const hubEvent =
         msg.event && typeof msg.event['hub.event'] === 'string'
@@ -980,64 +718,39 @@ function vtkCastClient(publicAPI, model) {
       };
       fileBytesList = [raw];
     }
-    return publicAPI.publishStowBatch(msg, fileBytesList, hub);
+    return publicAPI.publishBinaryBatch(msg, fileBytesList, hub);
   };
 
   // --------------------------------------------------------------------------
 
-  publicAPI.publishStowBatch = async (
+  publicAPI.publishBinaryBatch = async (
     castMessage,
     fileBytesList,
     hub = model.hub
   ) => {
-    let msg = preparePublishMessage(castMessage, hub);
-    msg = coerceBinaryPublishToStowFiles(msg);
-    const rawList = await Promise.all(
-      (fileBytesList || []).map((bytes) => toArrayBufferStrict(bytes))
+    const msg = coerceBinaryPublishToFiles(
+      preparePublishMessage(castMessage, hub)
     );
-    msg = await normalizeStowBatchMessageMetadataOnly(msg);
-    model.lastSentMessage = msg;
-
-    const files = contextFilesFromEvent(msg.event);
-    const fileParts = rawList.map((buffer, index) => ({
-      buffer,
-      mimeType:
-        (files[index] && files[index].mimeType) || 'application/octet-stream',
-    }));
-    const boundary = `cast-stow-${generateMessageId(messageIdPrefix())}`;
-    const body = buildStowRelatedBody(boundary, JSON.stringify(msg), fileParts);
-
-    try {
-      const response = await fetch(hub.hub_endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${hub.token}`,
-          'Content-Type': `multipart/related; boundary="${boundary}"; type="application/dicom"`,
-        },
-        body,
-      });
-      return response;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.debug('CastClient:', message);
-      return null;
-    }
+    return postBinaryBatchPublish({
+      msg,
+      fileBytesList,
+      hub,
+      messageIdPrefix,
+    });
   };
 
   // --------------------------------------------------------------------------
 
   publicAPI.publish = async (castMessage, hub = model.hub) => {
     let msg = preparePublishMessage(castMessage, hub);
-    msg = coerceBinaryPublishToStowFiles(msg);
+    msg = coerceBinaryPublishToFiles(msg);
 
-    if (messageNeedsStowBatchPublish(msg)) {
-      const fileBytesList = await extractStowBatchFileBytes(msg);
+    if (messageNeedsBinaryBatchPublish(msg)) {
+      const fileBytesList = await extractBinaryBatchFileBytes(msg);
       if (fileBytesList.length) {
-        return publicAPI.publishStowBatch(msg, fileBytesList, hub);
+        return publicAPI.publishBinaryBatch(msg, fileBytesList, hub);
       }
     }
-
-    model.lastSentMessage = msg;
 
     try {
       const response = await fetch(hub.hub_endpoint, {
@@ -1058,9 +771,9 @@ function vtkCastClient(publicAPI, model) {
 
   // --------------------------------------------------------------------------
 
-  /** @deprecated Use ``publishStowBatch`` or ``publish``. */
+  /** @deprecated Use ``publishBinaryBatch`` or ``publish``. */
   publicAPI.publishNiftiMultipart = async (castMessage, fileBytes, hub) =>
-    publicAPI.publishStowBatch(castMessage, [fileBytes], hub);
+    publicAPI.publishBinaryBatch(castMessage, [fileBytes], hub);
 
   // --------------------------------------------------------------------------
 
@@ -1260,6 +973,16 @@ export default {
   isHubEndpointInCloud,
   isRunningInCloud,
   selectFirstMatchingHubKey,
+  collatedResponsesFromRequestResult,
+  dataTypeFromEventName,
+  isRequestEvent,
+  isResponseEvent,
+  normalizeDataType,
+  parseCollatedRequestResult,
+  REQUEST_SUFFIX,
+  requestEventFor,
+  responseEventFor,
+  RESPONSE_SUFFIX,
   buildDicomwebImagingStudyOpenContext,
   buildDicomUrlImagingStudyOpenContext,
   buildFilesImagingStudyOpenContext,

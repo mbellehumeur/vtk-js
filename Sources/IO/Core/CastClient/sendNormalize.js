@@ -1,6 +1,6 @@
 // Cast binary-family events: any ``hub.event`` whose name matches one of these
 // prefixes (exact or followed by ``-`` / ``_``) may carry a file attachment.
-// Publishers POST multipart/related STOW (JSON + file parts); the hub stores
+// Publishers POST multipart/related binary batch (JSON + file parts); the hub stores
 // bytes and fans out ``context.files[].payloadIds[]`` on the WebSocket text frame.
 // Receivers call ``fetchPayload`` when the application chooses to download.
 const CAST_BINARY_EVENT_PREFIXES = ['dicom', 'nifti', 'jpg', 'png', 'nrrd'];
@@ -123,42 +123,11 @@ function firstPendingPayloadSlot(event) {
   return firstPendingFileChunkSlot(event);
 }
 
-export function castPayloadIdFromEvent(event) {
-  const slot = firstPendingPayloadSlot(event);
-  return slot ? slot.payloadId : '';
-}
-
 export function hasPendingPayload(event) {
   return Boolean(firstPendingPayloadSlot(event));
 }
 
-/** Every unfetched chunk ``payloadId`` on ``context.files[]``. */
-export function listPendingPayloadSlots(event) {
-  const slots = [];
-  const files = contextFilesFromEvent(event);
-  for (let i = 0; i < files.length; i++) {
-    const entry = files[i];
-    if (entry.data == null) {
-      const plan = payloadChunkPlan(entry);
-      for (
-        let chunkIndex = 0;
-        chunkIndex < plan.payloadIds.length;
-        chunkIndex++
-      ) {
-        slots.push({
-          kind: 'files',
-          index: i,
-          chunkIndex,
-          payloadId: plan.payloadIds[chunkIndex],
-          expectedChunkBytes: plan.chunkByteLengths[chunkIndex] ?? null,
-        });
-      }
-    }
-  }
-  return slots;
-}
-
-function defaultStowFileName(hubEvent, index) {
+function defaultBinaryBatchFileName(hubEvent, index) {
   const name =
     typeof hubEvent === 'string' ? hubEvent.trim().toLowerCase() : '';
   if (name.startsWith('nifti')) {
@@ -167,7 +136,7 @@ function defaultStowFileName(hubEvent, index) {
   return index === 0 ? 'dicom-send.dcm' : `dicom-send-${index + 1}.dcm`;
 }
 
-function defaultStowMimeType(hubEvent) {
+function defaultBinaryBatchMimeType(hubEvent) {
   const name =
     typeof hubEvent === 'string' ? hubEvent.trim().toLowerCase() : '';
   if (name.startsWith('nifti')) {
@@ -176,7 +145,7 @@ function defaultStowMimeType(hubEvent) {
   return 'application/dicom';
 }
 
-export function coerceBinaryPublishToStowFiles(msg) {
+export function coerceBinaryPublishToFiles(msg) {
   const event = msg && msg.event;
   if (!event || !isCastBinaryEvent(event['hub.event'])) {
     return msg;
@@ -200,10 +169,10 @@ export function coerceBinaryPublishToStowFiles(msg) {
       if (resource && typeof resource === 'object' && resource.data != null) {
         const entry = { ...resource };
         if (typeof entry.fileName !== 'string' || !entry.fileName.trim()) {
-          entry.fileName = defaultStowFileName(hubEvent, i);
+          entry.fileName = defaultBinaryBatchFileName(hubEvent, i);
         }
         if (typeof entry.mimeType !== 'string' || !entry.mimeType.trim()) {
-          entry.mimeType = defaultStowMimeType(hubEvent);
+          entry.mimeType = defaultBinaryBatchMimeType(hubEvent);
         }
         files.push(entry);
       }
@@ -221,214 +190,6 @@ export function coerceBinaryPublishToStowFiles(msg) {
       },
     },
   };
-}
-
-function defaultDicomResourceFields(normalizedResource) {
-  normalizedResource.fileName =
-    typeof normalizedResource.fileName === 'string' &&
-    normalizedResource.fileName.trim()
-      ? normalizedResource.fileName
-      : 'dicom-send.dcm';
-  normalizedResource.mimeType =
-    typeof normalizedResource.mimeType === 'string' &&
-    normalizedResource.mimeType.trim()
-      ? normalizedResource.mimeType
-      : 'application/dicom';
-  return normalizedResource;
-}
-
-function defaultNiftiResourceFields(normalizedResource) {
-  normalizedResource.fileName =
-    typeof normalizedResource.fileName === 'string' &&
-    normalizedResource.fileName.trim()
-      ? normalizedResource.fileName
-      : 'nifti-send.nii.gz';
-  normalizedResource.mimeType =
-    typeof normalizedResource.mimeType === 'string' &&
-    normalizedResource.mimeType.trim()
-      ? normalizedResource.mimeType
-      : 'application/vnd.unknown.nifti-1';
-  return normalizedResource;
-}
-
-async function normalizeDicomSendContextItemMetadataOnly(item) {
-  if (!item || typeof item !== 'object') {
-    throw new Error('CastClient: dicom-send context items must be objects');
-  }
-  const status =
-    typeof item.status === 'string' ? item.status.trim().toLowerCase() : '';
-  if (status === 'complete') {
-    return { ...item };
-  }
-  const resource = item.resource;
-  if (!resource || typeof resource !== 'object') {
-    throw new Error(
-      'CastClient: dicom-send context item missing resource object'
-    );
-  }
-
-  let byteLength =
-    typeof resource.byteLength === 'number' && resource.byteLength >= 0
-      ? resource.byteLength
-      : null;
-
-  if ('data' in resource && resource.data != null) {
-    if (typeof resource.data === 'string') {
-      throw new Error(
-        'CastClient: dicom-send string payloads are not supported; pass binary input instead'
-      );
-    }
-    const binaryData = await toArrayBufferStrict(resource.data);
-    byteLength = binaryData.byteLength;
-  }
-
-  if (byteLength == null) {
-    throw new Error(
-      'CastClient: dicom-send multipart requires resource.data or resource.byteLength'
-    );
-  }
-
-  const normalizedResource = defaultDicomResourceFields({ ...resource });
-  delete normalizedResource.data;
-  delete normalizedResource.binaryTransfer;
-  delete normalizedResource.url;
-  delete normalizedResource.payloadId;
-  delete normalizedResource.expiresAt;
-  normalizedResource.byteLength = byteLength;
-
-  return { ...item, resource: normalizedResource };
-}
-
-export async function normalizeDicomSendMessageMetadataOnly(msg) {
-  if (!msg.event || typeof msg.event !== 'object') {
-    throw new Error('CastClient: dicom-send requires event object');
-  }
-  const event = msg.event;
-  if (event['hub.event'] !== 'dicom-send') {
-    return msg;
-  }
-
-  const contextValue = event.context;
-  let contextItems = [];
-  if (Array.isArray(contextValue)) {
-    contextItems = contextValue;
-  } else if (contextValue != null) {
-    contextItems = [contextValue];
-  }
-  if (!contextItems.length) {
-    throw new Error('CastClient: dicom-send requires non-empty event.context');
-  }
-
-  const normalizedContext = await Promise.all(
-    contextItems.map((contextItem) =>
-      normalizeDicomSendContextItemMetadataOnly(contextItem)
-    )
-  );
-
-  return {
-    ...msg,
-    event: {
-      ...event,
-      context: normalizedContext,
-    },
-  };
-}
-
-async function normalizeNiftiSendContextItemMetadataOnly(item) {
-  if (!item || typeof item !== 'object') {
-    throw new Error('CastClient: nifti-send context items must be objects');
-  }
-  const resource = item.resource;
-  if (!resource || typeof resource !== 'object') {
-    throw new Error(
-      'CastClient: nifti-send context item missing resource object'
-    );
-  }
-
-  let byteLength =
-    typeof resource.byteLength === 'number' && resource.byteLength >= 0
-      ? resource.byteLength
-      : null;
-
-  if ('data' in resource && resource.data != null) {
-    if (typeof resource.data === 'string') {
-      throw new Error(
-        'CastClient: nifti-send string payloads are not supported; pass binary input instead'
-      );
-    }
-    const binaryData = await toArrayBufferStrict(resource.data);
-    byteLength = binaryData.byteLength;
-  }
-
-  if (byteLength == null) {
-    throw new Error(
-      'CastClient: nifti-send multipart requires resource.data or resource.byteLength'
-    );
-  }
-
-  const normalizedResource = defaultNiftiResourceFields({ ...resource });
-  delete normalizedResource.data;
-  delete normalizedResource.binaryTransfer;
-  delete normalizedResource.url;
-  delete normalizedResource.payloadId;
-  delete normalizedResource.expiresAt;
-  normalizedResource.byteLength = byteLength;
-
-  return { ...item, resource: normalizedResource };
-}
-
-export async function normalizeNiftiSendMessageMetadataOnly(msg) {
-  if (!msg.event || typeof msg.event !== 'object') {
-    throw new Error('CastClient: nifti-send requires event object');
-  }
-  const event = msg.event;
-  if (event['hub.event'] !== 'nifti-send') {
-    return msg;
-  }
-
-  const contextValue = event.context;
-  let contextItems = [];
-  if (Array.isArray(contextValue)) {
-    contextItems = contextValue;
-  } else if (contextValue != null) {
-    contextItems = [contextValue];
-  }
-  if (!contextItems.length) {
-    throw new Error('CastClient: nifti-send requires non-empty event.context');
-  }
-
-  const normalizedContext = await Promise.all(
-    contextItems.map((contextItem) =>
-      normalizeNiftiSendContextItemMetadataOnly(contextItem)
-    )
-  );
-
-  return {
-    ...msg,
-    event: {
-      ...event,
-      context: normalizedContext,
-    },
-  };
-}
-
-export async function normalizeBinaryPublishMessageMetadataOnly(msg) {
-  if (!msg.event || typeof msg.event !== 'object') {
-    return msg;
-  }
-  const hubEvent = msg.event['hub.event'];
-  if (hubEvent === 'dicom-send') {
-    return normalizeDicomSendMessageMetadataOnly(msg);
-  }
-  if (hubEvent === 'nifti-send') {
-    return normalizeNiftiSendMessageMetadataOnly(msg);
-  }
-  if (!isCastBinaryEvent(hubEvent)) {
-    return msg;
-  }
-  throw new Error(
-    `CastClient: multipart publish metadata normalizer not implemented for ${hubEvent}`
-  );
 }
 
 function binaryFileNameFromMessage(msg, defaultName) {
@@ -460,31 +221,7 @@ function niftiFileNameFromMessage(msg) {
   return binaryFileNameFromMessage(msg, 'nifti-send.nii.gz');
 }
 
-export async function extractFirstBinaryFileBytes(msg) {
-  const event = msg && msg.event;
-  if (!event) {
-    return null;
-  }
-  const contextValue = event.context;
-  let items = [];
-  if (Array.isArray(contextValue)) {
-    items = contextValue;
-  } else if (contextValue != null) {
-    items = [contextValue];
-  }
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item && typeof item === 'object') {
-      const resource = item.resource;
-      if (resource && typeof resource === 'object' && resource.data != null) {
-        return toArrayBufferStrict(resource.data);
-      }
-    }
-  }
-  return null;
-}
-
-export function messageNeedsStowBatchPublish(msg) {
+export function messageNeedsBinaryBatchPublish(msg) {
   const event = msg && msg.event;
   if (!event || !isCastBinaryEvent(event['hub.event'])) {
     return false;
@@ -496,9 +233,11 @@ export function messageNeedsStowBatchPublish(msg) {
   return files.some((entry) => entry.data != null);
 }
 
-async function normalizeStowBatchFileEntry(entry, hubEvent = '', index = 0) {
+async function normalizeBinaryBatchFileEntry(entry, hubEvent = '', index = 0) {
   if (!entry || typeof entry !== 'object') {
-    throw new Error('CastClient: STOW batch files[] entries must be objects');
+    throw new Error(
+      'CastClient: binary batch publish files[] entries must be objects'
+    );
   }
   let byteLength =
     typeof entry.byteLength === 'number' && entry.byteLength >= 0
@@ -507,7 +246,7 @@ async function normalizeStowBatchFileEntry(entry, hubEvent = '', index = 0) {
   if ('data' in entry && entry.data != null) {
     if (typeof entry.data === 'string') {
       throw new Error(
-        'CastClient: STOW batch string payloads are not supported; pass binary input instead'
+        'CastClient: binary batch publish string payloads are not supported; pass binary input instead'
       );
     }
     const binaryData = await toArrayBufferStrict(entry.data);
@@ -515,7 +254,7 @@ async function normalizeStowBatchFileEntry(entry, hubEvent = '', index = 0) {
   }
   if (byteLength == null) {
     throw new Error(
-      'CastClient: STOW batch requires files[].data or files[].byteLength'
+      'CastClient: binary batch publish requires files[].data or files[].byteLength'
     );
   }
   const normalized = { ...entry };
@@ -528,17 +267,17 @@ async function normalizeStowBatchFileEntry(entry, hubEvent = '', index = 0) {
   delete normalized.expiresAt;
   normalized.byteLength = byteLength;
   if (typeof normalized.fileName !== 'string' || !normalized.fileName.trim()) {
-    normalized.fileName = defaultStowFileName(hubEvent, index);
+    normalized.fileName = defaultBinaryBatchFileName(hubEvent, index);
   }
   if (typeof normalized.mimeType !== 'string' || !normalized.mimeType.trim()) {
-    normalized.mimeType = defaultStowMimeType(hubEvent);
+    normalized.mimeType = defaultBinaryBatchMimeType(hubEvent);
   }
   return normalized;
 }
 
-export async function normalizeStowBatchMessageMetadataOnly(msg) {
+export async function normalizeBinaryBatchMessageMetadataOnly(msg) {
   if (!msg.event || typeof msg.event !== 'object') {
-    throw new Error('CastClient: STOW batch requires event object');
+    throw new Error('CastClient: binary batch publish requires event object');
   }
   const event = msg.event;
   if (!isCastBinaryEvent(event['hub.event'])) {
@@ -546,18 +285,20 @@ export async function normalizeStowBatchMessageMetadataOnly(msg) {
   }
   const ctx = event.context;
   if (!ctx || typeof ctx !== 'object' || Array.isArray(ctx)) {
-    throw new Error('CastClient: STOW batch requires event.context object');
+    throw new Error(
+      'CastClient: binary batch publish requires event.context object'
+    );
   }
   const files = ctx.files;
   if (!Array.isArray(files) || !files.length) {
     throw new Error(
-      'CastClient: STOW batch requires non-empty event.context.files[]'
+      'CastClient: binary batch publish requires non-empty event.context.files[]'
     );
   }
   const hubEvent = event['hub.event'];
   const normalizedFiles = await Promise.all(
     files.map((entry, index) =>
-      normalizeStowBatchFileEntry(entry, hubEvent, index)
+      normalizeBinaryBatchFileEntry(entry, hubEvent, index)
     )
   );
   return {
@@ -572,7 +313,7 @@ export async function normalizeStowBatchMessageMetadataOnly(msg) {
   };
 }
 
-export async function extractStowBatchFileBytes(msg) {
+export async function extractBinaryBatchFileBytes(msg) {
   const event = msg && msg.event;
   if (!event) {
     return [];

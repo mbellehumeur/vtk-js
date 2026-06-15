@@ -30,7 +30,7 @@ export function resolveTargetActorForWire(value) {
     return undefined;
   }
   const text = String(value).trim();
-  if (!text) {
+  if (!text || text === '*') {
     return undefined;
   }
   return text;
@@ -41,7 +41,7 @@ export function resolveTargetProductNameForWire(value) {
     return undefined;
   }
   const text = String(value).trim();
-  if (!text) {
+  if (!text || text === '*') {
     return undefined;
   }
   return text;
