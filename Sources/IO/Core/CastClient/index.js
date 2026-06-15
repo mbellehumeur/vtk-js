@@ -665,11 +665,16 @@ function vtkCastClient(publicAPI, model) {
     }
 
     if (msg['target.actor'] === undefined && model.session.defaultTargetActor) {
-      const wireTarget = resolveTargetActorForWire(
-        model.session.defaultTargetActor
-      );
-      if (wireTarget) {
-        msg['target.actor'] = wireTarget;
+      const targetSubscriber = String(
+        msg['target.subscriber.name'] || ''
+      ).trim();
+      if (!targetSubscriber) {
+        const wireTarget = resolveTargetActorForWire(
+          model.session.defaultTargetActor
+        );
+        if (wireTarget) {
+          msg['target.actor'] = wireTarget;
+        }
       }
     }
 
@@ -825,8 +830,18 @@ function vtkCastClient(publicAPI, model) {
     if (args['subscriber.actor'] && String(args['subscriber.actor']).trim()) {
       body['subscriber.actor'] = String(args['subscriber.actor']).trim();
     }
-    let wireTarget = resolveTargetActorForWire(args['target.actor']);
-    if (wireTarget === undefined && model.session.defaultTargetActor) {
+    const hasExplicitTargetActor = Object.prototype.hasOwnProperty.call(
+      args,
+      'target.actor'
+    );
+    let wireTarget = hasExplicitTargetActor
+      ? resolveTargetActorForWire(args['target.actor'])
+      : undefined;
+    if (
+      wireTarget === undefined &&
+      !hasExplicitTargetActor &&
+      model.session.defaultTargetActor
+    ) {
       wireTarget = resolveTargetActorForWire(model.session.defaultTargetActor);
     }
     if (wireTarget !== undefined) {

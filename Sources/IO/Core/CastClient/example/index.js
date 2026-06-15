@@ -167,7 +167,7 @@ const EXAMPLE_SUBSCRIBER_PREFIX = EXAMPLE_PRODUCT_NAME;
 
 const DEFAULT_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const DEFAULT_SUBSCRIBE_EVENTS =
-  'imagingstudy-open,imagingstudy-close,status-request,subscription-removed';
+  'imagingstudy-open,imagingstudy-close,status-request,subscription-removed,status-update,idc-claude-send';
 const DEFAULT_SUBSCRIBE_ACTORS_JSON = `["${DEFAULT_ACTOR_KEYWORD}"]`;
 const DEFAULT_GET_ACTOR_KEYWORD = 'WORKLIST_CLIENT';
 const IMAGE_DISPLAY_ACTOR_KEYWORD = 'ID';
@@ -189,26 +189,14 @@ const WORKLIST_ORG_IDC_CUSTOM_PREFIX = 'idc-custom-';
 
 const IDC_CLAUDE_PRODUCT_NAME = 'IDCCLAUDE';
 const IDC_CLAUDE_DATA_TYPE = 'IDC-CLAUDE';
+const IDC_CLAUDE_SEND_EVENT = 'idc-claude-send';
 const IDC_CLAUDE_MAX_STUDIES = 20;
 const IDC_CLAUDE_REQUEST_TIMEOUT_SECONDS = 180;
 const IDC_CLAUDE_ADD_STUDY_TIMEOUT_SECONDS = 120;
 const IDC_CLAUDE_ACTION_SEARCH = 'search';
 const IDC_CLAUDE_ACTION_ADD_STUDY = 'addStudy';
-const IDC_CLAUDE_SEARCH_PROGRESS_MS = 9000;
-const IDC_CLAUDE_SEARCH_PROGRESS_MESSAGES = [
-  'Starting IDC search — usually 1–3 minutes. First run may also refresh the local IDC index.',
-  'Asking Claude to draft DuckDB SQL from your natural-language query…',
-  'Querying IDC metadata on the Slicer IDCCLAUDE server.',
-  'Still working — narrow collection + modality prompts finish faster.',
-  'Hang tight — the hub waits up to 3 minutes for Claude and idc-index.',
-  'Almost there — matching studies will appear below when filtering finishes.',
-];
-const IDC_CLAUDE_ADD_STUDY_PROGRESS_MS = 7000;
-const IDC_CLAUDE_ADD_STUDY_PROGRESS_MESSAGES = [
-  'Fetching public DICOM URLs for this series — often under a minute.',
-  'Resolving S3 locations via idc-index — large series can take 1–2 minutes.',
-  'Still downloading URL list — you can add other studies after this finishes.',
-];
+const IDC_CLAUDE_JOB_WAITING_MESSAGE =
+  'IDC job submitted — waiting for IDCCLAUDE (live progress below)…';
 const IDC_CLAUDE_DEFAULT_PROMPT = '3 US series from collection cmb_lca';
 const IDC_CLAUDE_DEFAULT_ORG_LABEL = 'US annotation meeting';
 const IDC_CUSTOM_WORKLISTS_STORAGE_KEY = 'castExample.idcCustomWorklists';
@@ -806,68 +794,108 @@ function refreshWorklistOrganizationSelect(el, state) {
   }
 }
 
-function formatIdcClaudeRequestFailure(envelope) {
-  if (envelope.timedOut) {
-    return (
-      'Cast hub timed out before IDCCLAUDE finished (needs ~1–3 minutes). ' +
-      'In 3D Slicer: Hub tab → Stop → Start hub, then reconnect IDCCLAUDE.'
-    );
+function newIdcClaudeSendId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
   }
-  const missing = Array.isArray(envelope.missing) ? envelope.missing : [];
-  if (missing.length) {
-    return `No response from IDCCLAUDE (missing: ${missing.join(
-      ', '
-    )}). Connect the IDCCLAUDE resource server in Slicer.`;
-  }
-  return 'No IDCCLAUDE resource server responded';
+  return `idc-send-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function parseIdcClaudeCollatedResponse(resultData) {
-  const envelope =
-    resultData && typeof resultData === 'object' ? resultData : {};
-  const responses = Array.isArray(envelope.responses) ? envelope.responses : [];
-  if (!responses.length) {
-    return { error: formatIdcClaudeRequestFailure(envelope) };
+function clearIdcClaudeJobLog(el) {
+  if (el.idcClaudeJobLog) {
+    el.idcClaudeJobLog.textContent = '';
+    el.idcClaudeJobLog.hidden = true;
   }
-  const data = responses[0]?.data;
+}
+
+function appendIdcClaudeJobLogLine(el, line) {
+  const text = String(line || '').trim();
+  if (!text || !el.idcClaudeJobLog) {
+    return;
+  }
+  el.idcClaudeJobLog.hidden = false;
+  const current = el.idcClaudeJobLog.textContent || '';
+  el.idcClaudeJobLog.textContent = current ? `${current}\n${text}` : text;
+  el.idcClaudeJobLog.scrollTop = el.idcClaudeJobLog.scrollHeight;
+}
+
+function clearIdcClaudeSendTimeout(state) {
+  if (state.idcClaudeSendTimeoutTimer) {
+    clearTimeout(state.idcClaudeSendTimeoutTimer);
+    state.idcClaudeSendTimeoutTimer = null;
+  }
+}
+
+function idcClaudeProductFromMessage(message) {
+  return String(
+    message?.['subscriber.product.name'] ||
+      message?.['subscriber.product']?.name ||
+      ''
+  ).trim();
+}
+
+function parseIdcClaudeSendPayload(data) {
   if (!data || typeof data !== 'object') {
-    return { error: 'Empty idc-claude-response payload' };
+    return { error: 'Empty idc-claude-send payload' };
   }
   if (data.error) {
     const sql = typeof data.sql === 'string' ? data.sql.trim() : '';
-    return { error: String(data.error), sql };
+    return { error: String(data.error), sql, data };
+  }
+  const action = String(data.action || '').trim();
+  if (action === IDC_CLAUDE_ACTION_ADD_STUDY) {
+    const study = data.study;
+    if (!study || typeof study !== 'object') {
+      return { error: 'IDC add-study response missing study payload', data };
+    }
+    const files = Array.isArray(study.files) ? study.files : [];
+    if (!files.length) {
+      return { error: 'IDC add-study response missing file URLs', data };
+    }
+    return { data, study, action };
   }
   const studies = Array.isArray(data.studies) ? data.studies : [];
   const sql = typeof data.sql === 'string' ? data.sql.trim() : '';
   if (!studies.length) {
-    return { error: 'IDC query returned no studies', sql };
+    return { error: 'IDC query returned no studies', sql, data };
   }
-  return { data, studies, sql };
+  return { data, studies, sql, action };
 }
 
-function parseIdcClaudeAddStudyResponse(resultData) {
-  const envelope =
-    resultData && typeof resultData === 'object' ? resultData : {};
-  const responses = Array.isArray(envelope.responses) ? envelope.responses : [];
-  if (!responses.length) {
-    return { error: formatIdcClaudeRequestFailure(envelope) };
+function idcClaudeWorklistSubscriberName(el, state) {
+  const sessionName = state.client?.getSessionConfig?.()?.subscriberName;
+  return String(
+    sessionName ||
+      el.subscriberName?.value?.trim() ||
+      el.getSubscriber?.value?.trim() ||
+      ''
+  ).trim();
+}
+
+async function publishIdcClaudeSend(el, state, context) {
+  const subscriberName = idcClaudeWorklistSubscriberName(el, state);
+  if (!subscriberName) {
+    throw new Error('IDC publish failed: worklist subscriber name is missing');
   }
-  const data = responses[0]?.data;
-  if (!data || typeof data !== 'object') {
-    return { error: 'Empty idc-claude-response payload' };
+  const payload = {
+    'subscriber.name': subscriberName,
+    'subscriber.actor': DEFAULT_GET_ACTOR_KEYWORD,
+    'target.product.name': IDC_CLAUDE_PRODUCT_NAME,
+    event: {
+      'hub.event': IDC_CLAUDE_SEND_EVENT,
+      'hub.topic': el.topic.value.trim(),
+      context: {
+        dataType: IDC_CLAUDE_DATA_TYPE,
+        ...context,
+      },
+    },
+  };
+  const res = await state.client.publish(payload);
+  if (!res || !res.ok) {
+    throw new Error(
+      res ? `IDC publish failed (HTTP ${res.status})` : 'IDC publish failed'
+    );
   }
-  if (data.error) {
-    return { error: String(data.error) };
-  }
-  const study = data.study;
-  if (!study || typeof study !== 'object') {
-    return { error: 'IDC add-study response missing study payload' };
-  }
-  const files = Array.isArray(study.files) ? study.files : [];
-  if (!files.length) {
-    return { error: 'IDC add-study response missing file URLs' };
-  }
-  return { data, study };
 }
 
 async function fetchHubStartedAt(hubEndpoint) {
@@ -2228,6 +2256,12 @@ function buildPageHtml() {
           style.idcClaudeStatus
         }" aria-live="polite"></p>
       </div>
+      <pre
+        id="idcClaudeJobLog"
+        class="${style.idcClaudeJobLog}"
+        hidden
+        aria-live="polite"
+      ></pre>
       <p id="idcClaudeCitation" class="${style.idcClaudeCitation}"></p>
       <div id="idcClaudeSqlSection" class="${style.idcClaudeSqlSection}" hidden>
         <button
@@ -3283,6 +3317,16 @@ function setIdcClaudeModalStatus(el, text, { busy = false } = {}) {
   }
 }
 
+function setIdcClaudeJobWaiting(el) {
+  setIdcClaudeModalStatus(el, IDC_CLAUDE_JOB_WAITING_MESSAGE, { busy: true });
+  if (el.idcClaudeJobLog) {
+    el.idcClaudeJobLog.hidden = false;
+    if (!el.idcClaudeJobLog.textContent.trim()) {
+      el.idcClaudeJobLog.textContent = 'Waiting for IDCCLAUDE…';
+    }
+  }
+}
+
 function stopIdcClaudeProgress(state) {
   if (state.idcClaudeProgressTimer) {
     clearInterval(state.idcClaudeProgressTimer);
@@ -3290,39 +3334,12 @@ function stopIdcClaudeProgress(state) {
   }
 }
 
-function startIdcClaudeProgress(el, state, messages, intervalMs) {
-  stopIdcClaudeProgress(state);
-  const lines = Array.isArray(messages) ? messages.filter(Boolean) : [];
-  if (!lines.length) {
-    return;
-  }
-  let index = 0;
-  setIdcClaudeModalStatus(el, lines[0], { busy: true });
-  if (lines.length === 1) {
-    return;
-  }
-  state.idcClaudeProgressTimer = setInterval(() => {
-    index = (index + 1) % lines.length;
-    setIdcClaudeModalStatus(el, lines[index], { busy: true });
-  }, intervalMs);
+function startIdcClaudeSearchProgress(el) {
+  setIdcClaudeJobWaiting(el);
 }
 
-function startIdcClaudeSearchProgress(el, state) {
-  startIdcClaudeProgress(
-    el,
-    state,
-    IDC_CLAUDE_SEARCH_PROGRESS_MESSAGES,
-    IDC_CLAUDE_SEARCH_PROGRESS_MS
-  );
-}
-
-function startIdcClaudeAddStudyProgress(el, state) {
-  startIdcClaudeProgress(
-    el,
-    state,
-    IDC_CLAUDE_ADD_STUDY_PROGRESS_MESSAGES,
-    IDC_CLAUDE_ADD_STUDY_PROGRESS_MS
-  );
+function startIdcClaudeAddStudyProgress(el) {
+  setIdcClaudeJobWaiting(el);
 }
 
 function syncIdcClaudeSqlUi(el, state) {
@@ -3362,6 +3379,9 @@ function syncIdcClaudeSqlUi(el, state) {
 
 function clearIdcClaudeSearchResults(el, state) {
   stopIdcClaudeProgress(state);
+  clearIdcClaudeSendTimeout(state);
+  state.idcClaudePendingSend = null;
+  clearIdcClaudeJobLog(el);
   state.idcClaudePendingResults = null;
   state.idcClaudeLastSearchSql = '';
   state.idcClaudeSqlVisible = false;
@@ -3430,7 +3450,8 @@ function idcClaudeCanBuildWorklist(state) {
     state.wsState === 'connected' &&
     Boolean(state.idcClaudeAvailable) &&
     !state.idcClaudeJobRunning &&
-    !state.idcClaudeBuildBusy
+    !state.idcClaudeBuildBusy &&
+    !state.idcClaudePendingSend
   );
 }
 
@@ -4310,13 +4331,215 @@ function renderIdcClaudeSearchResults(el, state) {
   });
 }
 
+function startIdcClaudeSendTimeout(el, state, sendId, timeoutMs) {
+  clearIdcClaudeSendTimeout(state);
+  state.idcClaudeSendTimeoutTimer = setTimeout(() => {
+    if (state.idcClaudePendingSend?.id !== sendId) {
+      return;
+    }
+    const pending = state.idcClaudePendingSend;
+    state.idcClaudePendingSend = null;
+    stopIdcClaudeProgress(state);
+    state.idcClaudeBuildBusy = false;
+    updateIdcClaudeBuildBtn(el, state);
+    if (pending?.action === IDC_CLAUDE_ACTION_ADD_STUDY) {
+      const studyIdText = String(pending.studyId || '').trim();
+      if (studyIdText) {
+        state.idcClaudeAddingStudyIds.delete(studyIdText);
+        renderIdcClaudeSearchResults(el, state);
+      }
+    }
+    const detail = `IDC job timed out after ${Math.round(
+      timeoutMs / 1000
+    )}s — check IDCCLAUDE in Slicer.`;
+    setIdcClaudeModalStatus(el, detail);
+    addMessage(el, state, 'err', 'IDC Claude', detail);
+  }, timeoutMs);
+}
+
+function handleIdcClaudeStatusUpdate(el, state, event) {
+  if (!state.idcClaudePendingSend) {
+    return;
+  }
+  const context = event?.context;
+  const raw =
+    context && typeof context === 'object' && !Array.isArray(context)
+      ? context.message
+      : undefined;
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return;
+  }
+  stopIdcClaudeProgress(state);
+  appendIdcClaudeJobLogLine(el, raw.trim());
+  setIdcClaudeModalStatus(el, raw.trim(), { busy: true });
+}
+
+function applyIdcClaudeSearchPayload(el, state, parsed, organizationLabel) {
+  const { data, studies } = parsed;
+  const org = String(data.organization || '').trim();
+  if (!org) {
+    setIdcClaudeModalStatus(el, 'Response missing organization id.');
+    return;
+  }
+  const prompt = el.idcClaudePrompt?.value?.trim() || '';
+  state.idcClaudePendingResults = {
+    organization: org,
+    organizationLabel:
+      String(data.organizationLabel || '').trim() ||
+      organizationLabel ||
+      prompt,
+    prompt,
+    sql: data.sql,
+    citation: data.citation,
+    studies: studies.map((study) => ({ ...study, organization: org })),
+  };
+  state.idcClaudeLastSearchSql = String(data.sql || '').trim();
+  state.idcClaudeSqlVisible = false;
+  state.idcClaudeAddedStudyIds = new Set();
+  state.idcClaudeAddingStudyIds = new Set();
+  ensureIdcCustomWorklistEntry(state, state.idcClaudePendingResults);
+  saveIdcCustomWorklistsToSession(el, state);
+  refreshWorklistOrganizationSelect(el, state);
+  renderIdcClaudeSearchResults(el, state);
+  syncIdcClaudeSqlUi(el, state);
+  if (el.idcClaudeCitation && data.citation) {
+    el.idcClaudeCitation.textContent = data.citation;
+  }
+  setIdcClaudeModalStatus(
+    el,
+    `Found ${studies.length} studies. Add each to the worklist when ready.`
+  );
+  addMessage(el, state, 'received', 'IDC Claude', {
+    organization: org,
+    studies: studies.length,
+    action: IDC_CLAUDE_ACTION_SEARCH,
+  });
+  runWideStatusPoll(el, state).catch((err) => {
+    console.warn(
+      '[vtkCastClient] wide STATUS poll after IDC Claude search failed',
+      err
+    );
+  });
+}
+
+function applyIdcClaudeAddStudyPayload(
+  el,
+  state,
+  parsed,
+  pending,
+  studyIdText
+) {
+  const org = String(
+    parsed.data.organization || pending.organization || ''
+  ).trim();
+  const worklistStudy = {
+    ...parsed.study,
+    organization: org,
+  };
+  const entry = ensureIdcCustomWorklistEntry(state, pending);
+  if (!entry) {
+    setIdcClaudeModalStatus(el, 'Worklist organization is missing.');
+    return;
+  }
+  entry.studies = Array.isArray(entry.studies) ? entry.studies : [];
+  const existingIndex = entry.studies.findIndex(
+    (item) => String(item.id || '').trim() === studyIdText
+  );
+  if (existingIndex >= 0) {
+    entry.studies[existingIndex] = worklistStudy;
+  } else {
+    entry.studies.push(worklistStudy);
+  }
+  state.idcClaudeAddedStudyIds.add(studyIdText);
+  saveIdcCustomWorklistsToSession(el, state);
+  refreshWorklistOrganizationSelect(el, state);
+  el.worklistOrganizationSelect.value = org;
+  renderWorklistPanel(el.worklistPanel, org, el, state);
+  updateWorklistContextControls(el, state);
+  setIdcClaudeModalStatus(
+    el,
+    `Added ${worklistStudy.name || studyIdText} to "${
+      worklistOrganizationLabels(state)[org] || org
+    }".`
+  );
+  addMessage(el, state, 'received', 'IDC Claude', {
+    action: IDC_CLAUDE_ACTION_ADD_STUDY,
+    study: studyIdText,
+    organization: org,
+  });
+  runWideStatusPoll(el, state).catch((err) => {
+    console.warn(
+      '[vtkCastClient] wide STATUS poll after IDC Claude add failed',
+      err
+    );
+  });
+}
+
+function handleIdcClaudeSendResult(el, state, message) {
+  const product = idcClaudeProductFromMessage(message);
+  if (product !== IDC_CLAUDE_PRODUCT_NAME) {
+    return;
+  }
+  const event = message?.event || {};
+  const context = event?.context || {};
+  const correlationId = String(context.id || '').trim();
+  const pendingSend = state.idcClaudePendingSend;
+  if (!pendingSend || !correlationId || pendingSend.id !== correlationId) {
+    return;
+  }
+  const parsed = parseIdcClaudeSendPayload(context.data);
+  clearIdcClaudeSendTimeout(state);
+  state.idcClaudePendingSend = null;
+  stopIdcClaudeProgress(state);
+
+  try {
+    if (pendingSend.action === IDC_CLAUDE_ACTION_ADD_STUDY) {
+      const studyIdText = String(pendingSend.studyId || '').trim();
+      state.idcClaudeAddingStudyIds.delete(studyIdText);
+      renderIdcClaudeSearchResults(el, state);
+      if (parsed.error) {
+        setIdcClaudeModalStatus(el, parsed.error);
+        addMessage(el, state, 'err', 'IDC Claude', parsed.error);
+        return;
+      }
+      const pending =
+        pendingSend.pendingResults || state.idcClaudePendingResults;
+      if (!pending) {
+        setIdcClaudeModalStatus(el, 'Worklist search context is missing.');
+        return;
+      }
+      applyIdcClaudeAddStudyPayload(el, state, parsed, pending, studyIdText);
+      return;
+    }
+
+    state.idcClaudeBuildBusy = false;
+    updateIdcClaudeBuildBtn(el, state);
+    if (parsed.error) {
+      state.idcClaudeLastSearchSql = parsed.sql || '';
+      state.idcClaudeSqlVisible = false;
+      syncIdcClaudeSqlUi(el, state);
+      setIdcClaudeModalStatus(el, parsed.error);
+      addMessage(el, state, 'err', 'IDC Claude', parsed.error);
+      return;
+    }
+    applyIdcClaudeSearchPayload(
+      el,
+      state,
+      parsed,
+      pendingSend.organizationLabel || ''
+    );
+  } finally {
+    syncIdcClaudeDialogAvailability(el, state);
+  }
+}
+
 async function addIdcClaudeStudyToWorklist(el, state, studyId) {
   const pending = state.idcClaudePendingResults;
   if (!pending) {
     setIdcClaudeModalStatus(el, 'Search for studies first.');
     return;
   }
-  if (!state.client?.request || state.wsState !== 'connected') {
+  if (!state.client?.publish || state.wsState !== 'connected') {
     setIdcClaudeModalStatus(el, 'Connect to the Cast hub first.');
     return;
   }
@@ -4324,6 +4547,13 @@ async function addIdcClaudeStudyToWorklist(el, state, studyId) {
     setIdcClaudeModalStatus(
       el,
       'IDCCLAUDE is not connected to the hub — see the message below.'
+    );
+    return;
+  }
+  if (state.idcClaudePendingSend) {
+    setIdcClaudeModalStatus(
+      el,
+      'IDCCLAUDE is busy — wait for the current job.'
     );
     return;
   }
@@ -4348,103 +4578,40 @@ async function addIdcClaudeStudyToWorklist(el, state, studyId) {
     return;
   }
 
+  const sendId = newIdcClaudeSendId();
+  state.idcClaudePendingSend = {
+    id: sendId,
+    action: IDC_CLAUDE_ACTION_ADD_STUDY,
+    studyId: studyIdText,
+    pendingResults: pending,
+  };
   state.idcClaudeAddingStudyIds.add(studyIdText);
   renderIdcClaudeSearchResults(el, state);
-  startIdcClaudeAddStudyProgress(el, state);
+  clearIdcClaudeJobLog(el);
+  startIdcClaudeAddStudyProgress(el);
 
   try {
-    const result = await state.client.request({
-      'subscriber.name': el.getSubscriber.value.trim(),
-      event: {
-        'hub.event': requestEventFor(IDC_CLAUDE_DATA_TYPE),
-        'hub.topic': el.topic.value.trim(),
-        context: {
-          dataType: IDC_CLAUDE_DATA_TYPE,
-          action: IDC_CLAUDE_ACTION_ADD_STUDY,
-          organization: pending.organization,
-          study,
-          timeoutSeconds: IDC_CLAUDE_ADD_STUDY_TIMEOUT_SECONDS,
-        },
-      },
-      'subscriber.actor': DEFAULT_GET_ACTOR_KEYWORD,
-      'target.product.name': IDC_CLAUDE_PRODUCT_NAME,
-    });
-    stopIdcClaudeProgress(state);
-    const envelope =
-      result.data && typeof result.data === 'object' ? result.data : {};
-    if (!result.ok || envelope.timedOut) {
-      let detail;
-      if (envelope.timedOut) {
-        detail = formatIdcClaudeRequestFailure(envelope);
-      } else if (typeof result.data === 'string') {
-        detail = result.data;
-      } else {
-        detail =
-          envelope.error ||
-          JSON.stringify(redactSceneviewPayloadForLog(result.data), null, 2);
-      }
-      setIdcClaudeModalStatus(el, detail);
-      addMessage(el, state, 'err', 'IDC Claude', detail);
-      return;
-    }
-    const parsed = parseIdcClaudeAddStudyResponse(result.data);
-    if (parsed.error) {
-      setIdcClaudeModalStatus(el, parsed.error);
-      addMessage(el, state, 'err', 'IDC Claude', parsed.error);
-      return;
-    }
-    const org = String(
-      parsed.data.organization || pending.organization || ''
-    ).trim();
-    const worklistStudy = {
-      ...parsed.study,
-      organization: org,
-    };
-    const entry = ensureIdcCustomWorklistEntry(state, pending);
-    if (!entry) {
-      setIdcClaudeModalStatus(el, 'Worklist organization is missing.');
-      return;
-    }
-    entry.studies = Array.isArray(entry.studies) ? entry.studies : [];
-    const existingIndex = entry.studies.findIndex(
-      (item) => String(item.id || '').trim() === studyIdText
-    );
-    if (existingIndex >= 0) {
-      entry.studies[existingIndex] = worklistStudy;
-    } else {
-      entry.studies.push(worklistStudy);
-    }
-    state.idcClaudeAddedStudyIds.add(studyIdText);
-    saveIdcCustomWorklistsToSession(el, state);
-    refreshWorklistOrganizationSelect(el, state);
-    el.worklistOrganizationSelect.value = org;
-    renderWorklistPanel(el.worklistPanel, org, el, state);
-    updateWorklistContextControls(el, state);
-    setIdcClaudeModalStatus(
-      el,
-      `Added ${worklistStudy.name || studyIdText} to "${
-        worklistOrganizationLabels(state)[org] || org
-      }".`
-    );
-    addMessage(el, state, 'received', 'IDC Claude', {
+    await publishIdcClaudeSend(el, state, {
+      id: sendId,
       action: IDC_CLAUDE_ACTION_ADD_STUDY,
-      study: studyIdText,
-      organization: org,
+      organization: pending.organization,
+      study,
     });
+    startIdcClaudeSendTimeout(
+      el,
+      state,
+      sendId,
+      IDC_CLAUDE_ADD_STUDY_TIMEOUT_SECONDS * 1000
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    setIdcClaudeModalStatus(el, msg);
-    addMessage(el, state, 'err', 'IDC Claude', msg);
-  } finally {
+    clearIdcClaudeSendTimeout(state);
+    state.idcClaudePendingSend = null;
     stopIdcClaudeProgress(state);
     state.idcClaudeAddingStudyIds.delete(studyIdText);
     renderIdcClaudeSearchResults(el, state);
-    runWideStatusPoll(el, state).catch((err) => {
-      console.warn(
-        '[vtkCastClient] wide STATUS poll after IDC Claude add failed',
-        err
-      );
-    });
+    setIdcClaudeModalStatus(el, msg);
+    addMessage(el, state, 'err', 'IDC Claude', msg);
   }
 }
 
@@ -4460,7 +4627,7 @@ function idcClaudeMaxStudiesForPrompt(prompt) {
 }
 
 async function searchIdcClaudeStudiesFromPrompt(el, state) {
-  if (!state.client?.request || state.wsState !== 'connected') {
+  if (!state.client?.publish || state.wsState !== 'connected') {
     setIdcClaudeModalStatus(el, 'Connect to the Cast hub first.');
     return;
   }
@@ -4471,7 +4638,7 @@ async function searchIdcClaudeStudiesFromPrompt(el, state) {
     );
     return;
   }
-  if (state.idcClaudeJobRunning) {
+  if (state.idcClaudeJobRunning || state.idcClaudePendingSend) {
     setIdcClaudeModalStatus(
       el,
       'IDCCLAUDE is busy — wait for the current query.'
@@ -4487,109 +4654,41 @@ async function searchIdcClaudeStudiesFromPrompt(el, state) {
     return;
   }
   const organizationLabel = el.idcClaudeOrgLabel?.value?.trim() || '';
+  const sendId = newIdcClaudeSendId();
   state.idcClaudeBuildBusy = true;
   clearIdcClaudeSearchResults(el, state);
-  startIdcClaudeSearchProgress(el, state);
+  state.idcClaudePendingSend = {
+    id: sendId,
+    action: IDC_CLAUDE_ACTION_SEARCH,
+    organizationLabel,
+  };
+  startIdcClaudeSearchProgress(el);
   if (el.idcClaudeBuildConfirmBtn) {
     el.idcClaudeBuildConfirmBtn.disabled = true;
   }
   try {
-    const result = await state.client.request({
-      'subscriber.name': el.getSubscriber.value.trim(),
-      event: {
-        'hub.event': requestEventFor(IDC_CLAUDE_DATA_TYPE),
-        'hub.topic': el.topic.value.trim(),
-        context: {
-          dataType: IDC_CLAUDE_DATA_TYPE,
-          action: IDC_CLAUDE_ACTION_SEARCH,
-          prompt,
-          maxStudies: idcClaudeMaxStudiesForPrompt(prompt),
-          organizationLabel: organizationLabel || undefined,
-          timeoutSeconds: IDC_CLAUDE_REQUEST_TIMEOUT_SECONDS,
-        },
-      },
-      'subscriber.actor': DEFAULT_GET_ACTOR_KEYWORD,
-      'target.product.name': IDC_CLAUDE_PRODUCT_NAME,
-    });
-    stopIdcClaudeProgress(state);
-    const envelope =
-      result.data && typeof result.data === 'object' ? result.data : {};
-    if (!result.ok || envelope.timedOut) {
-      let detail;
-      if (envelope.timedOut) {
-        detail = formatIdcClaudeRequestFailure(envelope);
-      } else if (typeof result.data === 'string') {
-        detail = result.data;
-      } else {
-        detail =
-          envelope.error ||
-          JSON.stringify(redactSceneviewPayloadForLog(result.data), null, 2);
-      }
-      setIdcClaudeModalStatus(el, detail);
-      addMessage(el, state, 'err', 'IDC Claude', detail);
-      return;
-    }
-    const parsed = parseIdcClaudeCollatedResponse(result.data);
-    if (parsed.error) {
-      state.idcClaudeLastSearchSql = parsed.sql || '';
-      state.idcClaudeSqlVisible = false;
-      syncIdcClaudeSqlUi(el, state);
-      setIdcClaudeModalStatus(el, parsed.error);
-      addMessage(el, state, 'err', 'IDC Claude', parsed.error);
-      return;
-    }
-    const { data, studies } = parsed;
-    const org = String(data.organization || '').trim();
-    if (!org) {
-      setIdcClaudeModalStatus(el, 'Response missing organization id.');
-      return;
-    }
-    state.idcClaudePendingResults = {
-      organization: org,
-      organizationLabel:
-        String(data.organizationLabel || '').trim() ||
-        organizationLabel ||
-        prompt,
-      prompt,
-      sql: data.sql,
-      citation: data.citation,
-      studies: studies.map((study) => ({ ...study, organization: org })),
-    };
-    state.idcClaudeLastSearchSql = String(data.sql || '').trim();
-    state.idcClaudeSqlVisible = false;
-    state.idcClaudeAddedStudyIds = new Set();
-    state.idcClaudeAddingStudyIds = new Set();
-    ensureIdcCustomWorklistEntry(state, state.idcClaudePendingResults);
-    saveIdcCustomWorklistsToSession(el, state);
-    refreshWorklistOrganizationSelect(el, state);
-    renderIdcClaudeSearchResults(el, state);
-    syncIdcClaudeSqlUi(el, state);
-    if (el.idcClaudeCitation && data.citation) {
-      el.idcClaudeCitation.textContent = data.citation;
-    }
-    setIdcClaudeModalStatus(
-      el,
-      `Found ${studies.length} studies. Add each to the worklist when ready.`
-    );
-    addMessage(el, state, 'received', 'IDC Claude', {
-      organization: org,
-      studies: studies.length,
+    await publishIdcClaudeSend(el, state, {
+      id: sendId,
       action: IDC_CLAUDE_ACTION_SEARCH,
+      prompt,
+      maxStudies: idcClaudeMaxStudiesForPrompt(prompt),
+      organizationLabel: organizationLabel || undefined,
     });
-    runWideStatusPoll(el, state).catch((err) => {
-      console.warn(
-        '[vtkCastClient] wide STATUS poll after IDC Claude search failed',
-        err
-      );
-    });
+    startIdcClaudeSendTimeout(
+      el,
+      state,
+      sendId,
+      IDC_CLAUDE_REQUEST_TIMEOUT_SECONDS * 1000
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    setIdcClaudeModalStatus(el, msg);
-    addMessage(el, state, 'err', 'IDC Claude', msg);
-  } finally {
+    clearIdcClaudeSendTimeout(state);
+    state.idcClaudePendingSend = null;
     stopIdcClaudeProgress(state);
     state.idcClaudeBuildBusy = false;
     updateIdcClaudeBuildBtn(el, state);
+    setIdcClaudeModalStatus(el, msg);
+    addMessage(el, state, 'err', 'IDC Claude', msg);
   }
 }
 
@@ -5662,7 +5761,7 @@ function buildSceneviewLayoutPageHtml(
     10
   )}; flex-shrink: 0; max-width: min(${px(420)}, 45vw); }
   .svTrainingRepoLabel { font-size: ${px(
-    11
+    13
   )}; font-weight: 400; line-height: 1.35; color: #8a9a8e; }
   .svTrainingUploadBtn { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
     width: ${px(28)}; height: ${px(28)}; padding: 0; border: ${px(
@@ -6341,6 +6440,10 @@ function ensureClient(el, state, recreate = false) {
         handleConferenceStart(el, state, enriched);
       } else if (hubEvent === 'conference-end') {
         handleConferenceEnd(el, state, enriched);
+      } else if (hubEvent === 'status-update') {
+        handleIdcClaudeStatusUpdate(el, state, event);
+      } else if (hubEvent === IDC_CLAUDE_SEND_EVENT) {
+        handleIdcClaudeSendResult(el, state, enriched);
       }
       addMessage(
         el,
@@ -6973,6 +7076,7 @@ async function boot() {
     idcClaudeStatusRow: byId('idcClaudeStatusRow'),
     idcClaudeStatusSpinner: byId('idcClaudeStatusSpinner'),
     idcClaudeStatus: byId('idcClaudeStatus'),
+    idcClaudeJobLog: byId('idcClaudeJobLog'),
     idcClaudeCitation: byId('idcClaudeCitation'),
     idcClaudeSqlSection: byId('idcClaudeSqlSection'),
     idcClaudeToggleSqlBtn: byId('idcClaudeToggleSqlBtn'),
@@ -7010,6 +7114,8 @@ async function boot() {
     idcClaudeBuildBusy: false,
     idcClaudeAvailable: false,
     idcClaudeJobRunning: false,
+    idcClaudePendingSend: null,
+    idcClaudeSendTimeoutTimer: null,
     idcClaudePendingResults: null,
     idcClaudeLastSearchSql: '',
     idcClaudeSqlVisible: false,

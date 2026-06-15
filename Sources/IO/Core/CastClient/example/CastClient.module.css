@@ -884,6 +884,21 @@
   font-style: italic;
 }
 
+.idcClaudeJobLog {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  max-height: 8rem;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  color: var(--cast-muted-foreground);
+  background: color-mix(in srgb, var(--cast-foreground) 4%, var(--cast-background));
+  border: 1px solid var(--cast-border);
+  border-radius: calc(var(--cast-radius) * 0.75);
+}
+
 .idcClaudeCitation {
   margin: 8px 0 0;
   font-size: 11px;
