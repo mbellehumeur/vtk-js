@@ -1,0 +1,116 @@
+{
+  "organization": "idc-wsi",
+  "organizationLabel": "IDC - Whole Slide Imaging",
+  "modality": "SM",
+  "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb",
+  "studies": [
+    {
+      "id": "idc-wsi-02",
+      "name": "IDC WSI 2",
+      "description": "htan_hms \u2014 HTA7_926 \u2014 t-CyCIF",
+      "size": "98 GB",
+      "format": "DICOM",
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb",
+      "studyInstanceUID": "2.25.93749216439228361118017742627453453196",
+      "seriesInstanceUID": "1.3.6.1.4.1.5962.99.1.2344794501.795090168.1655907236229.4.0",
+      "instanceCount": 252
+    },
+    {
+      "id": "idc-wsi-03",
+      "name": "IDC WSI 3",
+      "description": "htan_hms \u2014 HTA7_965 \u2014 t-CyCIF",
+      "size": "97 GB",
+      "format": "DICOM",
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb",
+      "studyInstanceUID": "2.25.174442227011591161839224535127252003551",
+      "seriesInstanceUID": "1.3.6.1.4.1.5962.99.1.2352175091.700331458.1655914616819.4.0",
+      "instanceCount": 252
+    },
+    {
+      "id": "idc-wsi-04",
+      "name": "IDC WSI 4",
+      "description": "htan_hms \u2014 HTA7_925 \u2014 t-CyCIF",
+      "size": "86 GB",
+      "format": "DICOM",
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb",
+      "studyInstanceUID": "2.25.110940496032974123445604819863673717982",
+      "seriesInstanceUID": "1.3.6.1.4.1.5962.99.1.2354479345.898820832.1655916921073.4.0",
+      "instanceCount": 252
+    },
+    {
+      "id": "idc-wsi-05",
+      "name": "IDC WSI 5",
+      "description": "htan_hms \u2014 HTA7_982 \u2014 t-CyCIF",
+      "size": "83 GB",
+      "format": "DICOM",
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb",
+      "studyInstanceUID": "2.25.322763956086448848651654481429424487892",
+      "seriesInstanceUID": "1.3.6.1.4.1.5962.99.1.2347249348.1148593387.1655909691076.4.0",
+      "instanceCount": 252
+    },
+    {
+      "id": "idc-wsi-06",
+      "name": "IDC WSI 6",
+      "description": "htan_hms \u2014 HTA7_931 \u2014 t-CyCIF",
+      "size": "80 GB",
+      "format": "DICOM",
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb",
+      "studyInstanceUID": "2.25.63504200218356539417558724289824234398",
+      "seriesInstanceUID": "1.3.6.1.4.1.5962.99.1.2336236735.1380885418.1655898678463.4.0",
+      "instanceCount": 252
+    },
+    {
+      "id": "idc-wsi-07",
+      "name": "IDC WSI 7",
+      "description": "htan_hms \u2014 HTA7_963 \u2014 t-CyCIF",
+      "size": "79 GB",
+      "format": "DICOM",
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb",
+      "studyInstanceUID": "2.25.12616158998399217132499508662048718824",
+      "seriesInstanceUID": "1.3.6.1.4.1.5962.99.1.2358547573.1319252942.1655920989301.4.0",
+      "instanceCount": 252
+    },
+    {
+      "id": "idc-wsi-08",
+      "name": "IDC WSI 8",
+      "description": "htan_hms \u2014 HTA7_972 \u2014 t-CyCIF",
+      "size": "79 GB",
+      "format": "DICOM",
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb",
+      "studyInstanceUID": "2.25.183140175210739429826415953400233623278",
+      "seriesInstanceUID": "1.3.6.1.4.1.5962.99.1.2333800755.566110932.1655896242483.4.0",
+      "instanceCount": 252
+    },
+    {
+      "id": "idc-wsi-09",
+      "name": "IDC WSI 9",
+      "description": "htan_hms \u2014 HTA7_966 \u2014 t-CyCIF",
+      "size": "78 GB",
+      "format": "DICOM",
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb",
+      "studyInstanceUID": "2.25.14542022415536418286893333022896470177",
+      "seriesInstanceUID": "1.3.6.1.4.1.5962.99.1.2356610445.548875431.1655919052173.4.0",
+      "instanceCount": 216
+    },
+    {
+      "id": "idc-wsi-10",
+      "name": "IDC WSI 10",
+      "description": "htan_hms \u2014 HTA7_927 \u2014 t-CyCIF",
+      "size": "76 GB",
+      "format": "DICOM",
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb",
+      "studyInstanceUID": "2.25.252944744259825394775026913206036790581",
+      "seriesInstanceUID": "1.3.6.1.4.1.5962.99.1.2341534466.1727676165.1655903976194.4.0",
+      "instanceCount": 252
+    }
+  ]
+}

@@ -49,10 +49,11 @@
 
 import vtkCastClient, {
   buildDicomUrlImagingStudyOpenContext,
+  buildDicomwebImagingStudyOpenContext,
   buildFilesImagingStudyOpenContext,
   buildIdcImagingStudyOpenContext,
   CAST_CONFERENCE_EXIT_ACK_MS,
-  CAST_CONFERENCE_POLL_MS,
+  CAST_OPEN_MODE_DICOMWEB,
   CAST_OPEN_MODE_DICOM_URL,
   conferenceHostTopic,
   createCastConference,
@@ -87,6 +88,17 @@ import {
 import idcPortalDemoSeries2 from './idc-data/idc-portal-demo-series-2.json';
 import idcLungScreenManifest from './idc-data/idc-lung-screen-manifest.json';
 import idcLungUsManifest from './idc-data/idc-lung-us-manifest.json';
+import idcWsiManifest from './idc-data/idc-wsi-manifest.json';
+import slicerMarkUrl from './assets/3DSlicer-DesktopIcon.png';
+import idcPortalFaviconUrl from './assets/idc-portal-favicon.ico';
+import {
+  IDC_MCP_PUBLIC_URL,
+  IdcMcpClient,
+  fetchHubIdcSeriesFiles,
+  idcMcpOrganizationId,
+  mcpSeriesToWorklistStudy,
+  parseIdcMcpToolResult,
+} from './idc-mcp-client';
 
 import style from './CastClient.module.css';
 
@@ -105,15 +117,10 @@ const VOLVIEW_MARK_SVG = `<svg class="${style.headerViewerBtnIconVolview}" viewB
 // OHIF 4-pane grid mark (from OHIFLogo toolbar icon).
 const OHIF_MARK_SVG = `<svg class="${style.headerViewerBtnIcon}" width="16" height="16" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g fill="currentColor" fill-rule="nonzero" stroke="currentColor" stroke-width="0.25"><path d="M20.874737,0 L14.2607623,0 C13.3583609,0 12.6268201,0.731540857 12.6268201,1.63394224 L12.6268201,8.24791696 C12.6268201,9.15031834 13.3583609,9.88185919 14.2607623,9.88185919 L20.874737,9.88185919 C21.7771384,9.88185919 22.5086793,9.15031834 22.5086793,8.24791696 L22.5086793,1.63394224 C22.5086793,0.731540857 21.7771384,0 20.874737,0 Z M14.2607623,0.653576894 L20.874737,0.653576894 C21.4161779,0.653576894 21.8551024,1.09250141 21.8551024,1.63394224 L21.8551024,8.24791696 C21.8551024,8.78935779 21.4161779,9.2282823 20.874737,9.2282823 L14.2607623,9.2282823 C13.7193215,9.2282823 13.280397,8.78935779 13.280397,8.24791696 L13.280397,1.63394224 C13.280397,1.09250141 13.7193215,0.653576894 14.2607623,0.653576894 Z"/><path d="M8.24791696,0 L1.63394224,0 C0.731540857,0 0,0.731540857 0,1.63394224 L0,8.24791696 C0,9.15031834 0.731540857,9.88185919 1.63394224,9.88185919 L8.24791696,9.88185919 C9.15031834,9.88185919 9.88185919,9.15031834 9.88185919,8.24791696 L9.88185919,1.63394224 C9.88185919,0.731540857 9.15031834,0 8.24791696,0 Z M1.63394224,0.653576894 L8.24791696,0.653576894 C8.78935779,0.653576894 9.2282823,1.09250141 9.2282823,1.63394224 L9.2282823,8.24791696 C9.2282823,8.78935779 8.78935779,9.2282823 8.24791696,9.2282823 L1.63394224,9.2282823 C1.09250141,9.2282823 0.653576894,8.78935779 0.653576894,8.24791696 L0.653576894,1.63394224 C0.653576894,1.09250141 1.09250141,0.653576894 1.63394224,0.653576894 Z"/><path d="M20.874737,12.6268201 L14.2607623,12.6268201 C13.3583609,12.6268201 12.6268201,13.3583609 12.6268201,14.2607623 L12.6268201,20.874737 C12.6268201,21.7771384 13.3583609,22.5086793 14.2607623,22.5086793 L20.874737,22.5086793 C21.7771384,22.5086793 22.5086793,21.7771384 22.5086793,20.874737 L22.5086793,14.2607623 C22.5086793,13.3583609 21.7771384,12.6268201 20.874737,12.6268201 Z M14.2607623,13.280397 L20.874737,13.280397 C21.4161779,13.280397 21.8551024,13.7193215 21.8551024,14.2607623 L21.8551024,20.874737 C21.8551024,21.4161779 21.4161779,21.8551024 20.874737,21.8551024 L14.2607623,21.8551024 C13.7193215,21.8551024 13.280397,21.4161779 13.280397,20.874737 L13.280397,14.2607623 C13.280397,13.7193215 13.7193215,13.280397 14.2607623,13.280397 Z"/><path d="M8.24791696,12.6268201 L1.63394224,12.6268201 C0.731540857,12.6268201 0,13.3583609 0,14.2607623 L0,20.874737 C0,21.7771384 0.731540857,22.5086793 1.63394224,22.5086793 L8.24791696,22.5086793 C9.15031834,22.5086793 9.88185919,21.7771384 9.88185919,20.874737 L9.88185919,14.2607623 C9.88185919,13.3583609 9.15031834,12.6268201 8.24791696,12.6268201 Z M1.63394224,13.280397 L8.24791696,13.280397 C8.78935779,13.280397 9.2282823,13.7193215 9.2282823,14.2607623 L9.2282823,20.874737 C9.2282823,21.4161779 8.78935779,21.8551024 8.24791696,21.8551024 L1.63394224,21.8551024 C1.09250141,21.8551024 0.653576894,21.4161779 0.653576894,20.874737 L0.653576894,14.2607623 C0.653576894,13.7193215 1.09250141,13.280397 1.63394224,13.280397 Z"/></g></svg>`;
 
-// NIH IDC portal favicon (same asset as portal.imaging.datacommons.cancer.gov).
-const IDC_PORTAL_FAVICON_URL =
-  'https://storage.googleapis.com/idc-prod-web-static-files/static/img/favicon.ico';
-const IDC_MARK_IMG = `<img class="${style.headerViewerBtnIconIdc}" src="${IDC_PORTAL_FAVICON_URL}" width="16" height="16" alt="" aria-hidden="true" />`;
+// NIH IDC portal favicon (bundled — same asset as portal.imaging.datacommons.cancer.gov).
+const IDC_MARK_IMG = `<img class="${style.headerViewerBtnIconIdc}" src="${idcPortalFaviconUrl}" width="16" height="16" alt="" aria-hidden="true" />`;
 
-// Official 3D Slicer mark (IDC portal static assets).
-const SLICER_MARK_URL =
-  'https://storage.googleapis.com/idc-prod-web-static-files/static/img/3D-Slicer-Mark.svg';
-const SLICER_MARK_IMG = `<img class="${style.headerViewerBtnIconSlicer}" src="${SLICER_MARK_URL}" width="16" height="16" alt="" aria-hidden="true" />`;
+const SLICER_MARK_IMG = `<img class="${style.headerViewerBtnIconSlicer}" src="${slicerMarkUrl}" width="16" height="16" alt="" aria-hidden="true" />`;
 
 const VTK_JS_FAVICON_FALLBACK =
   'https://kitware.github.io/vtk-js/icon/favicon-32x32.png';
@@ -156,6 +163,7 @@ function applyCastWorklistFavicon() {
 const CAST_THEME_STORAGE_KEY = 'castExample.theme';
 const CAST_THEME_DARK = 'dark';
 const CAST_THEME_LIGHT = 'light';
+const CAST_HEADER_LABEL = 'Cast Interface';
 
 const CAST_HEADER_STATUS_COLOR_CLASSES = [
   style.castHeaderStatusConnected,
@@ -193,6 +201,7 @@ const WORKLIST_ORG_VOLVIEW = 'volview';
 const WORKLIST_ORG_IDC = 'idc';
 const WORKLIST_ORG_IDC_LUNG = 'idc-lung-screen';
 const WORKLIST_ORG_IDC_LUNG_US = 'idc-lung-us';
+const WORKLIST_ORG_IDC_WSI = 'idc-wsi';
 const WORKLIST_ORG_HUB = 'hub';
 const WORKLIST_ORG_IDC_CUSTOM_PREFIX = 'idc-custom-';
 
@@ -218,6 +227,7 @@ const WORKLIST_ORGANIZATION_OPTIONS = [
   { value: WORKLIST_ORG_IDC, label: 'Imaging Data Commons' },
   { value: WORKLIST_ORG_IDC_LUNG, label: 'IDC - CT Lung Screenings' },
   { value: WORKLIST_ORG_IDC_LUNG_US, label: 'IDC - Lung Ultrasound' },
+  { value: WORKLIST_ORG_IDC_WSI, label: 'IDC - Whole Slide Imaging' },
 ];
 
 const WORKLIST_ORG_LABELS = {
@@ -226,6 +236,7 @@ const WORKLIST_ORG_LABELS = {
   [WORKLIST_ORG_IDC]: 'Imaging Data Commons',
   [WORKLIST_ORG_IDC_LUNG]: 'IDC - CT Lung Screenings',
   [WORKLIST_ORG_IDC_LUNG_US]: 'IDC - Lung Ultrasound',
+  [WORKLIST_ORG_IDC_WSI]: 'IDC - Whole Slide Imaging',
 };
 
 function withWorklistOrganization(studies, organization) {
@@ -271,22 +282,33 @@ const IDC_CLAUDE_DIALOG_ACK_HTML = `<p class="${style.idcClaudeAck}">
   (<a class="${style.castAboutLink}" href="${CAST_IDC_PAPER_URL}" target="_blank" rel="noopener noreferrer">2023</a>).
 </p>`;
 
+const IDC_MCP_DIALOG_ACK_HTML = `<p class="${style.idcClaudeAck}">
+  Connects to the
+  <a class="${style.castAboutLink}" href="${IDC_MCP_PUBLIC_URL}" target="_blank" rel="noopener noreferrer">IDC MCP server</a>
+  via Streamable HTTP (dev proxy <code>/idc-mcp-proxy</code>).
+  If you use IDC data in research, cite Fedorov A, et al., <em>Radiographics</em>
+  (<a class="${style.castAboutLink}" href="${CAST_IDC_PAPER_URL}" target="_blank" rel="noopener noreferrer">2023</a>).
+</p>`;
+
 const CAST_ABOUT_RESOURCE_SERVERS_ACK_HTML = `<div class="${style.castAboutSampleAck}">
   <p class="${style.castAboutDisclaimerHeading}"><strong>Resource servers acknowledgement</strong></p>
   <p><strong>TotalSegmentator</strong> was created by the Department of Research and Analysis at University Hospital Basel. If you use it, please cite our Radiology: Artificial Intelligence paper (<a class="${style.castAboutLink}" href="${CAST_TOTALSEG_CT_PAPER_URL}" target="_blank" rel="noopener noreferrer">free preprint</a>). If you use it for MR images, please cite the TotalSegmentator MRI <em>Radiology</em> paper (<a class="${style.castAboutLink}" href="${CAST_TOTALSEG_MRI_PAPER_URL}" target="_blank" rel="noopener noreferrer">free preprint</a>).</p>
   <p><strong>nnU-Net</strong> — TotalSegmentator is heavily based on nnU-Net;  (<a class="${style.castAboutLink}" href="${CAST_NNUNET_PAPER_URL}" target="_blank" rel="noopener noreferrer">preprint</a>).</p>
-  <p><strong>IDC Claude</strong> — builds custom worklists from natural-language queries against the <a class="${style.castAboutLink}" href="${CAST_IDC_PORTAL_URL}" target="_blank" rel="noopener noreferrer">Imaging Data Commons</a> (National Cancer Institute) using Anthropic Claude. Query guidance follows the <a class="${style.castAboutLink}" href="${CAST_IDC_SKILL_URL}" target="_blank" rel="noopener noreferrer">IDC skill</a>.</p>
+  <p><strong>IDC Claude skill</strong> — builds custom worklists from natural-language queries against the <a class="${style.castAboutLink}" href="${CAST_IDC_PORTAL_URL}" target="_blank" rel="noopener noreferrer">Imaging Data Commons</a> (National Cancer Institute) using Anthropic Claude. Query guidance follows the <a class="${style.castAboutLink}" href="${CAST_IDC_SKILL_URL}" target="_blank" rel="noopener noreferrer">IDC skill</a>.</p>
+  <p><strong>IDC MCP</strong> — queries the <a class="${style.castAboutLink}" href="${IDC_MCP_PUBLIC_URL}" target="_blank" rel="noopener noreferrer">IDC MCP server</a> (Streamable HTTP) for IDC metadata and cohort search.</p>
   <p><strong>idc-index</strong> — official <a class="${style.castAboutLink}" href="${CAST_IDC_INDEX_URL}" target="_blank" rel="noopener noreferrer">Imaging Data Commons</a> Python package for local DuckDB SQL against IDC metadata and DICOM series download URLs; used by the IDC Claude resource server. If you use it in research, cite Fedorov A, et al., <em>Radiographics</em> (<a class="${style.castAboutLink}" href="${CAST_IDC_PAPER_URL}" target="_blank" rel="noopener noreferrer">2023</a>).</p>
 </div>`;
 
 const CAST_VOLVIEW_URL = 'https://github.com/Kitware/VolView';
 const CAST_OHIF_URL = 'https://ohif.org/';
+const CAST_SLIM_URL = 'https://github.com/ImagingDataCommons/slim';
 const CAST_SLICER_URL = 'https://www.slicer.org/';
 
 const CAST_ABOUT_IMAGE_DISPLAYS_ACK_HTML = `<div class="${style.castAboutSampleAck}">
   <p class="${style.castAboutDisclaimerHeading}"><strong>Image displays acknowledgement</strong></p>
   <p><strong>VolView</strong> — open-source web viewer from <a class="${style.castAboutLink}" href="${CAST_VOLVIEW_URL}" target="_blank" rel="noopener noreferrer">Kitware, Inc.</a></p>
   <p><strong>OHIF</strong> — open-source zero-footprint viewer from the <a class="${style.castAboutLink}" href="${CAST_OHIF_URL}" target="_blank" rel="noopener noreferrer">Open Health Imaging Foundation</a>.</p>
+  <p><strong>Slim</strong> — interoperable slide microscopy viewer from the <a class="${style.castAboutLink}" href="${CAST_SLIM_URL}" target="_blank" rel="noopener noreferrer">Imaging Data Commons</a> (National Cancer Institute).</p>
   <p><strong>3D Slicer</strong> — open-source platform for medical image computing from the <a class="${style.castAboutLink}" href="${CAST_SLICER_URL}" target="_blank" rel="noopener noreferrer">3D Slicer community</a>.</p>
 </div>`;
 
@@ -384,11 +406,24 @@ const IDC_LUNG_US_STUDIES = (
   )
 );
 
+/** Whole-slide imaging SM — regenerate via scripts/generate-idc-wsi-worklist.py */
+const IDC_WSI_STUDIES = (
+  Array.isArray(idcWsiManifest?.studies) ? idcWsiManifest.studies : []
+).map((entry) =>
+  idcWorklistEntry(
+    entry,
+    entry.name || entry.id,
+    entry.description || 'IDC whole slide microscopy',
+    entry.size
+  )
+);
+
 const WORKLIST_BUILTIN_STUDIES = [
   ...withWorklistOrganization(VOLVIEW_SAMPLE_STUDIES, WORKLIST_ORG_VOLVIEW),
   ...withWorklistOrganization(IDC_SAMPLE_STUDIES, WORKLIST_ORG_IDC),
   ...withWorklistOrganization(IDC_LUNG_SCREEN_STUDIES, WORKLIST_ORG_IDC_LUNG),
   ...withWorklistOrganization(IDC_LUNG_US_STUDIES, WORKLIST_ORG_IDC_LUNG_US),
+  ...withWorklistOrganization(IDC_WSI_STUDIES, WORKLIST_ORG_IDC_WSI),
 ];
 
 const OPENIGT_LINK_ACTOR_TOOLTIP =
@@ -545,9 +580,14 @@ const VOLVIEW_VIEWER_HUB_PATH = '/volview-client/';
 const OHIF_VIEWER_URL_LOCAL = 'http://localhost:3000/viewer/';
 const OHIF_VIEWER_HUB_PATH = '/viewer/';
 
+/** Slim: local CRA dev on :3001 (avoids OHIF on :3000); hub bundle at /slim/. */
+const SLIM_VIEWER_URL_LOCAL = 'http://localhost:3001/';
+const SLIM_VIEWER_HUB_PATH = '/slim/';
+
 const CAST_VIEWER_OPEN_TITLE_DISABLED = 'Subscribe to the hub first';
 const CAST_VIEWER_OPEN_TITLE_OHIF = 'Open an OHIF viewer instance';
 const CAST_VIEWER_OPEN_TITLE_VOLVIEW = 'Open a VolView viewer instance';
+const CAST_VIEWER_OPEN_TITLE_SLIM = 'Open a Slim viewer instance';
 
 function hubOriginFromEndpoint(hubEndpoint) {
   const trimmed = String(hubEndpoint || '').trim();
@@ -589,6 +629,31 @@ function resolveOhifViewerBaseUrl(el) {
   return (
     bundledViewerBaseUrl(el, OHIF_VIEWER_HUB_PATH) || OHIF_VIEWER_URL_LOCAL
   );
+}
+
+function resolveSlimViewerBaseUrl(el) {
+  if (el.hubSelect.value === 'local') {
+    return SLIM_VIEWER_URL_LOCAL;
+  }
+  return (
+    bundledViewerBaseUrl(el, SLIM_VIEWER_HUB_PATH) || SLIM_VIEWER_URL_LOCAL
+  );
+}
+
+function resolveSlimFaviconUrl(el) {
+  try {
+    return new URL('favicon.ico', resolveSlimViewerBaseUrl(el)).href;
+  } catch {
+    return '';
+  }
+}
+
+function updateSlimViewerButtonIcon(el) {
+  const icon = el.openSlimBtnIcon;
+  if (!icon) {
+    return;
+  }
+  icon.src = resolveSlimFaviconUrl(el);
 }
 
 function resolveHubMetricsUrl(hubEndpoint) {
@@ -826,15 +891,19 @@ function clearIdcClaudeJobLog(el) {
   }
 }
 
-function appendIdcClaudeJobLogLine(el, line) {
+function appendIdcJobLogLine(logEl, line) {
   const text = String(line || '').trim();
-  if (!text || !el.idcClaudeJobLog) {
+  if (!text || !logEl) {
     return;
   }
-  el.idcClaudeJobLog.hidden = false;
-  const current = el.idcClaudeJobLog.textContent || '';
-  el.idcClaudeJobLog.textContent = current ? `${current}\n${text}` : text;
-  el.idcClaudeJobLog.scrollTop = el.idcClaudeJobLog.scrollHeight;
+  logEl.hidden = false;
+  const current = logEl.textContent || '';
+  logEl.textContent = current ? `${current}\n${text}` : text;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function appendIdcClaudeJobLogLine(el, line) {
+  appendIdcJobLogLine(el.idcClaudeJobLog, line);
 }
 
 function clearIdcClaudeSendTimeout(state) {
@@ -1392,7 +1461,17 @@ function filterWorklistStudiesByOrganization(organization, state) {
   return studies.filter((study) => study.organization === organization);
 }
 
+function isDicomwebWorklistSample(sample) {
+  return (
+    String(sample?.openMode || '').trim() === CAST_OPEN_MODE_DICOMWEB &&
+    Boolean(sample?.studyInstanceUID?.trim())
+  );
+}
+
 function isIdcWorklistSample(sample) {
+  if (isDicomwebWorklistSample(sample)) {
+    return false;
+  }
   return Boolean(
     sample?.studyInstanceUID?.trim() &&
       Array.isArray(sample?.files) &&
@@ -1511,6 +1590,7 @@ function worklistSampleFormatLabel(sample) {
     sample?.organization === WORKLIST_ORG_IDC ||
     sample?.organization === WORKLIST_ORG_IDC_LUNG ||
     sample?.organization === WORKLIST_ORG_IDC_LUNG_US ||
+    sample?.organization === WORKLIST_ORG_IDC_WSI ||
     String(sample?.organization || '').startsWith(
       WORKLIST_ORG_IDC_CUSTOM_PREFIX
     )
@@ -1559,7 +1639,18 @@ async function handleWorklistSampleOpen(el, state, sampleId) {
   const files = worklistSampleFiles(sample);
   const openMode = String(sample.openMode || '').trim();
   let context;
-  if (isIdcWorklistSample(sample)) {
+  if (
+    openMode === CAST_OPEN_MODE_DICOMWEB ||
+    isDicomwebWorklistSample(sample)
+  ) {
+    context = buildDicomwebImagingStudyOpenContext({
+      id: sample.id,
+      studyInstanceUID: sample.studyInstanceUID,
+      seriesInstanceUID: sample.seriesInstanceUID,
+      dicomwebRoot: sample.dicomwebRoot,
+      patientReference,
+    });
+  } else if (isIdcWorklistSample(sample)) {
     const ohifMode =
       String(sample.ohifMode || '').trim() ||
       (sample.organization === WORKLIST_ORG_IDC_LUNG_US ? 'usAnnotation' : '');
@@ -1953,15 +2044,17 @@ function buildPageHtml() {
     style.castHeaderStatusWrap
   }"><button type="button" id="castHeaderStatusBtn" class="${
     style.castHeaderStatusBtn
-  }" aria-label="Cast hub" aria-haspopup="menu" aria-expanded="false" title="Cast hub"><div id="castHeaderStatus" class="${
+  }" aria-label="${CAST_HEADER_LABEL}" aria-haspopup="menu" aria-expanded="false" title="${CAST_HEADER_LABEL}"><div id="castHeaderStatus" class="${
     style.castHeaderStatus
-  } ${style.castHeaderStatusIdle}" title="Not connected"><span class="${
+  } ${style.castHeaderStatusIdle}"><span class="${
     style.castHeaderStatusIcon
   }">${CAST_RADIO_ICON_SVG}<span id="castHeaderStatusSlash" class="${
     style.castHeaderStatusSlash
   }" aria-hidden="true"></span></span></div></button><div id="castHeaderStatusMenu" class="${
     style.castHeaderMenu
-  }" role="menu" hidden><button type="button" id="castHeaderStatusStartConference" class="${
+  }" role="menu" hidden><button type="button" id="castHeaderStatusSessionInfo" class="${
+    style.castHeaderMenuItem
+  }" role="menuitem">Session info</button><button type="button" id="castHeaderStatusStartConference" class="${
     style.castHeaderMenuItem
   }" role="menuitem">Conferencing</button><button type="button" id="castHeaderStatusOpenHub" class="${
     style.castHeaderMenuItem
@@ -2009,12 +2102,12 @@ function buildPageHtml() {
           </select>
           <button
             type="button"
-            id="idcClaudeBuildBtn"
+            id="idcMcpBuildBtn"
             class="${style.headerViewerBtn}"
-            title="IDC Claude — natural-language IDC worklist"
+            title="IDC MCP Server — natural-language IDC worklist via MCP server"
           >${IDC_MARK_IMG}<span class="${
     style.headerViewerBtnLabel
-  }">IDC Claude</span></button>
+  }">IDC MCP Server</span></button>
         </div>
       </div>
       <div class="${style.worklistSceneviewActions}">
@@ -2042,6 +2135,21 @@ function buildPageHtml() {
           >${VOLVIEW_MARK_SVG}<span class="${
     style.headerViewerBtnLabel
   }">VolView</span></button>
+          <button
+            type="button"
+            id="openSlimBtn"
+            class="${style.headerViewerBtn}"
+            title="${CAST_VIEWER_OPEN_TITLE_DISABLED}"
+            disabled
+          ><img
+            id="openSlimBtnIcon"
+            class="${style.headerViewerBtnIcon}"
+            src=""
+            width="16"
+            height="16"
+            alt=""
+            aria-hidden="true"
+          /><span class="${style.headerViewerBtnLabel}">Slim</span></button>
         </div>
         <button type="button" id="openSceneviewsBtn" class="${
           style.headerViewerBtn
@@ -2210,6 +2318,21 @@ function buildPageHtml() {
   </div>
   </div>
   </div>
+  <div id="castSessionInfoOverlay" class="${style.castAboutOverlay}" hidden>
+    <div class="${
+      style.castAboutDialog
+    }" role="dialog" aria-modal="true" aria-labelledby="castSessionInfoTitle" tabindex="-1">
+      <h2 id="castSessionInfoTitle" class="${
+        style.castAboutTitle
+      }">Session info</h2>
+      <div id="castSessionInfoBody" class="${style.castSessionInfoBody}"></div>
+      <div class="${style.castAboutActions}">
+        <button type="button" id="castSessionInfoCloseBtn" class="${
+          style.headerViewerBtn
+        }">Close</button>
+      </div>
+    </div>
+  </div>
   <div id="castAboutOverlay" class="${style.castAboutOverlay}" hidden>
     <div class="${
       style.castAboutDialog
@@ -2314,6 +2437,93 @@ function buildPageHtml() {
         </div>
       </div>
       ${IDC_CLAUDE_DIALOG_ACK_HTML}
+    </div>
+  </div>
+  <div id="idcMcpOverlay" class="${style.castAboutOverlay}" hidden>
+    <div
+      class="${style.castAboutDialog} ${style.idcMcpDialog}"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="idcMcpDialogTitle"
+    >
+      <button
+        type="button"
+        id="idcMcpCancelBtn"
+        class="${style.idcMcpDialogCloseBtn}"
+        aria-label="Close"
+      >×</button>
+      <h2 id="idcMcpDialogTitle" class="${style.castAboutTitle}">
+        IDC MCP Server
+      </h2>
+      <p class="${style.castAboutBody}">
+        Enter a natural-language query for NCI Imaging Data Commons (IDC).
+        Search uses the remote IDC MCP server. Add each study via IDC Claude
+        skill on the hub to resolve public DICOM download URLs.
+      </p>
+      <label class="${style.idcClaudeFieldLabel}" for="idcMcpPrompt">
+        IDC query
+      </label>
+      <textarea
+        id="idcMcpPrompt"
+        class="${style.idcClaudePrompt}"
+        rows="4"
+        placeholder="Natural-language IDC query (collection + Modality + LIMIT finish faster)"
+      ></textarea>
+      <label class="${style.idcClaudeFieldLabel}" for="idcMcpOrgLabel">
+        Worklist label
+      </label>
+      <input
+        type="text"
+        id="idcMcpOrgLabel"
+        class="${style.idcClaudeOrgLabel}"
+        placeholder="e.g. US annotation meeting"
+      />
+      <div class="${style.idcMcpSearchBar}">
+        <button type="button" id="idcMcpSearchBtn" class="${
+          style.headerViewerBtn
+        }">Search</button>
+        <p id="idcMcpAvailability" class="${
+          style.idcClaudeAvailability
+        }" aria-live="polite">IDC MCP search</p>
+      </div>
+      <div id="idcMcpStatusRow" class="${style.idcClaudeStatusRow}">
+        <span
+          id="idcMcpStatusSpinner"
+          class="${style.idcClaudeStatusSpinner}"
+          hidden
+          aria-hidden="true"
+        ></span>
+        <p id="idcMcpStatus" class="${
+          style.idcClaudeStatus
+        }" aria-live="polite"></p>
+      </div>
+      <div id="idcMcpResultsSection" class="${
+        style.idcClaudeResultsSection
+      }" hidden>
+        <p class="${style.idcClaudeFieldLabel}">Matching studies</p>
+        <div id="idcMcpResults" class="${style.idcClaudeResults}"></div>
+      </div>
+      <pre
+        id="idcMcpJobLog"
+        class="${style.idcClaudeJobLog}"
+        hidden
+        aria-live="polite"
+      ></pre>
+      <p id="idcMcpCitation" class="${style.idcClaudeCitation}"></p>
+      <div id="idcMcpSqlSection" class="${style.idcClaudeSqlSection}" hidden>
+        <button
+          type="button"
+          id="idcMcpToggleSqlBtn"
+          class="${style.idcClaudeToggleSqlBtn}"
+          aria-expanded="false"
+          aria-controls="idcMcpSqlPanel"
+          hidden
+        >Show IDC index query</button>
+        <pre id="idcMcpSqlPanel" class="${
+          style.idcClaudeSqlPanel
+        }" hidden></pre>
+      </div>
+      ${IDC_MCP_DIALOG_ACK_HTML}
     </div>
   </div>
   <div id="castConferenceOverlay" class="${style.castAboutOverlay}" hidden>
@@ -2584,7 +2794,7 @@ function castHeaderStatusIconStyle(status, conferenceActive) {
   };
 }
 
-function castHeaderStatusTooltipLines(el, state, status, detailText) {
+function castHeaderStatusInfoLines(el, state, status, detailText) {
   const lines = [];
   const session = state?.client?.getSessionConfig?.();
   const topic = String(el.topic?.value?.trim() || session?.topic || '').trim();
@@ -2618,7 +2828,7 @@ function castHeaderStatusTooltipLines(el, state, status, detailText) {
       lines.push(`Participants: ${participants.join(', ')}`);
     }
   }
-  return lines.join('\n');
+  return lines;
 }
 
 function updateCastHeaderStatus(el, state) {
@@ -2626,7 +2836,6 @@ function updateCastHeaderStatus(el, state) {
     return;
   }
   const status = state.castHeaderStatus || 'disconnected';
-  const detailText = state.castHeaderDetailText || '';
   const { colorClass, showSlash, pulse, conferencePulse } =
     castHeaderStatusIconStyle(status, state.conferenceActive);
 
@@ -2636,12 +2845,6 @@ function updateCastHeaderStatus(el, state) {
   el.castHeaderStatus.classList.toggle(
     style.castHeaderStatusConferencePulse,
     conferencePulse
-  );
-  el.castHeaderStatus.title = castHeaderStatusTooltipLines(
-    el,
-    state,
-    status,
-    detailText
   );
 
   if (el.castHeaderStatusSlash) {
@@ -2669,13 +2872,6 @@ function setConferenceActive(el, state, active, participants, title = '') {
   updateCastHeaderStatus(el, state);
 }
 
-function stopConferencePoll(state) {
-  if (state.conferencePollTimer != null) {
-    clearInterval(state.conferencePollTimer);
-    state.conferencePollTimer = null;
-  }
-}
-
 async function syncConferenceActive(el, state) {
   if (state.wsState !== 'connected') {
     setConferenceActive(el, state, false);
@@ -2688,12 +2884,8 @@ async function syncConferenceActive(el, state) {
   setConferenceActive(el, state, active, participants, title);
 }
 
-function startConferencePoll(el, state) {
-  stopConferencePoll(state);
+function syncConferenceOnConnect(el, state) {
   syncConferenceActive(el, state).catch(() => {});
-  state.conferencePollTimer = setInterval(() => {
-    syncConferenceActive(el, state).catch(() => {});
-  }, CAST_CONFERENCE_POLL_MS);
 }
 
 function handleConferenceStart(el, state, message) {
@@ -2709,7 +2901,6 @@ function handleConferenceStart(el, state, message) {
       : undefined
   );
   setConferenceActive(el, state, true, participants, title);
-  syncConferenceActive(el, state).catch(() => {});
 }
 
 function handleConferenceEnd(el, state, message) {
@@ -2724,7 +2915,6 @@ function handleConferenceEnd(el, state, message) {
   if (!leaveTopic || !topic || leaveTopic === topic) {
     setConferenceActive(el, state, false);
   }
-  syncConferenceActive(el, state).catch(() => {});
 }
 
 function escapeHtml(text) {
@@ -3168,6 +3358,33 @@ function closeCastAboutDialog(el) {
   el.castAboutOverlay.hidden = true;
 }
 
+function openCastSessionInfoDialog(el, state) {
+  if (!el.castSessionInfoOverlay || !el.castSessionInfoBody) {
+    return;
+  }
+  const status = state.castHeaderStatus || 'disconnected';
+  const detailText = state.castHeaderDetailText || '';
+  const lines = castHeaderStatusInfoLines(el, state, status, detailText);
+  el.castSessionInfoBody.replaceChildren();
+  lines.forEach((line) => {
+    const row = document.createElement('div');
+    row.textContent = line;
+    el.castSessionInfoBody.appendChild(row);
+  });
+  el.castSessionInfoOverlay.hidden = false;
+  const dialog = el.castSessionInfoOverlay.firstElementChild;
+  if (dialog instanceof HTMLElement) {
+    dialog.focus({ preventScroll: true });
+  }
+}
+
+function closeCastSessionInfoDialog(el) {
+  if (!el.castSessionInfoOverlay) {
+    return;
+  }
+  el.castSessionInfoOverlay.hidden = true;
+}
+
 function setIdcClaudeModalStatus(el, text, { busy = false } = {}) {
   if (el.idcClaudeStatus) {
     el.idcClaudeStatus.textContent = text || '';
@@ -3178,6 +3395,40 @@ function setIdcClaudeModalStatus(el, text, { busy = false } = {}) {
   }
   if (el.idcClaudeStatusRow) {
     el.idcClaudeStatusRow.setAttribute('aria-busy', busy ? 'true' : 'false');
+  }
+}
+
+function setIdcMcpModalStatus(el, text, { busy = false } = {}) {
+  if (el.idcMcpStatus) {
+    el.idcMcpStatus.textContent = text || '';
+    el.idcMcpStatus.classList.toggle(style.idcClaudeStatusBusy, busy);
+  }
+  if (el.idcMcpStatusSpinner) {
+    el.idcMcpStatusSpinner.hidden = !busy;
+  }
+  if (el.idcMcpStatusRow) {
+    el.idcMcpStatusRow.setAttribute('aria-busy', busy ? 'true' : 'false');
+  }
+}
+
+function clearIdcMcpJobLog(el) {
+  if (el.idcMcpJobLog) {
+    el.idcMcpJobLog.textContent = '';
+    el.idcMcpJobLog.hidden = true;
+  }
+}
+
+function idcMcpDialogAvailabilityText(el) {
+  const hubEndpoint = String(el?.hubEndpoint?.value || '').trim();
+  if (!hubEndpoint) {
+    return 'IDC MCP search ready. Set a Cast hub endpoint to add studies with DICOM files.';
+  }
+  return 'IDC MCP search.';
+}
+
+function syncIdcMcpAvailabilityText(el, state) {
+  if (el.idcMcpAvailability) {
+    el.idcMcpAvailability.textContent = idcMcpDialogAvailabilityText(el);
   }
 }
 
@@ -3430,6 +3681,14 @@ function wireCastHeaderMenu(el, root) {
         closeIdcClaudeDialog(el);
         return;
       }
+      if (el.idcMcpOverlay && !el.idcMcpOverlay.hidden) {
+        el.idcMcpOverlay.hidden = true;
+        return;
+      }
+      if (el.castSessionInfoOverlay && !el.castSessionInfoOverlay.hidden) {
+        closeCastSessionInfoDialog(el);
+        return;
+      }
       closeCastHeaderMenu(el);
       closeCastHeaderStatusMenu(el);
     }
@@ -3469,6 +3728,9 @@ function castViewerWindowName(viewerKind) {
   }
   if (viewerKind === 'ohif') {
     return 'castViewerOhifWindow';
+  }
+  if (viewerKind === 'slim') {
+    return 'castViewerSlimWindow';
   }
   return 'castViewerWindow';
 }
@@ -3517,6 +3779,21 @@ function wireCastHeaderStatusMenu(el, state) {
       openCastConferenceClient(el, state);
     } catch (err) {
       addMessage(el, state, 'err', 'Conference', 'Invalid hub_endpoint URL');
+    }
+  });
+
+  el.castHeaderStatusSessionInfo?.addEventListener('click', () => {
+    closeCastHeaderStatusMenu(el);
+    openCastSessionInfoDialog(el, state);
+  });
+
+  el.castSessionInfoCloseBtn?.addEventListener('click', () => {
+    closeCastSessionInfoDialog(el);
+  });
+
+  el.castSessionInfoOverlay?.addEventListener('click', (event) => {
+    if (event.target === el.castSessionInfoOverlay) {
+      closeCastSessionInfoDialog(el);
     }
   });
 
@@ -3948,7 +4225,8 @@ function updateIdcClaudeBuildBtn(el, state) {
     return;
   }
   el.idcClaudeBuildBtn.disabled = Boolean(state.idcClaudeBuildBusy);
-  el.idcClaudeBuildBtn.title = 'IDC Claude — natural-language IDC worklist';
+  el.idcClaudeBuildBtn.title =
+    'IDC Claude skill — natural-language IDC worklist';
   syncIdcClaudeDialogAvailability(el, state);
 }
 
@@ -4103,6 +4381,7 @@ function applyWideStatusPollResults(el, state, resultData) {
   state.idcClaudeJobRunning = idcClaudeJobRunningFromStatusResponses(responses);
   refreshImageDisplayConnectionStatus(el, state);
   updateIdcClaudeBuildBtn(el, state);
+  syncIdcMcpAvailabilityText(el, state);
 }
 
 async function runWideStatusPoll(el, state) {
@@ -4138,21 +4417,34 @@ async function runWideStatusPoll(el, state) {
   }
 }
 
-function renderIdcClaudeSearchResults(el, state) {
-  if (!el.idcClaudeResults || !el.idcClaudeResultsSection) {
+function renderIdcClaudeSearchResults(el, state, dialogKind = 'claude') {
+  const isMcp = dialogKind === 'mcp';
+  const pending = isMcp
+    ? state.idcMcpPendingResults
+    : state.idcClaudePendingResults;
+  const resultsEl = isMcp ? el.idcMcpResults : el.idcClaudeResults;
+  const sectionEl = isMcp
+    ? el.idcMcpResultsSection
+    : el.idcClaudeResultsSection;
+  if (!resultsEl || !sectionEl) {
     return;
   }
-  const pending = state.idcClaudePendingResults;
   const studies = Array.isArray(pending?.studies) ? pending.studies : [];
-  el.idcClaudeResults.replaceChildren();
+  resultsEl.replaceChildren();
   if (!studies.length) {
-    el.idcClaudeResultsSection.hidden = true;
+    sectionEl.hidden = true;
     return;
   }
 
-  el.idcClaudeResultsSection.hidden = false;
-  const addedIds = state.idcClaudeAddedStudyIds || new Set();
-  const addingIds = state.idcClaudeAddingStudyIds || new Set();
+  sectionEl.hidden = false;
+  const addedIds = isMcp
+    ? state.idcMcpAddedStudyIds || new Set()
+    : state.idcClaudeAddedStudyIds || new Set();
+  const addingIds = isMcp
+    ? state.idcMcpAddingStudyIds || new Set()
+    : state.idcClaudeAddingStudyIds || new Set();
+  const mcpAddHubRequired = 'Set the Cast hub endpoint first';
+  const hubEndpoint = String(el.hubEndpoint?.value || '').trim();
 
   studies.forEach((study) => {
     const row = document.createElement('div');
@@ -4176,7 +4468,25 @@ function renderIdcClaudeSearchResults(el, state) {
     addBtn.className = style.idcClaudeAddBtn;
     addBtn.dataset.studyId = study.id;
     const studyId = String(study.id || '').trim();
-    if (addedIds.has(studyId)) {
+    if (isMcp) {
+      if (addedIds.has(studyId)) {
+        addBtn.textContent = 'Added';
+        addBtn.disabled = true;
+      } else if (addingIds.has(studyId)) {
+        addBtn.textContent = 'Adding…';
+        addBtn.disabled = true;
+      } else if (!hubEndpoint) {
+        addBtn.textContent = 'Add to worklist';
+        addBtn.disabled = true;
+        addBtn.title = mcpAddHubRequired;
+      } else {
+        addBtn.textContent = 'Add to worklist';
+        addBtn.addEventListener('click', () => {
+          // eslint-disable-next-line no-use-before-define -- defined below
+          addIdcMcpStudyToWorklist(el, state, studyId);
+        });
+      }
+    } else if (addedIds.has(studyId)) {
       addBtn.textContent = 'Added';
       addBtn.disabled = true;
     } else if (addingIds.has(studyId)) {
@@ -4186,13 +4496,24 @@ function renderIdcClaudeSearchResults(el, state) {
       addBtn.textContent = 'Add to worklist';
       addBtn.addEventListener('click', () => {
         // eslint-disable-next-line no-use-before-define -- defined below
-        addIdcClaudeStudyToWorklist(el, state, studyId);
+        addIdcStudyToWorklist(el, state, studyId);
       });
     }
 
     row.append(text, addBtn);
-    el.idcClaudeResults.append(row);
+    resultsEl.append(row);
   });
+}
+
+function syncIdcMcpDialogAvailability(el, state) {
+  syncIdcMcpAvailabilityText(el, state);
+  if (
+    el.idcMcpOverlay &&
+    !el.idcMcpOverlay.hidden &&
+    state.idcMcpPendingResults
+  ) {
+    renderIdcClaudeSearchResults(el, state, 'mcp');
+  }
 }
 
 function startIdcClaudeSendTimeout(el, state, sendId, timeoutMs) {
@@ -4202,6 +4523,8 @@ function startIdcClaudeSendTimeout(el, state, sendId, timeoutMs) {
       return;
     }
     const pending = state.idcClaudePendingSend;
+    const dialogKind = pending?.dialogKind || 'claude';
+    const isMcp = dialogKind === 'mcp';
     state.idcClaudePendingSend = null;
     stopIdcClaudeProgress(state);
     state.idcClaudeBuildBusy = false;
@@ -4209,15 +4532,24 @@ function startIdcClaudeSendTimeout(el, state, sendId, timeoutMs) {
     if (pending?.action === IDC_CLAUDE_ACTION_ADD_STUDY) {
       const studyIdText = String(pending.studyId || '').trim();
       if (studyIdText) {
-        state.idcClaudeAddingStudyIds.delete(studyIdText);
-        renderIdcClaudeSearchResults(el, state);
+        if (isMcp) {
+          state.idcMcpAddingStudyIds?.delete(studyIdText);
+        } else {
+          state.idcClaudeAddingStudyIds?.delete(studyIdText);
+        }
+        renderIdcClaudeSearchResults(el, state, dialogKind);
       }
     }
     const detail = `IDC job timed out after ${Math.round(
       timeoutMs / 1000
     )}s — check IDCCLAUDE in Slicer.`;
-    setIdcClaudeModalStatus(el, detail);
-    addMessage(el, state, 'err', 'IDC Claude', detail);
+    if (isMcp) {
+      setIdcMcpModalStatus(el, detail);
+      addMessage(el, state, 'err', 'IDC MCP', detail);
+    } else {
+      setIdcClaudeModalStatus(el, detail);
+      addMessage(el, state, 'err', 'IDC Claude skill', detail);
+    }
   }, timeoutMs);
 }
 
@@ -4233,9 +4565,16 @@ function handleIdcClaudeStatusUpdate(el, state, event) {
   if (typeof raw !== 'string' || !raw.trim()) {
     return;
   }
+  const dialogKind = state.idcClaudePendingSend.dialogKind || 'claude';
+  const isMcp = dialogKind === 'mcp';
   stopIdcClaudeProgress(state);
-  appendIdcClaudeJobLogLine(el, raw.trim());
-  setIdcClaudeModalStatus(el, raw.trim(), { busy: true });
+  if (isMcp) {
+    appendIdcJobLogLine(el.idcMcpJobLog, raw.trim());
+    setIdcMcpModalStatus(el, raw.trim(), { busy: true });
+  } else {
+    appendIdcClaudeJobLogLine(el, raw.trim());
+    setIdcClaudeModalStatus(el, raw.trim(), { busy: true });
+  }
 }
 
 function applyIdcClaudeSearchPayload(el, state, parsed, organizationLabel) {
@@ -4273,7 +4612,7 @@ function applyIdcClaudeSearchPayload(el, state, parsed, organizationLabel) {
     el,
     `Found ${studies.length} studies. Add each to the worklist when ready.`
   );
-  addMessage(el, state, 'received', 'IDC Claude', {
+  addMessage(el, state, 'received', 'IDC Claude skill', {
     organization: org,
     studies: studies.length,
     action: IDC_CLAUDE_ACTION_SEARCH,
@@ -4286,13 +4625,15 @@ function applyIdcClaudeSearchPayload(el, state, parsed, organizationLabel) {
   });
 }
 
-function applyIdcClaudeAddStudyPayload(
+function applyIdcStudyAddPayload(
   el,
   state,
   parsed,
   pending,
-  studyIdText
+  studyIdText,
+  dialogKind = 'claude'
 ) {
+  const isMcp = dialogKind === 'mcp';
   const org = String(
     parsed.data.organization || pending.organization || ''
   ).trim();
@@ -4302,7 +4643,12 @@ function applyIdcClaudeAddStudyPayload(
   };
   const entry = ensureIdcCustomWorklistEntry(state, pending);
   if (!entry) {
-    setIdcClaudeModalStatus(el, 'Worklist organization is missing.');
+    const msg = 'Worklist organization is missing.';
+    if (isMcp) {
+      setIdcMcpModalStatus(el, msg);
+    } else {
+      setIdcClaudeModalStatus(el, msg);
+    }
     return;
   }
   entry.studies = Array.isArray(entry.studies) ? entry.studies : [];
@@ -4314,26 +4660,47 @@ function applyIdcClaudeAddStudyPayload(
   } else {
     entry.studies.push(worklistStudy);
   }
-  state.idcClaudeAddedStudyIds.add(studyIdText);
+  if (isMcp) {
+    if (!state.idcMcpAddedStudyIds) {
+      state.idcMcpAddedStudyIds = new Set();
+    }
+    state.idcMcpAddedStudyIds.add(studyIdText);
+  } else {
+    if (!state.idcClaudeAddedStudyIds) {
+      state.idcClaudeAddedStudyIds = new Set();
+    }
+    state.idcClaudeAddedStudyIds.add(studyIdText);
+  }
   saveIdcCustomWorklistsToSession(el, state);
   refreshWorklistOrganizationSelect(el, state);
   el.worklistOrganizationSelect.value = org;
   renderWorklistPanel(el.worklistPanel, org, el, state);
   updateWorklistContextControls(el, state);
-  setIdcClaudeModalStatus(
-    el,
-    `Added ${worklistStudy.name || studyIdText} to "${
-      worklistOrganizationLabels(state)[org] || org
-    }".`
-  );
-  addMessage(el, state, 'received', 'IDC Claude', {
-    action: IDC_CLAUDE_ACTION_ADD_STUDY,
-    study: studyIdText,
-    organization: org,
-  });
+  const addedMsg = `Added ${worklistStudy.name || studyIdText} to "${
+    worklistOrganizationLabels(state)[org] || org
+  }".`;
+  if (isMcp) {
+    setIdcMcpModalStatus(el, addedMsg);
+    renderIdcClaudeSearchResults(el, state, 'mcp');
+    addMessage(el, state, 'received', 'IDC MCP', {
+      action: IDC_CLAUDE_ACTION_ADD_STUDY,
+      study: studyIdText,
+      organization: org,
+    });
+  } else {
+    setIdcClaudeModalStatus(el, addedMsg);
+    renderIdcClaudeSearchResults(el, state);
+    addMessage(el, state, 'received', 'IDC Claude skill', {
+      action: IDC_CLAUDE_ACTION_ADD_STUDY,
+      study: studyIdText,
+      organization: org,
+    });
+  }
   runWideStatusPoll(el, state).catch((err) => {
     console.warn(
-      '[vtkCastClient] wide STATUS poll after IDC Claude add failed',
+      `[vtkCastClient] wide STATUS poll after IDC ${
+        isMcp ? 'MCP' : 'Claude'
+      } add failed`,
       err
     );
   });
@@ -4359,20 +4726,44 @@ function handleIdcClaudeSendResult(el, state, message) {
   try {
     if (pendingSend.action === IDC_CLAUDE_ACTION_ADD_STUDY) {
       const studyIdText = String(pendingSend.studyId || '').trim();
-      state.idcClaudeAddingStudyIds.delete(studyIdText);
-      renderIdcClaudeSearchResults(el, state);
+      const dialogKind = pendingSend.dialogKind || 'claude';
+      const isMcp = dialogKind === 'mcp';
+      if (isMcp) {
+        state.idcMcpAddingStudyIds?.delete(studyIdText);
+      } else {
+        state.idcClaudeAddingStudyIds.delete(studyIdText);
+      }
+      renderIdcClaudeSearchResults(el, state, dialogKind);
       if (parsed.error) {
-        setIdcClaudeModalStatus(el, parsed.error);
-        addMessage(el, state, 'err', 'IDC Claude', parsed.error);
+        if (isMcp) {
+          setIdcMcpModalStatus(el, parsed.error);
+          addMessage(el, state, 'err', 'IDC MCP', parsed.error);
+        } else {
+          setIdcClaudeModalStatus(el, parsed.error);
+          addMessage(el, state, 'err', 'IDC Claude skill', parsed.error);
+        }
         return;
       }
       const pending =
-        pendingSend.pendingResults || state.idcClaudePendingResults;
+        pendingSend.pendingResults ||
+        (isMcp ? state.idcMcpPendingResults : state.idcClaudePendingResults);
       if (!pending) {
-        setIdcClaudeModalStatus(el, 'Worklist search context is missing.');
+        const msg = 'Worklist search context is missing.';
+        if (isMcp) {
+          setIdcMcpModalStatus(el, msg);
+        } else {
+          setIdcClaudeModalStatus(el, msg);
+        }
         return;
       }
-      applyIdcClaudeAddStudyPayload(el, state, parsed, pending, studyIdText);
+      applyIdcStudyAddPayload(
+        el,
+        state,
+        parsed,
+        pending,
+        studyIdText,
+        dialogKind
+      );
       return;
     }
 
@@ -4383,7 +4774,7 @@ function handleIdcClaudeSendResult(el, state, message) {
       state.idcClaudeSqlVisible = false;
       syncIdcClaudeSqlUi(el, state);
       setIdcClaudeModalStatus(el, parsed.error);
-      addMessage(el, state, 'err', 'IDC Claude', parsed.error);
+      addMessage(el, state, 'err', 'IDC Claude skill', parsed.error);
       return;
     }
     applyIdcClaudeSearchPayload(
@@ -4397,28 +4788,15 @@ function handleIdcClaudeSendResult(el, state, message) {
   }
 }
 
-async function addIdcClaudeStudyToWorklist(el, state, studyId) {
-  const pending = state.idcClaudePendingResults;
+async function addIdcMcpStudyToWorklist(el, state, studyId) {
+  const pending = state.idcMcpPendingResults;
   if (!pending) {
-    setIdcClaudeModalStatus(el, 'Search for studies first.');
+    setIdcMcpModalStatus(el, 'Search for studies first.');
     return;
   }
-  if (!state.client?.publish || state.wsState !== 'connected') {
-    setIdcClaudeModalStatus(el, 'Connect to the Cast hub first.');
-    return;
-  }
-  if (!state.idcClaudeAvailable) {
-    setIdcClaudeModalStatus(
-      el,
-      'IDCCLAUDE is not connected to the hub — see the message below.'
-    );
-    return;
-  }
-  if (state.idcClaudePendingSend) {
-    setIdcClaudeModalStatus(
-      el,
-      'IDCCLAUDE is busy — wait for the current job.'
-    );
+  const hubEndpoint = String(el.hubEndpoint?.value || '').trim();
+  if (!hubEndpoint) {
+    setIdcMcpModalStatus(el, 'Configure the Cast hub endpoint first.');
     return;
   }
   const studyIdText = String(studyId || '').trim();
@@ -4426,7 +4804,99 @@ async function addIdcClaudeStudyToWorklist(el, state, studyId) {
     (entry) => String(entry.id || '').trim() === studyIdText
   );
   if (!study) {
-    setIdcClaudeModalStatus(el, 'Unknown IDC study selection.');
+    setIdcMcpModalStatus(el, 'Unknown IDC study selection.');
+    return;
+  }
+  if (!state.idcMcpAddedStudyIds) {
+    state.idcMcpAddedStudyIds = new Set();
+  }
+  if (!state.idcMcpAddingStudyIds) {
+    state.idcMcpAddingStudyIds = new Set();
+  }
+  if (
+    state.idcMcpAddedStudyIds.has(studyIdText) ||
+    state.idcMcpAddingStudyIds.has(studyIdText)
+  ) {
+    return;
+  }
+
+  state.idcMcpAddingStudyIds.add(studyIdText);
+  renderIdcClaudeSearchResults(el, state, 'mcp');
+  clearIdcMcpJobLog(el);
+  setIdcMcpModalStatus(el, 'Resolving DICOM URLs via hub…', { busy: true });
+  appendIdcJobLogLine(el.idcMcpJobLog, 'hub idc-index series-files started…');
+
+  try {
+    const hubResult = await fetchHubIdcSeriesFiles(
+      hubEndpoint,
+      pending.organization,
+      study
+    );
+    if (hubResult?.error) {
+      throw new Error(String(hubResult.error));
+    }
+    const resolvedStudy = hubResult?.study;
+    if (!resolvedStudy || typeof resolvedStudy !== 'object') {
+      throw new Error('Hub response missing study payload');
+    }
+    const openMode = String(resolvedStudy.openMode || '')
+      .trim()
+      .toLowerCase();
+    if (openMode !== CAST_OPEN_MODE_DICOMWEB) {
+      const files = Array.isArray(resolvedStudy.files)
+        ? resolvedStudy.files
+        : [];
+      if (!files.length) {
+        throw new Error('Hub response missing file URLs');
+      }
+    }
+    state.idcMcpAddingStudyIds.delete(studyIdText);
+    applyIdcStudyAddPayload(
+      el,
+      state,
+      { data: hubResult, study: resolvedStudy },
+      pending,
+      studyIdText,
+      'mcp'
+    );
+  } catch (err) {
+    state.idcMcpAddingStudyIds.delete(studyIdText);
+    renderIdcClaudeSearchResults(el, state, 'mcp');
+    const msg = err instanceof Error ? err.message : String(err);
+    setIdcMcpModalStatus(el, msg);
+    addMessage(el, state, 'err', 'IDC MCP', msg);
+  }
+}
+
+async function addIdcStudyToWorklist(el, state, studyId) {
+  const pending = state.idcClaudePendingResults;
+  const setStatus = setIdcClaudeModalStatus;
+  const messageLabel = 'IDC Claude skill';
+  if (!pending) {
+    setStatus(el, 'Search for studies first.');
+    return;
+  }
+  if (!state.client?.publish || state.wsState !== 'connected') {
+    setStatus(el, 'Connect to the Cast hub first.');
+    return;
+  }
+  if (!state.idcClaudeAvailable) {
+    setStatus(
+      el,
+      'IDCCLAUDE is not connected to the hub — see the message below.'
+    );
+    return;
+  }
+  if (state.idcClaudePendingSend) {
+    setStatus(el, 'IDCCLAUDE is busy — wait for the current job.');
+    return;
+  }
+  const studyIdText = String(studyId || '').trim();
+  const study = (pending.studies || []).find(
+    (entry) => String(entry.id || '').trim() === studyIdText
+  );
+  if (!study) {
+    setStatus(el, 'Unknown IDC study selection.');
     return;
   }
   if (!state.idcClaudeAddedStudyIds) {
@@ -4448,6 +4918,7 @@ async function addIdcClaudeStudyToWorklist(el, state, studyId) {
     action: IDC_CLAUDE_ACTION_ADD_STUDY,
     studyId: studyIdText,
     pendingResults: pending,
+    dialogKind: 'claude',
   };
   state.idcClaudeAddingStudyIds.add(studyIdText);
   renderIdcClaudeSearchResults(el, state);
@@ -4474,8 +4945,8 @@ async function addIdcClaudeStudyToWorklist(el, state, studyId) {
     stopIdcClaudeProgress(state);
     state.idcClaudeAddingStudyIds.delete(studyIdText);
     renderIdcClaudeSearchResults(el, state);
-    setIdcClaudeModalStatus(el, msg);
-    addMessage(el, state, 'err', 'IDC Claude', msg);
+    setStatus(el, msg);
+    addMessage(el, state, 'err', messageLabel, msg);
   }
 }
 
@@ -4552,7 +5023,7 @@ async function searchIdcClaudeStudiesFromPrompt(el, state) {
     state.idcClaudeBuildBusy = false;
     updateIdcClaudeBuildBtn(el, state);
     setIdcClaudeModalStatus(el, msg);
-    addMessage(el, state, 'err', 'IDC Claude', msg);
+    addMessage(el, state, 'err', 'IDC Claude skill', msg);
   }
 }
 
@@ -4561,7 +5032,7 @@ function wireIdcClaudeDialog(el, state) {
     openIdcClaudeDialog(el, state);
   });
   el.idcClaudeCancelBtn?.addEventListener('click', () => {
-    closeIdcClaudeDialog(el);
+    closeIdcClaudeDialog(el, state);
   });
   el.idcClaudeBuildConfirmBtn?.addEventListener('click', () => {
     searchIdcClaudeStudiesFromPrompt(el, state);
@@ -4572,7 +5043,225 @@ function wireIdcClaudeDialog(el, state) {
   });
   el.idcClaudeOverlay?.addEventListener('click', (event) => {
     if (event.target === el.idcClaudeOverlay) {
-      closeIdcClaudeDialog(el);
+      closeIdcClaudeDialog(el, state);
+    }
+  });
+}
+
+function syncIdcMcpSqlUi(el, state) {
+  const sql = String(
+    state.idcMcpPendingResults?.sql || state.idcMcpLastSearchSql || ''
+  ).trim();
+  if (!el.idcMcpSqlSection || !el.idcMcpToggleSqlBtn || !el.idcMcpSqlPanel) {
+    return;
+  }
+  if (!sql) {
+    el.idcMcpSqlSection.hidden = true;
+    el.idcMcpToggleSqlBtn.hidden = true;
+    el.idcMcpSqlPanel.hidden = true;
+    el.idcMcpSqlPanel.textContent = '';
+    el.idcMcpToggleSqlBtn.setAttribute('aria-expanded', 'false');
+    state.idcMcpSqlVisible = false;
+    return;
+  }
+
+  el.idcMcpSqlSection.hidden = false;
+  el.idcMcpToggleSqlBtn.hidden = false;
+  el.idcMcpSqlPanel.textContent = sql;
+  const visible = Boolean(state.idcMcpSqlVisible);
+  el.idcMcpSqlPanel.hidden = !visible;
+  el.idcMcpToggleSqlBtn.textContent = visible
+    ? 'Hide IDC index query'
+    : 'Show IDC index query';
+  el.idcMcpToggleSqlBtn.setAttribute(
+    'aria-expanded',
+    visible ? 'true' : 'false'
+  );
+}
+
+function clearIdcMcpSearchResults(el, state) {
+  clearIdcMcpJobLog(el);
+  state.idcMcpPendingResults = null;
+  state.idcMcpLastSearchSql = '';
+  state.idcMcpSqlVisible = false;
+  state.idcMcpAddedStudyIds = new Set();
+  state.idcMcpAddingStudyIds = new Set();
+  if (el.idcMcpResults) {
+    el.idcMcpResults.replaceChildren();
+  }
+  if (el.idcMcpResultsSection) {
+    el.idcMcpResultsSection.hidden = true;
+  }
+  syncIdcMcpSqlUi(el, state);
+}
+
+function ensureIdcMcpClient(state) {
+  if (!state.idcMcpClient) {
+    state.idcMcpClient = new IdcMcpClient();
+  }
+  return state.idcMcpClient;
+}
+
+function openIdcMcpDialog(el, state) {
+  if (!el.idcMcpOverlay) {
+    return;
+  }
+  setIdcMcpModalStatus(el, '');
+  clearIdcMcpSearchResults(el, state);
+  if (el.idcMcpCitation) {
+    el.idcMcpCitation.textContent = '';
+  }
+  syncIdcMcpDialogAvailability(el, state);
+  if (el.idcMcpPrompt && !el.idcMcpPrompt.value.trim()) {
+    el.idcMcpPrompt.value = IDC_CLAUDE_DEFAULT_PROMPT;
+  }
+  if (el.idcMcpOrgLabel && !el.idcMcpOrgLabel.value.trim()) {
+    el.idcMcpOrgLabel.value = IDC_CLAUDE_DEFAULT_ORG_LABEL;
+  }
+  el.idcMcpOverlay.hidden = false;
+  el.idcMcpPrompt?.focus();
+}
+
+function closeIdcMcpDialog(el) {
+  if (!el.idcMcpOverlay) {
+    return;
+  }
+  el.idcMcpOverlay.hidden = true;
+}
+
+function applyIdcMcpSearchResults(
+  el,
+  state,
+  parsed,
+  organizationLabel,
+  prompt
+) {
+  const org = idcMcpOrganizationId(prompt);
+  const studies = (parsed.studies || []).map((series, index) =>
+    mcpSeriesToWorklistStudy(series, org, index + 1)
+  );
+  if (!studies.length) {
+    setIdcMcpModalStatus(
+      el,
+      parsed.text
+        ? 'MCP query completed but returned no studies.'
+        : 'MCP query returned no studies.'
+    );
+    return;
+  }
+
+  state.idcMcpPendingResults = {
+    organization: org,
+    organizationLabel: organizationLabel || prompt,
+    prompt,
+    sql: parsed.sql || '',
+    citation: parsed.citation || '',
+    studies,
+  };
+  state.idcMcpLastSearchSql = String(parsed.sql || '').trim();
+  state.idcMcpSqlVisible = false;
+  state.idcMcpAddedStudyIds = new Set();
+  state.idcMcpAddingStudyIds = new Set();
+  ensureIdcCustomWorklistEntry(state, state.idcMcpPendingResults);
+  saveIdcCustomWorklistsToSession(el, state);
+  refreshWorklistOrganizationSelect(el, state);
+  renderIdcClaudeSearchResults(el, state, 'mcp');
+  syncIdcMcpSqlUi(el, state);
+  if (el.idcMcpCitation && parsed.citation) {
+    el.idcMcpCitation.textContent = parsed.citation;
+  }
+  setIdcMcpModalStatus(
+    el,
+    `Found ${studies.length} studies. Add each to the worklist when ready.`
+  );
+  addMessage(el, state, 'received', 'IDC MCP', {
+    organization: org,
+    studies: studies.length,
+    tool: state.idcMcpLastToolName || '',
+  });
+}
+
+async function searchIdcMcpStudiesFromPrompt(el, state) {
+  if (state.idcMcpSearchBusy) {
+    return;
+  }
+  const prompt = el.idcMcpPrompt?.value?.trim() || '';
+  if (!prompt) {
+    setIdcMcpModalStatus(el, 'Enter a natural-language IDC query.');
+    return;
+  }
+  const organizationLabel = el.idcMcpOrgLabel?.value?.trim() || '';
+  const client = ensureIdcMcpClient(state);
+
+  state.idcMcpSearchBusy = true;
+  clearIdcMcpSearchResults(el, state);
+  if (el.idcMcpSearchBtn) {
+    el.idcMcpSearchBtn.disabled = true;
+  }
+  setIdcMcpModalStatus(el, 'Connecting to IDC MCP…', { busy: true });
+  appendIdcJobLogLine(el.idcMcpJobLog, 'IDC MCP query started…');
+
+  try {
+    const queryResult = await client.queryIdc(prompt, {
+      maxRows: idcClaudeMaxStudiesForPrompt(prompt),
+      onSseTextChunk: (chunk) => {
+        appendIdcJobLogLine(el.idcMcpJobLog, chunk);
+      },
+    });
+    state.idcMcpLastToolName = queryResult.toolName || '';
+    if (queryResult.statusNote) {
+      appendIdcJobLogLine(el.idcMcpJobLog, queryResult.statusNote);
+    }
+    const parsed = parseIdcMcpToolResult(
+      queryResult.text,
+      queryResult.structured
+    );
+    if (
+      queryResult.queryMode === 'sql' &&
+      queryResult.toolArgs?.sql &&
+      !parsed.sql
+    ) {
+      parsed.sql = String(queryResult.toolArgs.sql);
+    }
+    applyIdcMcpSearchResults(el, state, parsed, organizationLabel, prompt);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('session expired') || msg.includes('HTTP 404')) {
+      client.resetSession();
+    }
+    setIdcMcpModalStatus(el, msg);
+    addMessage(el, state, 'err', 'IDC MCP', msg);
+  } finally {
+    state.idcMcpSearchBusy = false;
+    if (el.idcMcpSearchBtn) {
+      el.idcMcpSearchBtn.disabled = false;
+    }
+    if (el.idcMcpStatusSpinner) {
+      el.idcMcpStatusSpinner.hidden = true;
+    }
+    if (el.idcMcpStatusRow) {
+      el.idcMcpStatusRow.setAttribute('aria-busy', 'false');
+    }
+  }
+}
+
+function wireIdcMcpDialog(el, state) {
+  el.idcMcpBuildBtn?.addEventListener('click', () => {
+    openIdcMcpDialog(el, state);
+  });
+  el.idcMcpCancelBtn?.addEventListener('click', () => {
+    closeIdcMcpDialog(el);
+  });
+  el.idcMcpSearchBtn?.addEventListener('click', () => {
+    searchIdcMcpStudiesFromPrompt(el, state);
+  });
+  el.idcMcpToggleSqlBtn?.addEventListener('click', () => {
+    state.idcMcpSqlVisible = !state.idcMcpSqlVisible;
+    syncIdcMcpSqlUi(el, state);
+  });
+  el.idcMcpOverlay?.addEventListener('click', (event) => {
+    if (event.target === el.idcMcpOverlay) {
+      closeIdcMcpDialog(el);
     }
   });
 }
@@ -5385,6 +6074,42 @@ function sceneviewViewportBoxPercentHtml(pct, title, thumbnail, zIndex) {
   )}">${thumbLayer}</div>`;
 }
 
+function sceneviewLayoutFitDimensions(display, layoutScreenRect, layoutSize) {
+  const coordSize =
+    layoutSize ||
+    (layoutScreenRect
+      ? { width: layoutScreenRect.width, height: layoutScreenRect.height }
+      : { width: 1, height: 1 });
+  // layoutRect values are in layout-client space (layoutClientSize), not screen px.
+  const fitWidth = Math.max(1, coordSize.width);
+  const fitHeight = Math.max(1, coordSize.height);
+  return { coordSize, fitWidth, fitHeight };
+}
+
+function sceneviewIsSingleFullBleedViewport(display, viewports, layoutSize) {
+  const list = Array.isArray(viewports) ? viewports.filter(Boolean) : [];
+  if (list.length !== 1 || (display && display.layout)) {
+    return false;
+  }
+  if (!layoutSize) {
+    return true;
+  }
+  const vp = list[0];
+  const rect = screenRectFromPayload(vp && vp.layoutRect);
+  if (!rect) {
+    return true;
+  }
+  const tolerance = 8;
+  const w = layoutSize.width;
+  const h = layoutSize.height;
+  return (
+    rect.left <= tolerance &&
+    rect.top <= tolerance &&
+    Math.abs(rect.width - w) <= tolerance &&
+    Math.abs(rect.height - h) <= tolerance
+  );
+}
+
 function sceneviewIdDisplayInnerHtml(win, display, viewports) {
   const layoutScreenRect = layoutScreenRectFromEntry(display, viewports, win);
   const layoutSize = layoutClientSizeFromEntry(display, layoutScreenRect);
@@ -5400,7 +6125,10 @@ function sceneviewIdDisplayInnerHtml(win, display, viewports) {
             viewportList[0],
         ]
       : viewportList;
-  if (display && display.maximized && listForLayout[0]) {
+  const useFullBleed =
+    sceneviewIsSingleFullBleedViewport(display, listForLayout, layoutSize) &&
+    listForLayout.length === 1;
+  if ((display && display.maximized && listForLayout[0]) || useFullBleed) {
     const activeVp = listForLayout[0];
     const vpName =
       (activeVp && (activeVp.name || activeVp.viewId)) || 'viewport';
@@ -5415,15 +6143,11 @@ function sceneviewIdDisplayInnerHtml(win, display, viewports) {
       3
     )}</div></div></div>`;
   }
-  const coordSize =
-    layoutSize ||
-    (layoutScreenRect
-      ? { width: layoutScreenRect.width, height: layoutScreenRect.height }
-      : { width: 1, height: 1 });
-  const fitWidth = layoutScreenRect ? layoutScreenRect.width : coordSize.width;
-  const fitHeight = layoutScreenRect
-    ? layoutScreenRect.height
-    : coordSize.height;
+  const { coordSize, fitWidth, fitHeight } = sceneviewLayoutFitDimensions(
+    display,
+    layoutScreenRect,
+    layoutSize
+  );
   const viewportItems = [];
   listForLayout.forEach((vp, vpIdx) => {
     if (!vp) {
@@ -5691,7 +6415,8 @@ function buildSceneviewLayoutPageHtml(
   .svWorklist .svThumbWrap { background: #0a0a12; display: flex; align-items: center; justify-content: center; }
   .svWorklist .svDisplayContent .svThumb { width: 100%; height: 100%; object-fit: contain; object-position: center center;
     transform: scale(${SCENEVIEW_WORKLIST_THUMB_SCALE}); transform-origin: center center; display: block; background: transparent; }
-  .svDisplayId .svViewport .svThumb { width: 100%; height: 100%; object-fit: fill; display: block; background: #000; }
+  .svDisplayId .svViewport .svThumbWrap { background: #000; display: flex; align-items: center; justify-content: center; }
+  .svDisplayId .svViewport .svThumb { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; object-position: center center; display: block; background: #000; }
   .svDisplayLabelAbove { position: absolute; left: 0; right: 0; bottom: 100%; margin-bottom: ${px(
     4
   )};
@@ -6162,11 +6887,13 @@ function setOpenViewerButtonsEnabled(el, enabled) {
   el.openTopicViewerBtn.disabled = disabled;
   el.openVolViewBtn.disabled = disabled;
   el.openOhifBtn.disabled = disabled;
+  el.openSlimBtn.disabled = disabled;
   const disabledTitle = CAST_VIEWER_OPEN_TITLE_DISABLED;
   el.openOhifBtn.title = enabled ? CAST_VIEWER_OPEN_TITLE_OHIF : disabledTitle;
   el.openVolViewBtn.title = enabled
     ? CAST_VIEWER_OPEN_TITLE_VOLVIEW
     : disabledTitle;
+  el.openSlimBtn.title = enabled ? CAST_VIEWER_OPEN_TITLE_SLIM : disabledTitle;
   el.openTopicViewerBtn.title = enabled
     ? 'Open a viewer instance'
     : disabledTitle;
@@ -6178,10 +6905,16 @@ function setHubAdminPortalButtonsEnabled(el, enabled) {
 }
 
 function openCastViewer(el, state, viewerKind) {
-  const viewerBaseUrl =
-    viewerKind === 'volview'
-      ? resolveVolviewViewerBaseUrl(el)
-      : resolveOhifViewerBaseUrl(el);
+  let viewerBaseUrl;
+  if (viewerKind === 'volview') {
+    viewerBaseUrl = resolveVolviewViewerBaseUrl(el);
+  } else if (viewerKind === 'ohif') {
+    viewerBaseUrl = resolveOhifViewerBaseUrl(el);
+  } else if (viewerKind === 'slim') {
+    viewerBaseUrl = resolveSlimViewerBaseUrl(el);
+  } else {
+    viewerBaseUrl = resolveVolviewViewerBaseUrl(el);
+  }
   const url = new URL(viewerBaseUrl);
   const topic = el.topic?.value?.trim();
   if (topic) {
@@ -6207,13 +6940,12 @@ function applyWebsocketStatus(el, state, wsState) {
     case 'connected':
       setConnection(el, state, 'connected', 'Websocket connected');
       updateOpenSceneviewsButton(el, state);
-      startConferencePoll(el, state);
+      syncConferenceOnConnect(el, state);
       runWideStatusPoll(el, state).catch((err) => {
         console.warn('[vtkCastClient] wide STATUS poll failed', err);
       });
       break;
     case 'error':
-      stopConferencePoll(state);
       setConferenceActive(el, state, false);
       clearImageDisplayRequesters(state);
       clearResourceServerStatus(state);
@@ -6224,7 +6956,6 @@ function applyWebsocketStatus(el, state, wsState) {
       break;
     case 'disconnected':
     default:
-      stopConferencePoll(state);
       setConferenceActive(el, state, false);
       clearImageDisplayRequesters(state);
       clearResourceServerStatus(state);
@@ -6243,6 +6974,7 @@ function applyHubPreset(el, state, hubKey) {
   el.tokenEndpoint.value = hubDef.authEndpoint;
   state.selectedClientId = hubDef.client_id;
   state.selectedClientSecret = hubDef.client_secret;
+  updateSlimViewerButtonIcon(el);
 }
 
 function buildHubConfig(el, state) {
@@ -6276,7 +7008,6 @@ function buildSessionConfig(el) {
 function ensureClient(el, state, recreate = false) {
   if (!state.client || recreate) {
     if (state.client) {
-      stopConferencePoll(state);
       state.client.delete();
     }
     state.client = vtkCastClient.newInstance({
@@ -6884,6 +7615,8 @@ async function boot() {
     openTopicViewerBtn: byId('openTopicViewerBtn'),
     openVolViewBtn: byId('openVolViewBtn'),
     openOhifBtn: byId('openOhifBtn'),
+    openSlimBtn: byId('openSlimBtn'),
+    openSlimBtnIcon: byId('openSlimBtnIcon'),
     openSceneviewsBtn: byId('openSceneviewsBtn'),
     viewerSelect: byId('viewerSelect'),
     publishBtn: byId('publishBtn'),
@@ -6906,6 +7639,7 @@ async function boot() {
     castHeaderStatusSlash: byId('castHeaderStatusSlash'),
     castHeaderStatusBtn: byId('castHeaderStatusBtn'),
     castHeaderStatusMenu: byId('castHeaderStatusMenu'),
+    castHeaderStatusSessionInfo: byId('castHeaderStatusSessionInfo'),
     castHeaderStatusOpenHub: byId('castHeaderStatusOpenHub'),
     castHeaderStatusStartConference: byId('castHeaderStatusStartConference'),
     castHeaderMenuBtn: byId('castHeaderMenuBtn'),
@@ -6914,6 +7648,9 @@ async function boot() {
     castHeaderMenuThemeLight: byId('castHeaderMenuThemeLight'),
     castHeaderAboutBtn: byId('castHeaderAboutBtn'),
     castAboutOverlay: byId('castAboutOverlay'),
+    castSessionInfoOverlay: byId('castSessionInfoOverlay'),
+    castSessionInfoBody: byId('castSessionInfoBody'),
+    castSessionInfoCloseBtn: byId('castSessionInfoCloseBtn'),
     castAboutTitle: byId('castAboutTitle'),
     castAboutCloseBtn: byId('castAboutCloseBtn'),
     castConferenceOverlay: byId('castConferenceOverlay'),
@@ -6932,7 +7669,7 @@ async function boot() {
     getResponseData: byId('getResponseData'),
     worklistContextDisplay: byId('worklistContextDisplay'),
     worklistOrganizationSelect: byId('worklistOrganizationSelect'),
-    idcClaudeBuildBtn: byId('idcClaudeBuildBtn'),
+    idcClaudeBuildBtn: document.getElementById('idcClaudeBuildBtn'),
     idcClaudeOverlay: byId('idcClaudeOverlay'),
     idcClaudeAvailability: byId('idcClaudeAvailability'),
     idcClaudePrompt: byId('idcClaudePrompt'),
@@ -6949,6 +7686,23 @@ async function boot() {
     idcClaudeResults: byId('idcClaudeResults'),
     idcClaudeCancelBtn: byId('idcClaudeCancelBtn'),
     idcClaudeBuildConfirmBtn: byId('idcClaudeBuildConfirmBtn'),
+    idcMcpBuildBtn: byId('idcMcpBuildBtn'),
+    idcMcpOverlay: byId('idcMcpOverlay'),
+    idcMcpPrompt: byId('idcMcpPrompt'),
+    idcMcpOrgLabel: byId('idcMcpOrgLabel'),
+    idcMcpStatusRow: byId('idcMcpStatusRow'),
+    idcMcpStatusSpinner: byId('idcMcpStatusSpinner'),
+    idcMcpStatus: byId('idcMcpStatus'),
+    idcMcpJobLog: byId('idcMcpJobLog'),
+    idcMcpCitation: byId('idcMcpCitation'),
+    idcMcpSqlSection: byId('idcMcpSqlSection'),
+    idcMcpToggleSqlBtn: byId('idcMcpToggleSqlBtn'),
+    idcMcpSqlPanel: byId('idcMcpSqlPanel'),
+    idcMcpResultsSection: byId('idcMcpResultsSection'),
+    idcMcpResults: byId('idcMcpResults'),
+    idcMcpAvailability: byId('idcMcpAvailability'),
+    idcMcpCancelBtn: byId('idcMcpCancelBtn'),
+    idcMcpSearchBtn: byId('idcMcpSearchBtn'),
     worklistImageDisplayLabel: byId('worklistImageDisplayLabel'),
     worklistPanel: byId('worklistPanel'),
     castStandardSelect: document.getElementById('castStandardSelect'),
@@ -6970,7 +7724,6 @@ async function boot() {
     conferenceActive: false,
     conferenceTitle: '',
     conferenceParticipants: [],
-    conferencePollTimer: null,
     wsState: 'disconnected',
     openWorklistSampleId: null,
     hubSampleStudies: [],
@@ -6985,6 +7738,14 @@ async function boot() {
     idcClaudeSqlVisible: false,
     idcClaudeAddedStudyIds: new Set(),
     idcClaudeAddingStudyIds: new Set(),
+    idcMcpClient: null,
+    idcMcpSearchBusy: false,
+    idcMcpPendingResults: null,
+    idcMcpLastSearchSql: '',
+    idcMcpLastToolName: '',
+    idcMcpSqlVisible: false,
+    idcMcpAddedStudyIds: new Set(),
+    idcMcpAddingStudyIds: new Set(),
     worklistUrlSelectionApplied: false,
     worklistOrganizationUserSelected: false,
     wideStatusPollBusy: false,
@@ -7005,6 +7766,7 @@ async function boot() {
   wireCastHeaderStatusMenu(el, state);
   wireCastConferenceDialog(el, state);
   wireIdcClaudeDialog(el, state);
+  wireIdcMcpDialog(el, state);
 
   applyCastStandardToPage(el, selectedCastStandard(el));
   el.castStandardSelect?.addEventListener('change', () => {
@@ -7225,6 +7987,9 @@ async function boot() {
   );
   el.openOhifBtn.addEventListener('click', () =>
     openCastViewer(el, state, 'ohif')
+  );
+  el.openSlimBtn.addEventListener('click', () =>
+    openCastViewer(el, state, 'slim')
   );
   el.openTopicViewerBtn.addEventListener('click', () =>
     openCastViewer(el, state, el.viewerSelect.value)

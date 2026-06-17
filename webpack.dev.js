@@ -6,6 +6,7 @@ const webpack = require('webpack');
 // config files
 const common = require('./webpack.common.js');
 const settings = require('./webpack.settings.js');
+const idcMcpProxy = require('./webpack.idc-mcp-proxy.js');
 
 // Configure the webpack-dev-server
 function configureDevServer(port) {
@@ -26,6 +27,7 @@ function configureDevServer(port) {
     headers: {
       'Access-Control-Allow-Origin': '*',
     },
+    proxy: [idcMcpProxy],
   };
 }
 

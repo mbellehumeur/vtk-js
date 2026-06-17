@@ -1,1 +1,3 @@
-export { resolveCastFileMessage as default } from '../resolveCastFileMessage';
+import { resolveCastFileMessage } from '../resolveCastFileMessage';
+
+export default resolveCastFileMessage;

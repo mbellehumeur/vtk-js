@@ -461,6 +461,7 @@ export function buildDicomUrlImagingStudyOpenContext({
  * @param {string} [params.seriesInstanceUID]
  * @param {string} [params.dicomwebRoot]
  * @param {string} [params.patientReference]
+ * @param {string} [params.ohifMode] OHIF mode route segment (e.g. `microscopy`, `usAnnotation`)
  * @returns {Array<object>}
  */
 export function buildDicomwebImagingStudyOpenContext({
@@ -469,6 +470,7 @@ export function buildDicomwebImagingStudyOpenContext({
   seriesInstanceUID,
   dicomwebRoot,
   patientReference,
+  ohifMode,
 }) {
   const studyId = String(id || '').trim() || 'study';
   const studyUid = normalizeUid(studyInstanceUID);
@@ -487,6 +489,13 @@ export function buildDicomwebImagingStudyOpenContext({
   ];
   if (root) {
     identifiers.push({ system: CAST_DICOMWEB_ROOT, value: root });
+  }
+  const ohifModeValue = String(ohifMode || '').trim();
+  if (ohifModeValue) {
+    identifiers.push({
+      system: CAST_IDENTIFIER_OHIF_MODE,
+      value: ohifModeValue,
+    });
   }
 
   const studyResource = {

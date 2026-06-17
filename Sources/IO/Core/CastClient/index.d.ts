@@ -408,8 +408,15 @@ export function resolveImagingStudyOpenPlan(
 ): ImagingStudyOpenPlan | null;
 export function normalizeStudyUID(value: unknown): string;
 export function extractStudyUIDFromResource(resource: unknown): string;
+
+export interface CastFilePayloadClient {
+  hasPendingPayload?: (message: CastMessage) => boolean;
+  fetchAllPayloads?: (message: CastMessage) => Promise<CastMessage>;
+  fetchPayload?: (message: CastMessage) => Promise<CastMessage>;
+}
+
 export function resolveCastFileMessage(
-  client: vtkCastClient | null | undefined,
+  client: CastFilePayloadClient | null | undefined,
   message: CastMessage
 ): Promise<CastMessage>;
 export function castMessageHasPendingFilePayloads(
@@ -422,6 +429,26 @@ export function getActorKeyword(actor: unknown): string;
 export function getInboundTargetActorKeyword(message: {
   'target.actor'?: unknown;
 }): string;
+
+export interface CastBatchContextFile {
+  fileName?: string;
+  mimeType?: string;
+  byteLength?: number;
+  data?: ArrayBuffer | Uint8Array | string;
+  payloadIds?: string[];
+  chunkByteLengths?: number[];
+  expiresAt?: string;
+  [key: string]: unknown;
+}
+
+export function batchContextFiles(
+  event: CastMessage['event'] | undefined
+): CastBatchContextFile[];
+
+export function decodeBase64ToArrayBuffer(
+  base64: string
+): ArrayBuffer | null;
+
 export function extractFilePayloadsForEvent(
   message: CastMessage,
   hubEventName: string
@@ -505,6 +532,15 @@ export function findActiveCastConference(
   conferences: CastConferenceRecord[]
 ): CastConferenceRecord | null;
 export function normalizeConferenceParticipants(raw: unknown): string[];
+export function isCastConferenceHost(
+  topic: string,
+  conference: CastConferenceRecord | null | undefined
+): boolean;
+export function isCastConferenceParticipant(
+  topic: string,
+  subscriberName: string,
+  conference: CastConferenceRecord | null | undefined
+): boolean;
 
 /**
  * Cast hub client: OAuth, subscribe, WebSocket bind, publish, and typed

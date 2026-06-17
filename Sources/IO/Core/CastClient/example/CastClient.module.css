@@ -285,11 +285,14 @@
 
 .headerTitleStack {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0;
   text-align: center;
   min-width: 0;
+  white-space: nowrap;
 }
 
 .headerViewerBtn {
@@ -490,6 +493,16 @@
   margin: 0 0 16px;
   font-size: 14px;
   line-height: 1.5;
+}
+
+.castSessionInfoBody {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.castSessionInfoBody div + div {
+  margin-top: 4px;
 }
 
 .castAboutLink {
@@ -781,7 +794,7 @@
 
 .worklistOrganizationControls {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -792,6 +805,49 @@
   justify-content: space-between;
   gap: 16px;
   margin-top: 16px;
+}
+
+.idcMcpDialog {
+  position: relative;
+}
+
+.idcMcpDialog .castAboutTitle {
+  padding-right: 2rem;
+}
+
+.idcMcpDialogCloseBtn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: calc(var(--cast-radius) * 0.75);
+  background: transparent;
+  color: var(--cast-muted-foreground);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.idcMcpDialogCloseBtn:hover {
+  background: var(--cast-muted);
+  color: var(--cast-foreground);
+}
+
+.idcMcpSearchBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.idcMcpSearchBar .idcClaudeAvailability {
+  margin: 0;
 }
 
 .idcClaudeActionButtons {
@@ -1021,6 +1077,12 @@
   font-weight: 300;
   color: var(--cast-foreground);
   line-height: 1.2;
+}
+
+.headerTitleSub::before {
+  content: ' — ';
+  font-weight: 300;
+  color: var(--cast-muted-foreground);
 }
 
 .headerTitleSub {
