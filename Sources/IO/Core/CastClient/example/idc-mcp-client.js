@@ -399,6 +399,24 @@ export class IdcMcpClient {
     return tools;
   }
 
+  // Resolve anonymous public download URLs (one per series) for an explicit
+  // selection of SeriesInstanceUIDs via the IDC MCP `get_cohort_urls` tool.
+  // source is 'aws' (s3://) or 'gcs' (gs://). Returns [] when nothing resolves.
+  async getCohortUrls(seriesInstanceUIDs, source = 'aws') {
+    const uids = (Array.isArray(seriesInstanceUIDs) ? seriesInstanceUIDs : [])
+      .map((uid) => String(uid || '').trim())
+      .filter(Boolean);
+    if (!uids.length) {
+      return [];
+    }
+    const { structured } = await this.callTool('get_cohort_urls', {
+      terms: { SeriesInstanceUID: uids },
+      source,
+      limit: Math.max(100, uids.length),
+    });
+    return Array.isArray(structured?.urls) ? structured.urls : [];
+  }
+
   async callTool(name, args, options = {}) {
     await this.initialize();
     const result = await this._postJsonRpc(
@@ -626,6 +644,105 @@ export function parseIdcMcpToolResult(text, structured) {
   }
 
   return { studies: [], sql, citation, raw: payload, source: 'empty' };
+}
+
+// Format resolved cohort URLs into a download manifest. For AWS this is an
+// s5cmd run-file (one `cp` per series prefix); for GCS a gs:// URL list that
+// gsutil can consume via `-I`. Buckets are public/anonymous, so no auth needed.
+export function buildIdcManifestText(urls, source = 'aws') {
+  const list = (Array.isArray(urls) ? urls : [])
+    .map((url) => String(url || '').trim())
+    .filter(Boolean);
+  if (source === 'gcs') {
+    const header = [
+      `# IDC download manifest — ${list.length} series (source: gcs)`,
+      '# Download with: cat THIS_FILE | gsutil -m cp -I ./',
+    ];
+    return `${[...header, ...list].join('\n')}\n`;
+  }
+  const header = [
+    `# IDC download manifest — ${list.length} series (source: aws)`,
+    '# Download with: s5cmd --no-sign-request run THIS_FILE',
+    '#   or per line: aws s3 cp --no-sign-request <url> .',
+  ];
+  const lines = list.map((url) => `cp "${url}" ./`);
+  return `${[...header, ...lines].join('\n')}\n`;
+}
+
+// Parse an s3://bucket/prefix/* series URL into { bucket, prefix }.
+function parseS3SeriesUrl(seriesAwsUrl) {
+  const match = String(seriesAwsUrl || '')
+    .trim()
+    .match(/^s3:\/\/([^/]+)\/(.+)$/i);
+  if (!match) {
+    return null;
+  }
+  const bucket = match[1];
+  const prefix = match[2].replace(/\*?$/, '').replace(/\/$/, '');
+  return { bucket, prefix };
+}
+
+function s3ObjectHttpUrl(bucket, key) {
+  const encodedKey = key.split('/').map(encodeURIComponent).join('/');
+  return `https://${bucket}.s3.amazonaws.com/${encodedKey}`;
+}
+
+// List the objects under a series prefix via the anonymous S3 REST API. The
+// idc-open-data bucket is public and CORS-enabled (GET/HEAD, Allow-Origin *),
+// so the browser can both list and fetch directly — no hub required. Returns
+// [{ url, fileName, size }] suitable for fetchWorklistFilesForZip.
+export async function listIdcSeriesFiles(seriesAwsUrl) {
+  const parsed = parseS3SeriesUrl(seriesAwsUrl);
+  if (!parsed) {
+    return [];
+  }
+  const files = [];
+  let continuationToken = null;
+  do {
+    const url = new URL(`https://${parsed.bucket}.s3.amazonaws.com/`);
+    url.searchParams.set('list-type', '2');
+    url.searchParams.set('prefix', `${parsed.prefix}/`);
+    if (continuationToken) {
+      url.searchParams.set('continuation-token', continuationToken);
+    }
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error(
+        `S3 list failed (HTTP ${response.status}) for ${parsed.prefix}`
+      );
+    }
+    const doc = new DOMParser().parseFromString(
+      await response.text(),
+      'application/xml'
+    );
+    if (doc.getElementsByTagName('parsererror').length) {
+      throw new Error('Failed to parse S3 listing response');
+    }
+    const contents = doc.getElementsByTagName('Contents');
+    for (let i = 0; i < contents.length; i += 1) {
+      const node = contents[i];
+      const key = node.getElementsByTagName('Key')[0]?.textContent || '';
+      if (!key || key.endsWith('/')) {
+        continue;
+      }
+      const size = Number(
+        node.getElementsByTagName('Size')[0]?.textContent || 0
+      );
+      files.push({
+        url: s3ObjectHttpUrl(parsed.bucket, key),
+        fileName: key.slice(key.lastIndexOf('/') + 1),
+        size,
+      });
+    }
+    const truncated =
+      (doc.getElementsByTagName('IsTruncated')[0]?.textContent || '').trim() ===
+      'true';
+    continuationToken = truncated
+      ? doc.getElementsByTagName('NextContinuationToken')[0]?.textContent ||
+        null
+      : null;
+  } while (continuationToken);
+  return files;
 }
 
 export function mcpSeriesToWorklistStudy(series, orgId, index) {

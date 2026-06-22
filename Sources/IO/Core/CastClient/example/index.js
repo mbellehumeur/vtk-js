@@ -94,8 +94,10 @@ import idcPortalFaviconUrl from './assets/idc-portal-favicon.ico';
 import {
   IDC_MCP_PUBLIC_URL,
   IdcMcpClient,
+  buildIdcManifestText,
   fetchHubIdcSeriesFiles,
   idcMcpOrganizationId,
+  listIdcSeriesFiles,
   mcpSeriesToWorklistStudy,
   parseIdcMcpToolResult,
 } from './idc-mcp-client';
@@ -2502,6 +2504,17 @@ function buildPageHtml() {
       }" hidden>
         <p class="${style.idcClaudeFieldLabel}">Matching studies</p>
         <div id="idcMcpResults" class="${style.idcClaudeResults}"></div>
+        <div class="${style.idcClaudeActions}">
+          <button type="button" id="idcMcpDownloadBtn" class="${
+            style.headerViewerBtn
+          }">Download files (zip)</button>
+          <button type="button" id="idcMcpManifestBtn" class="${
+            style.headerViewerBtn
+          }">Manifest</button>
+          <p id="idcMcpDownloadStatus" class="${
+            style.idcClaudeAvailability
+          }" aria-live="polite"></p>
+        </div>
       </div>
       <pre
         id="idcMcpJobLog"
@@ -5092,6 +5105,8 @@ function clearIdcMcpSearchResults(el, state) {
   if (el.idcMcpResultsSection) {
     el.idcMcpResultsSection.hidden = true;
   }
+  // eslint-disable-next-line no-use-before-define -- defined below
+  setIdcMcpDownloadStatus(el, '');
   syncIdcMcpSqlUi(el, state);
 }
 
@@ -5245,6 +5260,174 @@ async function searchIdcMcpStudiesFromPrompt(el, state) {
   }
 }
 
+function setIdcMcpDownloadStatus(el, text) {
+  if (el.idcMcpDownloadStatus) {
+    el.idcMcpDownloadStatus.textContent = text || '';
+  }
+}
+
+function setIdcMcpDownloadBusy(el, busy) {
+  if (el.idcMcpDownloadBtn) {
+    el.idcMcpDownloadBtn.disabled = busy;
+  }
+  if (el.idcMcpManifestBtn) {
+    el.idcMcpManifestBtn.disabled = busy;
+  }
+}
+
+function formatIdcByteSize(bytes) {
+  const mb = (Number(bytes) || 0) / (1024 * 1024);
+  return mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
+}
+
+function idcMcpSelectionSeriesUrls(studies) {
+  return studies
+    .map((study) => String(study.seriesAwsUrl || '').trim())
+    .filter(Boolean);
+}
+
+// Download the actual DICOM files for the current MCP result set as a zip.
+// idc-open-data is public + CORS-enabled, so we list each series prefix and
+// fetch every object straight from S3 in the browser — no hub needed. Files are
+// zipped per-series and the user confirms the total size first.
+async function downloadIdcMcpFiles(el, state) {
+  const pending = state.idcMcpPendingResults;
+  const studies = Array.isArray(pending?.studies) ? pending.studies : [];
+  if (!studies.length) {
+    return;
+  }
+  const seriesUrls = idcMcpSelectionSeriesUrls(studies);
+  if (!seriesUrls.length) {
+    setIdcMcpDownloadStatus(
+      el,
+      'Selection has no AWS series URLs to download.'
+    );
+    return;
+  }
+  setIdcMcpDownloadBusy(el, true);
+  setIdcMcpDownloadStatus(el, 'Listing files for selection…');
+  try {
+    const perSeries = await Promise.all(
+      studies.map((study) =>
+        study.seriesAwsUrl ? listIdcSeriesFiles(study.seriesAwsUrl) : []
+      )
+    );
+    const files = [];
+    perSeries.forEach((seriesFiles, index) => {
+      const study = studies[index];
+      const folder = String(
+        study.crdcSeriesUuid || study.seriesInstanceUID || `series-${index + 1}`
+      );
+      seriesFiles.forEach((file) => {
+        files.push({
+          url: file.url,
+          fileName: `${folder}/${file.fileName}`,
+          size: file.size,
+        });
+      });
+    });
+    if (!files.length) {
+      setIdcMcpDownloadStatus(el, 'No files found for this selection.');
+      return;
+    }
+    const sizeLabel = formatIdcByteSize(
+      files.reduce((sum, file) => sum + (Number(file.size) || 0), 0)
+    );
+    const proceed = window.confirm(
+      `Download ${files.length} files (${sizeLabel}) from ${seriesUrls.length} ` +
+        'series as a zip?'
+    );
+    if (!proceed) {
+      setIdcMcpDownloadStatus(el, 'Download cancelled.');
+      return;
+    }
+    setIdcMcpDownloadStatus(
+      el,
+      `Downloading ${files.length} files (${sizeLabel})…`
+    );
+    const zipEntries = await fetchWorklistFilesForZip(files);
+    const blob = new Blob([zipSync(zipEntries)], { type: 'application/zip' });
+    const zipName = `idc-${pending.organization || 'selection'}.zip`;
+    triggerWorklistBlobDownload(blob, zipName);
+    setIdcMcpDownloadStatus(
+      el,
+      `Saved ${zipName} — ${files.length} files (${sizeLabel}).`
+    );
+    addMessage(el, state, 'received', 'IDC MCP', {
+      action: 'download-files',
+      files: files.length,
+      series: seriesUrls.length,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    setIdcMcpDownloadStatus(el, msg);
+    addMessage(el, state, 'err', 'IDC MCP', msg);
+  } finally {
+    setIdcMcpDownloadBusy(el, false);
+  }
+}
+
+// Resolve public download URLs for the current MCP result set via the
+// get_cohort_urls MCP tool and save them as an s5cmd/gsutil manifest file.
+async function downloadIdcMcpManifest(el, state) {
+  const pending = state.idcMcpPendingResults;
+  const studies = Array.isArray(pending?.studies) ? pending.studies : [];
+  if (!studies.length) {
+    return;
+  }
+  const seriesUids = studies
+    .map((study) => String(study.seriesInstanceUID || '').trim())
+    .filter(Boolean);
+  if (!seriesUids.length) {
+    setIdcMcpDownloadStatus(
+      el,
+      'Selection has no SeriesInstanceUIDs to resolve.'
+    );
+    return;
+  }
+  const source = studies.some((study) => study.sourceBucket === 'gcs')
+    ? 'gcs'
+    : 'aws';
+  const client = ensureIdcMcpClient(state);
+  setIdcMcpDownloadBusy(el, true);
+  setIdcMcpDownloadStatus(el, 'Resolving download URLs via MCP…');
+  try {
+    let urls = await client.getCohortUrls(seriesUids, source);
+    if (!urls.length) {
+      // Fall back to URLs already attached to the studies (when the original
+      // query selected series_aws_url) so a manifest is still produced.
+      urls = studies
+        .map((study) => String(study.seriesAwsUrl || '').trim())
+        .filter(Boolean);
+    }
+    if (!urls.length) {
+      setIdcMcpDownloadStatus(
+        el,
+        'MCP returned no download URLs for this selection.'
+      );
+      return;
+    }
+    const manifest = buildIdcManifestText(urls, source);
+    const fileName = `idc-manifest-${pending.organization || 'selection'}.txt`;
+    triggerWorklistBlobDownload(
+      new Blob([manifest], { type: 'text/plain' }),
+      fileName
+    );
+    setIdcMcpDownloadStatus(el, `Saved ${fileName} — ${urls.length} series.`);
+    addMessage(el, state, 'received', 'IDC MCP', {
+      action: 'download-manifest',
+      series: urls.length,
+      source,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    setIdcMcpDownloadStatus(el, msg);
+    addMessage(el, state, 'err', 'IDC MCP', msg);
+  } finally {
+    setIdcMcpDownloadBusy(el, false);
+  }
+}
+
 function wireIdcMcpDialog(el, state) {
   el.idcMcpBuildBtn?.addEventListener('click', () => {
     openIdcMcpDialog(el, state);
@@ -5254,6 +5437,12 @@ function wireIdcMcpDialog(el, state) {
   });
   el.idcMcpSearchBtn?.addEventListener('click', () => {
     searchIdcMcpStudiesFromPrompt(el, state);
+  });
+  el.idcMcpDownloadBtn?.addEventListener('click', () => {
+    downloadIdcMcpFiles(el, state);
+  });
+  el.idcMcpManifestBtn?.addEventListener('click', () => {
+    downloadIdcMcpManifest(el, state);
   });
   el.idcMcpToggleSqlBtn?.addEventListener('click', () => {
     state.idcMcpSqlVisible = !state.idcMcpSqlVisible;
@@ -7700,6 +7889,9 @@ async function boot() {
     idcMcpSqlPanel: byId('idcMcpSqlPanel'),
     idcMcpResultsSection: byId('idcMcpResultsSection'),
     idcMcpResults: byId('idcMcpResults'),
+    idcMcpDownloadBtn: byId('idcMcpDownloadBtn'),
+    idcMcpManifestBtn: byId('idcMcpManifestBtn'),
+    idcMcpDownloadStatus: byId('idcMcpDownloadStatus'),
     idcMcpAvailability: byId('idcMcpAvailability'),
     idcMcpCancelBtn: byId('idcMcpCancelBtn'),
     idcMcpSearchBtn: byId('idcMcpSearchBtn'),
