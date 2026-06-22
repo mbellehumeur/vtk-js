@@ -58,7 +58,7 @@ export function resolveImagingStudyOpenPlan(context) {
     if (!studyInstanceUID) {
       return null;
     }
-    return {
+    const plan = {
       mode: 'dicomweb',
       studyId,
       studyInstanceUID,
@@ -66,6 +66,19 @@ export function resolveImagingStudyOpenPlan(context) {
       dicomwebRoot: extractDicomwebRoot(normalized) || undefined,
       ohifMode,
     };
+    const files = extractImagingStudyFiles(normalized);
+    if (files.length > 0) {
+      plan.idcFallback = {
+        studyInstanceUID,
+        seriesInstanceUID:
+          extractIdcSeriesUid(normalized) ||
+          extractDicomSeriesUid(normalized) ||
+          undefined,
+        sourceBucket: extractIdcSourceBucket(normalized),
+        files,
+      };
+    }
+    return plan;
   }
 
   if (openMode === CAST_OPEN_MODE_FILES) {

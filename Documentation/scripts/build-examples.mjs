@@ -132,6 +132,7 @@ function getMimeType(filePath) {
     '.gif': 'image/gif',
     '.svg': 'image/svg+xml',
     '.webp': 'image/webp',
+    '.ico': 'image/x-icon',
   };
   return mimeByExt[ext] || 'application/octet-stream';
 }
@@ -141,7 +142,7 @@ function toDataUri(filePath, source) {
 }
 
 function assetLoader({ inline = false } = {}) {
-  const assetRegex = /\.(png|jpe?g|dcm)$/i;
+  const assetRegex = /\.(png|jpe?g|dcm|ico)$/i;
 
   return {
     name: inline ? 'asset-loader-inline' : 'asset-loader',
@@ -267,7 +268,7 @@ async function walkFiles(dir, results = []) {
 
 async function copyApplicationStaticAssets(entryPath, outDir) {
   const sourceDir = path.dirname(entryPath);
-  const assetRegex = /\.(png|jpe?g|gif|svg|webp|dcm)$/i;
+  const assetRegex = /\.(png|jpe?g|gif|svg|webp|dcm|ico)$/i;
   const files = await walkFiles(sourceDir);
 
   await Promise.all(

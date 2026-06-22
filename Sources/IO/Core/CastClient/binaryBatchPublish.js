@@ -1,6 +1,7 @@
 import { generateMessageId } from './identity';
 import {
   contextFilesFromEvent,
+  fileIndicesNeedingBinaryBatchPart,
   normalizeBinaryBatchMessageMetadataOnly,
   toArrayBufferStrict,
 } from './sendNormalize';
@@ -46,11 +47,21 @@ export async function postBinaryBatchPublish({
     (fileBytesList || []).map((bytes) => toArrayBufferStrict(bytes))
   );
   const files = contextFilesFromEvent(normalized.event);
-  const fileParts = rawList.map((buffer, index) => ({
-    buffer,
-    mimeType:
-      (files[index] && files[index].mimeType) || 'application/octet-stream',
-  }));
+  const indicesNeedingParts = fileIndicesNeedingBinaryBatchPart(files);
+  if (rawList.length !== indicesNeedingParts.length) {
+    throw new Error(
+      `CastClient: binary batch publish expected ${indicesNeedingParts.length} file part(s), got ${rawList.length}`
+    );
+  }
+  const fileParts = rawList.map((buffer, partIndex) => {
+    const fileIndex = indicesNeedingParts[partIndex];
+    return {
+      buffer,
+      mimeType:
+        (files[fileIndex] && files[fileIndex].mimeType) ||
+        'application/octet-stream',
+    };
+  });
   const boundary = `cast-batch-${generateMessageId(messageIdPrefix())}`;
   const body = buildBinaryBatchRelatedBody(
     boundary,

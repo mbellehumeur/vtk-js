@@ -1124,5 +1124,7 @@
       "url": "https://idc-open-data.s3.amazonaws.com/54afc9df-a0cf-4cf1-8286-c79701cbaa6f/fe8c34db-a249-4d9e-be50-c0dd77a1f645.dcm",
       "fileName": "fe8c34db-a249-4d9e-be50-c0dd77a1f645.dcm"
     }
-  ]
+  ],
+  "openMode": "dicomweb",
+  "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
 }

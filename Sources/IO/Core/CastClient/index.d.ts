@@ -309,6 +309,9 @@ export function buildDicomwebImagingStudyOpenContext(params: {
   seriesInstanceUID?: string;
   dicomwebRoot?: string;
   patientReference?: string;
+  ohifMode?: string;
+  files?: CastImagingStudyFileEntry[];
+  sourceBucket?: 'aws' | 'gcs';
 }): Array<{ key: string; resource: Record<string, unknown> }>;
 
 export function buildIdcImagingStudyOpenContext(params: {
@@ -360,6 +363,12 @@ export type ImagingStudyOpenPlan =
       seriesInstanceUID?: string;
       dicomwebRoot?: string;
       ohifMode?: string;
+      idcFallback?: {
+        studyInstanceUID: string;
+        seriesInstanceUID?: string;
+        sourceBucket: 'aws' | 'gcs';
+        files: CastImagingStudyFileEntry[];
+      };
     }
   | {
       mode: 'files';

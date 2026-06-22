@@ -482,9 +482,20 @@
   line-height: 1.25;
 }
 
+.castAboutTitleMain {
+  font-weight: inherit;
+}
+
 .castAboutSubtitle {
-  margin: 0 0 12px;
+  display: inline;
+  margin: 0;
   font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--cast-muted-foreground);
+}
+
+.castAboutSubtitle::before {
+  content: ' — ';
   font-weight: 500;
   color: var(--cast-muted-foreground);
 }
@@ -493,6 +504,41 @@
   margin: 0 0 16px;
   font-size: 14px;
   line-height: 1.5;
+}
+
+.castAboutBody p {
+  margin: 0 0 12px;
+}
+
+.castAboutBody p:last-child {
+  margin-bottom: 0;
+}
+
+.castAboutFeatureList {
+  margin: 0 0 12px;
+  padding-left: 1.25rem;
+}
+
+.castAboutFeatureList li {
+  margin-bottom: 12px;
+}
+
+.castAboutFeatureList li:last-child {
+  margin-bottom: 0;
+}
+
+.castAboutFeatureThumbLink {
+  display: block;
+  margin-top: 8px;
+  width: fit-content;
+}
+
+.castAboutFeatureThumb {
+  display: block;
+  max-width: 200px;
+  height: auto;
+  border: 1px solid var(--cast-border);
+  border-radius: var(--cast-radius);
 }
 
 .castSessionInfoBody {
@@ -807,6 +853,12 @@
   margin-top: 16px;
 }
 
+.idcClaudeActions .idcClaudeAvailability {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
 .idcMcpDialog {
   position: relative;
 }
@@ -839,15 +891,11 @@
   color: var(--cast-foreground);
 }
 
-.idcMcpSearchBar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.idcMcpSearchBar .idcClaudeAvailability {
-  margin: 0;
+.idcMcpAvailability {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--cast-muted-foreground);
 }
 
 .idcClaudeActionButtons {
@@ -1014,18 +1062,18 @@
 .idcClaudeResults {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 240px;
+  gap: 5px;
+  max-height: 280px;
   overflow: auto;
   padding-right: 4px;
 }
 
 .idcClaudeResultRow {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 5px 8px;
   border: 1px solid var(--cast-border);
   border-radius: calc(var(--cast-radius) * 0.75);
   background: var(--cast-background);
@@ -1042,24 +1090,122 @@
   color: var(--cast-foreground);
 }
 
-.idcClaudeResultDesc {
-  margin-top: 2px;
+.idcClaudeResultTitleLink {
+  display: inline;
   font-size: 12px;
-  line-height: 1.35;
+  font-weight: 500;
+  color: var(--cast-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.idcClaudeResultTitleLink:hover {
+  text-decoration: underline;
+}
+
+.idcClaudeResultActions {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.idcClaudeResultDesc {
+  margin-top: 1px;
+  font-size: 11px;
+  line-height: 1.25;
   color: var(--cast-muted-foreground);
 }
 
-.idcClaudeResultMeta {
-  margin-top: 4px;
-  font-size: 11px;
+.idcClaudeResultDetail {
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--cast-muted-foreground);
+}
+
+.idcStudyInfoOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: oklch(0 0 0 / 55%);
+}
+
+.idcStudyInfoOverlay[hidden] {
+  display: none !important;
+}
+
+.idcStudyInfoDialog {
+  position: relative;
+  width: min(42rem, 100%);
+  max-height: min(90vh, 40rem);
+  padding: 24px;
+  overflow-y: auto;
+  border: 1px solid var(--cast-border);
+  border-radius: calc(var(--cast-radius) * 1.25);
+  background: var(--cast-card);
+  color: var(--cast-card-foreground);
+  box-shadow: 0 16px 40px oklch(0 0 0 / 35%);
+}
+
+.idcStudyInfoSubtitle {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--cast-muted-foreground);
+}
+
+.idcStudyInfoStatus {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--cast-muted-foreground);
+}
+
+.idcStudyInfoStatusBusy {
+  color: var(--cast-foreground);
+}
+
+.idcStudyInfoBody {
+  margin: 0;
+}
+
+.idcStudyInfoBodyList {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(8rem, auto) 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.idcStudyInfoBodyList dt {
+  margin: 0;
+  color: var(--cast-muted-foreground);
+}
+
+.idcStudyInfoBodyList dd {
+  margin: 0;
+  color: var(--cast-foreground);
+  word-break: break-word;
+}
+
+.idcStudyInfoEmpty {
+  margin: 0;
+  font-size: 12px;
   color: var(--cast-muted-foreground);
 }
 
 .idcClaudeAddBtn {
   flex-shrink: 0;
-  padding: 6px 10px;
+  padding: 4px 8px;
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.2;
   border: 1px solid var(--cast-border);
   border-radius: calc(var(--cast-radius) * 0.75);
   background: var(--cast-accent, var(--cast-background));

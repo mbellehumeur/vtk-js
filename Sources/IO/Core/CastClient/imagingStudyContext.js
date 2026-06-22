@@ -462,6 +462,8 @@ export function buildDicomUrlImagingStudyOpenContext({
  * @param {string} [params.dicomwebRoot]
  * @param {string} [params.patientReference]
  * @param {string} [params.ohifMode] OHIF mode route segment (e.g. `microscopy`, `usAnnotation`)
+ * @param {Array<{ url: string, fileName?: string, mimeType?: string, role?: string, label?: string }>} [params.files] Optional direct bucket URLs for viewers without DICOMweb
+ * @param {'aws' | 'gcs'} [params.sourceBucket]
  * @returns {Array<object>}
  */
 export function buildDicomwebImagingStudyOpenContext({
@@ -471,6 +473,8 @@ export function buildDicomwebImagingStudyOpenContext({
   dicomwebRoot,
   patientReference,
   ohifMode,
+  files,
+  sourceBucket,
 }) {
   const studyId = String(id || '').trim() || 'study';
   const studyUid = normalizeUid(studyInstanceUID);
@@ -496,6 +500,25 @@ export function buildDicomwebImagingStudyOpenContext({
       system: CAST_IDENTIFIER_OHIF_MODE,
       value: ohifModeValue,
     });
+  }
+
+  const normalizedFiles = (Array.isArray(files) ? files : [])
+    .map((entry) => normalizeFileEntry(entry))
+    .filter((entry) => entry !== null);
+  if (normalizedFiles.length > 0) {
+    const bucket =
+      String(sourceBucket || 'aws')
+        .trim()
+        .toLowerCase() === 'gcs'
+        ? 'gcs'
+        : 'aws';
+    identifiers.push({
+      system: CAST_IDENTIFIER_IDC_SOURCE_BUCKET,
+      value: bucket,
+    });
+    if (seriesUid) {
+      identifiers.push({ system: CAST_IDENTIFIER_IDC, value: seriesUid });
+    }
   }
 
   const studyResource = {
@@ -525,6 +548,21 @@ export function buildDicomwebImagingStudyOpenContext({
       resource: {
         resourceType: 'ImagingStudy',
         uid: seriesUid,
+      },
+    });
+  }
+
+  if (normalizedFiles.length > 0) {
+    context.push({
+      key: 'files',
+      resource: {
+        files: normalizedFiles.map((file) => ({
+          url: file.url,
+          fileName: file.fileName || undefined,
+          mimeType: file.mimeType || undefined,
+          role: file.role || undefined,
+          label: file.label || undefined,
+        })),
       },
     });
   }

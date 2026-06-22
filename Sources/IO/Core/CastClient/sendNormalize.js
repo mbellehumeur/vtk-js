@@ -221,6 +221,29 @@ function niftiFileNameFromMessage(msg) {
   return binaryFileNameFromMessage(msg, 'nifti-send.nii.gz');
 }
 
+export function fileEntryHasPublishUrl(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return false;
+  }
+  const url = typeof entry.url === 'string' ? entry.url.trim() : '';
+  if (!url) {
+    return false;
+  }
+  const lower = url.toLowerCase();
+  return lower.startsWith('http://') || lower.startsWith('https://');
+}
+
+/** File indices in ``files[]`` that require a multipart binary body part (no HTTP URL). */
+export function fileIndicesNeedingBinaryBatchPart(files) {
+  const indices = [];
+  for (let i = 0; i < files.length; i += 1) {
+    if (!fileEntryHasPublishUrl(files[i])) {
+      indices.push(i);
+    }
+  }
+  return indices;
+}
+
 export function messageNeedsBinaryBatchPublish(msg) {
   const event = msg && msg.event;
   if (!event || !isCastBinaryEvent(event['hub.event'])) {
@@ -230,7 +253,9 @@ export function messageNeedsBinaryBatchPublish(msg) {
   if (!files.length) {
     return false;
   }
-  return files.some((entry) => entry.data != null);
+  return files.some(
+    (entry) => entry.data != null && !fileEntryHasPublishUrl(entry)
+  );
 }
 
 async function normalizeBinaryBatchFileEntry(entry, hubEvent = '', index = 0) {
@@ -239,6 +264,7 @@ async function normalizeBinaryBatchFileEntry(entry, hubEvent = '', index = 0) {
       'CastClient: binary batch publish files[] entries must be objects'
     );
   }
+  const hasPublishUrl = fileEntryHasPublishUrl(entry);
   let byteLength =
     typeof entry.byteLength === 'number' && entry.byteLength >= 0
       ? entry.byteLength
@@ -252,6 +278,28 @@ async function normalizeBinaryBatchFileEntry(entry, hubEvent = '', index = 0) {
     const binaryData = await toArrayBufferStrict(entry.data);
     byteLength = binaryData.byteLength;
   }
+  if (byteLength == null && hasPublishUrl) {
+    const normalized = { ...entry };
+    delete normalized.data;
+    delete normalized.binaryTransfer;
+    delete normalized.payloadId;
+    delete normalized.payloadIds;
+    delete normalized.chunkByteLengths;
+    delete normalized.expiresAt;
+    if (
+      typeof normalized.fileName !== 'string' ||
+      !normalized.fileName.trim()
+    ) {
+      normalized.fileName = defaultBinaryBatchFileName(hubEvent, index);
+    }
+    if (
+      typeof normalized.mimeType !== 'string' ||
+      !normalized.mimeType.trim()
+    ) {
+      normalized.mimeType = defaultBinaryBatchMimeType(hubEvent);
+    }
+    return normalized;
+  }
   if (byteLength == null) {
     throw new Error(
       'CastClient: binary batch publish requires files[].data or files[].byteLength'
@@ -260,7 +308,9 @@ async function normalizeBinaryBatchFileEntry(entry, hubEvent = '', index = 0) {
   const normalized = { ...entry };
   delete normalized.data;
   delete normalized.binaryTransfer;
-  delete normalized.url;
+  if (!hasPublishUrl) {
+    delete normalized.url;
+  }
   delete normalized.payloadId;
   delete normalized.payloadIds;
   delete normalized.chunkByteLengths;
@@ -320,7 +370,11 @@ export async function extractBinaryBatchFileBytes(msg) {
   }
   const files = contextFilesFromEvent(event);
   const withData = files.filter(
-    (entry) => entry && typeof entry === 'object' && entry.data != null
+    (entry) =>
+      entry &&
+      typeof entry === 'object' &&
+      entry.data != null &&
+      !fileEntryHasPublishUrl(entry)
   );
   return Promise.all(withData.map((entry) => toArrayBufferStrict(entry.data)));
 }

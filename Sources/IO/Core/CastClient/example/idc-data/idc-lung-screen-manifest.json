@@ -862,7 +862,9 @@
           "url": "https://idc-open-data.s3.amazonaws.com/6b14f5c3-4f09-4bc7-89b3-af0770a13297/ffc4239d-1a9a-4474-9911-a9c3d30f057b.dcm",
           "fileName": "ffc4239d-1a9a-4474-9911-a9c3d30f057b.dcm"
         }
-      ]
+      ],
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
     },
     {
       "id": "nlst-lung-02",
@@ -1655,7 +1657,9 @@
           "url": "https://idc-open-data.s3.amazonaws.com/f473014e-02eb-484e-b19c-f0043aedbf41/ffa0f9ec-3a35-43f2-87cb-9ae17b6a8b9f.dcm",
           "fileName": "ffa0f9ec-3a35-43f2-87cb-9ae17b6a8b9f.dcm"
         }
-      ]
+      ],
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
     },
     {
       "id": "nlst-lung-03",
@@ -2444,7 +2448,9 @@
           "url": "https://idc-open-data.s3.amazonaws.com/0f775a84-74f3-4516-964f-84cfd55ce03f/fe4857b1-7aab-43be-88b8-5879c6aad57f.dcm",
           "fileName": "fe4857b1-7aab-43be-88b8-5879c6aad57f.dcm"
         }
-      ]
+      ],
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
     },
     {
       "id": "nlst-lung-04",
@@ -3229,7 +3235,9 @@
           "url": "https://idc-open-data.s3.amazonaws.com/bb0ff6ee-4777-4676-976a-4ba907406f1a/ff8f895a-6303-492d-a086-0c996e284080.dcm",
           "fileName": "ff8f895a-6303-492d-a086-0c996e284080.dcm"
         }
-      ]
+      ],
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
     },
     {
       "id": "nlst-lung-05",
@@ -4014,7 +4022,9 @@
           "url": "https://idc-open-data.s3.amazonaws.com/e222b8b4-1fbd-439f-a143-d15683910343/fe27772b-a8df-43de-9d75-c4f924476b80.dcm",
           "fileName": "fe27772b-a8df-43de-9d75-c4f924476b80.dcm"
         }
-      ]
+      ],
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
     },
     {
       "id": "nlst-lung-06",
@@ -4783,7 +4793,9 @@
           "url": "https://idc-open-data.s3.amazonaws.com/82d43ecf-e380-487b-b977-0053f4240c33/fca647b2-1b97-4f8d-8163-63029ddb8747.dcm",
           "fileName": "fca647b2-1b97-4f8d-8163-63029ddb8747.dcm"
         }
-      ]
+      ],
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
     },
     {
       "id": "nlst-lung-07",
@@ -5552,7 +5564,9 @@
           "url": "https://idc-open-data.s3.amazonaws.com/a63cec8c-3797-47aa-a923-cd4b2a583f8c/ffc57d0d-4e2f-4854-9c73-749348faa688.dcm",
           "fileName": "ffc57d0d-4e2f-4854-9c73-749348faa688.dcm"
         }
-      ]
+      ],
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
     },
     {
       "id": "nlst-lung-08",
@@ -6317,7 +6331,9 @@
           "url": "https://idc-open-data.s3.amazonaws.com/3b21c287-a4c7-479d-88e1-ddc284c3f4cd/ff4b18a8-b696-4730-af1b-2bbc7494a7a3.dcm",
           "fileName": "ff4b18a8-b696-4730-af1b-2bbc7494a7a3.dcm"
         }
-      ]
+      ],
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
     },
     {
       "id": "nlst-lung-09",
@@ -7074,7 +7090,9 @@
           "url": "https://idc-open-data.s3.amazonaws.com/288fb975-02e7-4e50-87fb-2ea5bd638907/ff51e997-e91c-4ac2-ae23-8bf2c09dc201.dcm",
           "fileName": "ff51e997-e91c-4ac2-ae23-8bf2c09dc201.dcm"
         }
-      ]
+      ],
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
     },
     {
       "id": "nlst-lung-10",
@@ -7823,7 +7841,10 @@
           "url": "https://idc-open-data.s3.amazonaws.com/2605a6ef-bb8c-4848-8104-06498bff351e/fff7d237-ea2d-47ff-b0a5-20e14ec6095a.dcm",
           "fileName": "fff7d237-ea2d-47ff-b0a5-20e14ec6095a.dcm"
         }
-      ]
+      ],
+      "openMode": "dicomweb",
+      "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
     }
-  ]
+  ],
+  "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
 }

@@ -8,5 +8,7 @@
       "url": "https://idc-open-data.s3.amazonaws.com/8ffc0420-624a-40e1-a0db-ddff8efa153b/041eff35-c532-4112-9c8b-dc5e579e7c18.dcm",
       "fileName": "041eff35-c532-4112-9c8b-dc5e579e7c18.dcm"
     }
-  ]
+  ],
+  "openMode": "dicomweb",
+  "dicomwebRoot": "https://proxy.imaging.datacommons.cancer.gov/current/viewer-only-no-downloads-see-tinyurl-dot-com-slash-3j3d9jyp/dicomWeb"
 }
